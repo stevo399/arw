@@ -140,3 +140,45 @@ def test_detect_objects_filters_small_objects():
         radar_lon=-97.0,
     )
     assert len(objects) == 0
+
+
+from src.detection import detect_objects_with_grid, DetectionResult
+
+
+def test_detect_objects_with_grid_returns_result():
+    reflectivity = np.full((360, 500), np.nan)
+    reflectivity[85:95, 195:205] = 45.0
+    azimuths = np.linspace(0, 359, 360)
+    ranges_m = np.linspace(2000, 250000, 500)
+    result = detect_objects_with_grid(
+        reflectivity=reflectivity,
+        azimuths=azimuths,
+        ranges_m=ranges_m,
+        radar_lat=35.0,
+        radar_lon=-97.0,
+    )
+    assert isinstance(result, DetectionResult)
+    assert len(result.objects) == 1
+    assert result.labeled_grid.shape == reflectivity.shape
+    assert len(result.object_masks) == 1
+    assert result.object_masks[1].shape == reflectivity.shape
+    assert result.object_masks[1].dtype == bool
+
+
+def test_detect_objects_with_grid_masks_match_objects():
+    reflectivity = np.full((360, 500), np.nan)
+    reflectivity[10:20, 50:60] = 35.0
+    reflectivity[200:210, 300:310] = 55.0
+    azimuths = np.linspace(0, 359, 360)
+    ranges_m = np.linspace(2000, 250000, 500)
+    result = detect_objects_with_grid(
+        reflectivity=reflectivity,
+        azimuths=azimuths,
+        ranges_m=ranges_m,
+        radar_lat=35.0,
+        radar_lon=-97.0,
+    )
+    assert len(result.objects) == 2
+    assert len(result.object_masks) == 2
+    for obj in result.objects:
+        assert obj.object_id in result.object_masks

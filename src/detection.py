@@ -201,3 +201,51 @@ def detect_objects(
 
     objects.sort(key=lambda o: o.peak_dbz, reverse=True)
     return objects
+
+
+@dataclass
+class DetectionResult:
+    """Result of object detection including labeled grid for tracking."""
+    objects: list[DetectedObject]
+    labeled_grid: np.ndarray
+    object_masks: dict[int, np.ndarray]
+
+
+def detect_objects_with_grid(
+    reflectivity: np.ndarray,
+    azimuths: np.ndarray,
+    ranges_m: np.ndarray,
+    radar_lat: float,
+    radar_lon: float,
+) -> DetectionResult:
+    """Detect rain objects and return labeled grid + masks for tracking.
+
+    Same as detect_objects but also returns the scipy labeled grid and
+    per-object boolean masks needed for overlap-based tracking.
+    """
+    valid = ~np.isnan(reflectivity) & (reflectivity >= MIN_DBZ_THRESHOLD)
+    labeled, num_features = label(valid)
+
+    objects = []
+    object_masks = {}
+    for i in range(1, num_features + 1):
+        obj_mask = labeled == i
+        obj = compute_object_properties(
+            obj_mask=obj_mask,
+            reflectivity=reflectivity,
+            azimuths=azimuths,
+            ranges_m=ranges_m,
+            radar_lat=radar_lat,
+            radar_lon=radar_lon,
+            object_id=i,
+        )
+        if obj is not None:
+            objects.append(obj)
+            object_masks[obj.object_id] = obj_mask
+
+    objects.sort(key=lambda o: o.peak_dbz, reverse=True)
+    return DetectionResult(
+        objects=objects,
+        labeled_grid=labeled,
+        object_masks=object_masks,
+    )
