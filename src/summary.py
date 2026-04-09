@@ -28,7 +28,7 @@ def generate_summary(
     strongest = objects[0]
     distance_mi = km_to_miles(strongest.distance_km)
     bearing = degrees_to_bearing(strongest.bearing_deg)
-    area_mi2 = km_to_miles(strongest.area_km2)
+    area_mi2 = km2_to_mi2(strongest.area_km2)
 
     return (
         f"{site_name}: {count} {obj_word} detected. "

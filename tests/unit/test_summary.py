@@ -45,7 +45,7 @@ def test_generate_summary_single_object():
     assert "heavy rain" in text
     assert "25 miles" in text
     assert "W" in text
-    assert "75 square miles" in text
+    assert "47 square miles" in text
 
 
 def test_generate_summary_multiple_objects():
