@@ -22,11 +22,12 @@ def scan_is_cached(site_id: str, filename: str) -> bool:
 
 
 def list_scans_for_date(site_id: str, date_str: str) -> list:
-    """List available scans for a site on a given date (YYYY-MM-DD)."""
+    """List available scans for a site on a given date (YYYY-MM-DD).
+    Filters out _MDM metadata files which are not real radar volume scans."""
     conn = _get_nexrad_conn()
     dt = datetime.strptime(date_str, "%Y-%m-%d")
     scans = conn.get_avail_scans(dt.year, dt.month, dt.day, site_id)
-    return scans
+    return [s for s in scans if not s.filename.endswith("_MDM")]
 
 
 def list_latest_scans(site_id: str) -> list:
@@ -49,9 +50,8 @@ def download_scan(site_id: str, scan) -> str:
     os.makedirs(cache_dir, exist_ok=True)
     conn = _get_nexrad_conn()
     results = conn.download(scan, cache_dir)
-    for result in results:
-        if result.success:
-            return str(result.filepath)
+    for result in results.success:
+        return str(result.filepath)
     raise RuntimeError(f"Failed to download scan {filename} for {site_id}")
 
 

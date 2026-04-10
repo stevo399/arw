@@ -46,9 +46,10 @@ def test_download_scan(tmp_path):
         mock_scan = MagicMock()
         mock_scan.filename = "KTLX20260408_183000_V06"
         mock_result = MagicMock()
-        mock_result.success = True
         local_file = tmp_path / "KTLX" / "KTLX20260408_183000_V06"
         mock_result.filepath = str(local_file)
-        mock_conn.return_value.download.return_value = [mock_result]
+        mock_download_results = MagicMock()
+        mock_download_results.success = [mock_result]
+        mock_conn.return_value.download.return_value = mock_download_results
         path = download_scan("KTLX", mock_scan)
         assert path is not None
