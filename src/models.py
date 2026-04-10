@@ -47,3 +47,64 @@ class SummaryResponse(BaseModel):
     site_id: str
     timestamp: str
     text: str
+
+
+class TrackPosition(BaseModel):
+    timestamp: str
+    latitude: float
+    longitude: float
+    distance_km: float
+    bearing_deg: float
+
+
+class TrackMotion(BaseModel):
+    speed_kmh: float
+    speed_mph: int
+    heading_deg: float | None
+    heading_label: str
+
+
+class PeakHistoryEntry(BaseModel):
+    timestamp: str
+    peak_dbz: float
+    peak_label: str
+
+
+class StormTrack(BaseModel):
+    track_id: int
+    status: str
+    positions: list[TrackPosition]
+    motion: TrackMotion
+    peak_dbz: float
+    peak_label: str
+    merged_into: int | None
+    split_from: int | None
+    first_seen: str
+    last_seen: str
+
+
+class TrackEvent(BaseModel):
+    event_type: str
+    timestamp: str
+    description: str
+    involved_track_ids: list[int]
+
+
+class TracksResponse(BaseModel):
+    site_id: str
+    timestamp: str
+    active_count: int
+    tracks: list[StormTrack]
+    recent_events: list[TrackEvent]
+
+
+class TrackDetailResponse(BaseModel):
+    track_id: int
+    status: str
+    positions: list[TrackPosition]
+    motion: TrackMotion
+    peak_history: list[PeakHistoryEntry]
+    merged_into: int | None
+    split_from: int | None
+    first_seen: str
+    last_seen: str
