@@ -1,71 +1,23 @@
-# src/tracker.py
-from dataclasses import dataclass, field
 from datetime import datetime
 import numpy as np
 from src.buffer import BufferedScan
 from src.detection import DetectedObject
 from src.motion import compute_motion, MotionVector
 from src.sites import haversine_distance_km
+from src.tracking.events import normalize_merge_event, normalize_split_event
+from src.tracking.types import PeakEntry, Track, TrackPosition
 
 MIN_OVERLAP_PCT = 0.30
 MAX_STORM_SPEED_KMH = 120.0
 MAX_MISSED_SCANS = 2
 
 
-@dataclass
-class TrackPosition:
-    timestamp: datetime
-    latitude: float
-    longitude: float
-    distance_km: float
-    bearing_deg: float
-
-
-@dataclass
-class PeakEntry:
-    timestamp: datetime
-    peak_dbz: float
-    peak_label: str
-
-
-@dataclass
-class Track:
-    track_id: int
-    status: str  # "active", "merged", "split", "lost"
-    positions: list[TrackPosition] = field(default_factory=list)
-    peak_history: list[PeakEntry] = field(default_factory=list)
-    current_object: DetectedObject | None = None
-    merged_into: int | None = None
-    split_from: int | None = None
-    first_seen: datetime | None = None
-    last_seen: datetime | None = None
-    _missed_scans: int = 0
-
-    def add_position(self, timestamp: datetime, obj: DetectedObject) -> None:
-        self.positions.append(TrackPosition(
-            timestamp=timestamp,
-            latitude=obj.centroid_lat,
-            longitude=obj.centroid_lon,
-            distance_km=obj.distance_km,
-            bearing_deg=obj.bearing_deg,
-        ))
-        self.peak_history.append(PeakEntry(
-            timestamp=timestamp,
-            peak_dbz=obj.peak_dbz,
-            peak_label=obj.peak_label,
-        ))
-        self.current_object = obj
-        self.last_seen = timestamp
-        self._missed_scans = 0
-        if self.first_seen is None:
-            self.first_seen = timestamp
-
-    def get_motion(self) -> MotionVector:
-        pos_tuples = [
-            (p.timestamp, p.latitude, p.longitude)
-            for p in self.positions
-        ]
-        return compute_motion(pos_tuples)
+def _get_track_motion(track: Track) -> MotionVector:
+    pos_tuples = [
+        (p.timestamp, p.latitude, p.longitude)
+        for p in track.positions
+    ]
+    return compute_motion(pos_tuples)
 
 
 def _compute_overlap(mask_a: np.ndarray, mask_b: np.ndarray) -> float:
@@ -88,6 +40,14 @@ class StormTracker:
         self._prev_scan: BufferedScan | None = None
         self._obj_to_track: dict[int, int] = {}  # object_id -> track_id for current scan
 
+    def _reset_for_site(self) -> None:
+        """Clear tracker state when switching radar sites."""
+        self._tracks.clear()
+        self._next_id = 1
+        self._recent_events.clear()
+        self._prev_scan = None
+        self._obj_to_track.clear()
+
     def _create_track(self, timestamp: datetime, obj: DetectedObject) -> Track:
         track = Track(track_id=self._next_id, status="active")
         self._next_id += 1
@@ -95,10 +55,19 @@ class StormTracker:
         self._tracks.append(track)
         return track
 
+    def _append_merge_event(self, timestamp: datetime, surviving_track_id: int, merged_track_ids: list[int]) -> None:
+        """Record a merge event with deduplicated track ids."""
+        event = normalize_merge_event(timestamp, surviving_track_id, merged_track_ids)
+        if event is not None:
+            self._recent_events.append(event)
+
     def update(self, scan: BufferedScan) -> None:
         """Process a new scan: match objects to tracks, detect merges/splits."""
         self._recent_events.clear()
         timestamp = scan.timestamp
+
+        if self._prev_scan is not None and self._prev_scan.site_id != scan.site_id:
+            self._reset_for_site()
 
         if self._prev_scan is None:
             # First scan: create a track for each object
@@ -147,123 +116,135 @@ class StormTracker:
                         match_candidates[new_id].append((prev_id, 0.0))
                         reverse_candidates.setdefault(prev_id, []).append((new_id, 0.0))
 
-        # Greedy assignment: sort all candidate pairs by overlap desc
+        # Sort candidates once so merge/split/simple passes make consistent choices.
         all_pairs = []
         for new_id, candidates in match_candidates.items():
             for prev_id, overlap in candidates:
                 all_pairs.append((overlap, prev_id, new_id))
         all_pairs.sort(reverse=True)
 
-        assigned_new: set[int] = set()
-        assigned_prev: set[int] = set()
-        assignments: dict[int, list[int]] = {}  # new_obj_id -> [prev_obj_ids]
-        reverse_assignments: dict[int, list[int]] = {}  # prev_obj_id -> [new_obj_ids]
-
+        assignments: dict[int, list[int]] = {nid: [] for nid in new_objects}
+        reverse_assignments: dict[int, list[int]] = {pid: [] for pid in prev_objects}
+        overlap_lookup: dict[tuple[int, int], float] = {}
         for overlap, prev_id, new_id in all_pairs:
-            # Allow many-to-one for merges and one-to-many for splits
-            if new_id not in assignments:
-                assignments[new_id] = []
-            if prev_id not in reverse_assignments:
-                reverse_assignments[prev_id] = []
-            assignments[new_id].append(prev_id)
-            reverse_assignments[prev_id].append(new_id)
-            assigned_new.add(new_id)
-            assigned_prev.add(prev_id)
-
-        # Deduplicate assignments
-        for key in assignments:
-            assignments[key] = list(dict.fromkeys(assignments[key]))
-        for key in reverse_assignments:
-            reverse_assignments[key] = list(dict.fromkeys(reverse_assignments[key]))
+            if prev_id not in assignments[new_id]:
+                assignments[new_id].append(prev_id)
+            if new_id not in reverse_assignments[prev_id]:
+                reverse_assignments[prev_id].append(new_id)
+            overlap_lookup[(new_id, prev_id)] = overlap
 
         # Process assignments: detect merges, splits, and simple updates
         new_obj_to_track: dict[int, int] = {}
-        processed_new: set[int] = set()
+        claimed_new: set[int] = set()
+        claimed_prev: set[int] = set()
 
         # Handle merges: new object matched to multiple previous objects
-        for new_id, prev_ids in assignments.items():
-            if len(prev_ids) <= 1:
+        merge_candidates = [
+            (
+                sum(overlap_lookup[(new_id, prev_id)] for prev_id in prev_ids),
+                max(overlap_lookup[(new_id, prev_id)] for prev_id in prev_ids),
+                new_id,
+            )
+            for new_id, prev_ids in assignments.items()
+            if len(prev_ids) > 1
+        ]
+        merge_candidates.sort(reverse=True)
+        for _, _, new_id in merge_candidates:
+            prev_ids = assignments[new_id]
+            available_prev_ids = [prev_id for prev_id in prev_ids if prev_id not in claimed_prev]
+            if len(available_prev_ids) <= 1:
                 continue
-            # Merge: multiple previous -> one new
-            surviving_track_id = None
-            merged_track_ids = []
-            for pid in prev_ids:
-                tid = self._obj_to_track.get(pid)
-                if tid is not None:
-                    if surviving_track_id is None:
-                        surviving_track_id = tid
-                    else:
-                        merged_track_ids.append(tid)
+            survivor_prev_id = max(
+                available_prev_ids,
+                key=lambda prev_id: (overlap_lookup[(new_id, prev_id)], -self._obj_to_track.get(prev_id, 10**9)),
+            )
+            surviving_track_id = self._obj_to_track.get(survivor_prev_id)
+            if surviving_track_id is None:
+                continue
+            surviving = self.get_track(surviving_track_id)
+            if surviving is None or surviving.status != "active":
+                continue
 
-            if surviving_track_id is not None:
-                surviving = self.get_track(surviving_track_id)
-                if surviving is not None:
-                    surviving.add_position(timestamp, new_objects[new_id])
-                    new_obj_to_track[new_id] = surviving_track_id
-                    for mtid in merged_track_ids:
-                        mt = self.get_track(mtid)
-                        if mt is not None and mt.status == "active":
-                            mt.status = "merged"
-                            mt.merged_into = surviving_track_id
-                    self._recent_events.append({
-                        "event_type": "merge",
-                        "timestamp": timestamp.isoformat(),
-                        "description": f"Tracks {', '.join(str(t) for t in merged_track_ids)} merged into track {surviving_track_id}",
-                        "involved_track_ids": [surviving_track_id] + merged_track_ids,
-                    })
-            processed_new.add(new_id)
+            surviving.add_position(timestamp, new_objects[new_id])
+            new_obj_to_track[new_id] = surviving_track_id
+            claimed_new.add(new_id)
+            claimed_prev.update(available_prev_ids)
+
+            merged_track_ids = []
+            for prev_id in available_prev_ids:
+                if prev_id == survivor_prev_id:
+                    continue
+                merged_track_id = self._obj_to_track.get(prev_id)
+                if merged_track_id is None:
+                    continue
+                merged_track = self.get_track(merged_track_id)
+                if merged_track is not None and merged_track.status == "active":
+                    merged_track.status = "merged"
+                    merged_track.merged_into = surviving_track_id
+                    merged_track_ids.append(merged_track_id)
+            self._append_merge_event(timestamp, surviving_track_id, merged_track_ids)
 
         # Handle splits: one previous object matched to multiple new objects
-        for prev_id, new_ids in reverse_assignments.items():
-            if len(new_ids) <= 1:
+        split_candidates = [
+            (
+                max(overlap_lookup[(new_id, prev_id)] for new_id in new_ids),
+                len(new_ids),
+                prev_id,
+            )
+            for prev_id, new_ids in reverse_assignments.items()
+            if len(new_ids) > 1
+        ]
+        split_candidates.sort(reverse=True)
+        for _, _, prev_id in split_candidates:
+            if prev_id in claimed_prev:
                 continue
-            unprocessed = [nid for nid in new_ids if nid not in processed_new]
-            if len(unprocessed) <= 1:
+            new_ids = reverse_assignments[prev_id]
+            available_new_ids = [new_id for new_id in new_ids if new_id not in claimed_new]
+            if len(available_new_ids) <= 1:
                 continue
             parent_tid = self._obj_to_track.get(prev_id)
             if parent_tid is None:
                 continue
             parent_track = self.get_track(parent_tid)
-            if parent_track is None:
+            if parent_track is None or parent_track.status != "active":
                 continue
             # Parent continues with largest piece
-            largest = max(unprocessed, key=lambda nid: new_objects[nid].area_km2)
+            largest = max(available_new_ids, key=lambda nid: new_objects[nid].area_km2)
             parent_track.add_position(timestamp, new_objects[largest])
             new_obj_to_track[largest] = parent_tid
-            processed_new.add(largest)
+            claimed_prev.add(prev_id)
+            claimed_new.add(largest)
             child_ids = []
-            for nid in unprocessed:
+            for nid in available_new_ids:
                 if nid == largest:
                     continue
                 child = self._create_track(timestamp, new_objects[nid])
                 child.split_from = parent_tid
                 new_obj_to_track[nid] = child.track_id
-                processed_new.add(nid)
+                claimed_new.add(nid)
                 child_ids.append(child.track_id)
-            self._recent_events.append({
-                "event_type": "split",
-                "timestamp": timestamp.isoformat(),
-                "description": f"Track {parent_tid} split into tracks {', '.join(str(c) for c in child_ids)}",
-                "involved_track_ids": [parent_tid] + child_ids,
-            })
+            event = normalize_split_event(timestamp, parent_tid, child_ids)
+            if event is not None:
+                self._recent_events.append(event)
 
         # Handle simple 1:1 matches
-        for new_id, prev_ids in assignments.items():
-            if new_id in processed_new:
+        for overlap, prev_id, new_id in all_pairs:
+            if new_id in claimed_new or prev_id in claimed_prev:
                 continue
-            if len(prev_ids) == 1:
-                prev_id = prev_ids[0]
-                tid = self._obj_to_track.get(prev_id)
-                if tid is not None:
-                    track = self.get_track(tid)
-                    if track is not None and track.status == "active":
-                        track.add_position(timestamp, new_objects[new_id])
-                        new_obj_to_track[new_id] = tid
-                        processed_new.add(new_id)
+            tid = self._obj_to_track.get(prev_id)
+            if tid is None:
+                continue
+            track = self.get_track(tid)
+            if track is None or track.status != "active":
+                continue
+            track.add_position(timestamp, new_objects[new_id])
+            new_obj_to_track[new_id] = tid
+            claimed_new.add(new_id)
+            claimed_prev.add(prev_id)
 
         # Create new tracks for unmatched new objects
         for new_id, obj in new_objects.items():
-            if new_id not in processed_new:
+            if new_id not in claimed_new:
                 track = self._create_track(timestamp, obj)
                 new_obj_to_track[new_id] = track.track_id
 
@@ -295,3 +276,6 @@ class StormTracker:
             if t.track_id == track_id:
                 return t
         return None
+
+
+Track.get_motion = _get_track_motion
