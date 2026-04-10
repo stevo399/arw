@@ -34,6 +34,10 @@ def compute_motion(positions: list[tuple[datetime, float, float]]) -> MotionVect
     lats = np.array([p[1] for p in positions])
     lons = np.array([p[2] for p in positions])
 
+    # If all timestamps are identical, no motion can be computed
+    if times_s[-1] == 0.0:
+        return MotionVector(speed_kmh=0.0, speed_mph=0, heading_deg=None, heading_label="stationary")
+
     # Linear regression: fit lat and lon vs time
     lat_slope = np.polyfit(times_s, lats, 1)[0]  # degrees per second
     lon_slope = np.polyfit(times_s, lons, 1)[0]  # degrees per second
