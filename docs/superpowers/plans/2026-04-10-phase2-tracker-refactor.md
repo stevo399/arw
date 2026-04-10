@@ -195,17 +195,17 @@ Compatibility goal:
 - Create: `tests/unit/test_tracking_motion.py`
 - Modify: `src/motion.py` or replace it with compatibility imports
 
-- [ ] Compute track-level motion from history with confidence scoring
-- [ ] Add sanity gating for unrealistic displacement, inconsistent headings, and low-quality histories
-- [ ] Return explicit states such as `stationary`, `nearly stationary`, and `uncertain`
-- [ ] Ensure dense-scene identity churn cannot produce 400+ mph spoken outputs
-- [ ] Add unit tests for stable motion, noisy motion, identity-swap-like jumps, and uncertain cases
-- [ ] Run targeted unit tests
-- [ ] Run smoke tests
-- [ ] Run live replay checks on a known merge/split regression case and a dense convective scene
-- [ ] Confirm that implausible speeds are suppressed or downgraded appropriately
-- [ ] Commit when green
-- [ ] Mark this task done in this file
+- [x] Compute track-level motion from history with confidence scoring
+- [x] Add sanity gating for unrealistic displacement, inconsistent headings, and low-quality histories
+- [x] Return explicit states such as `stationary`, `nearly stationary`, and `uncertain`
+- [x] Ensure dense-scene identity churn cannot produce 400+ mph spoken outputs
+- [x] Add unit tests for stable motion, noisy motion, identity-swap-like jumps, and uncertain cases
+- [x] Run targeted unit tests
+- [x] Run smoke tests
+- [x] Run live replay checks on a known merge/split regression case and a dense convective scene
+- [x] Confirm that implausible speeds are suppressed or downgraded appropriately
+- [x] Commit when green
+- [x] Mark this task done in this file
 
 ---
 

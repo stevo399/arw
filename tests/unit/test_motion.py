@@ -79,3 +79,26 @@ def test_motion_mph_conversion():
     motion = compute_motion(positions)
     expected_mph = round(motion.speed_kmh / 1.60934)
     assert motion.speed_mph == expected_mph
+
+
+def test_motion_absurd_speed_becomes_uncertain():
+    positions = [
+        (datetime(2026, 4, 8, 18, 0), 35.0, -97.0),
+        (datetime(2026, 4, 8, 18, 5), 38.0, -92.0),
+    ]
+    motion = compute_motion(positions)
+    assert motion.heading_label == "uncertain"
+    assert motion.confidence is not None
+    assert motion.confidence.label == "low"
+
+
+def test_motion_inconsistent_steps_becomes_uncertain():
+    positions = [
+        (datetime(2026, 4, 8, 18, 0), 35.0, -97.0),
+        (datetime(2026, 4, 8, 18, 5), 35.02, -97.0),
+        (datetime(2026, 4, 8, 18, 10), 35.4, -97.0),
+    ]
+    motion = compute_motion(positions)
+    assert motion.heading_label == "uncertain"
+    assert motion.confidence is not None
+    assert motion.confidence.label == "low"

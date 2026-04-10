@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from src.detection import DetectedObject
-from src.motion import MotionVector
 
 
 @dataclass
@@ -64,7 +64,7 @@ class Track:
     last_seen: datetime | None = None
     identity_confidence: float = 1.0
     motion_confidence: MotionConfidence | None = None
-    last_motion: MotionVector | None = None
+    last_motion: Any | None = None
     _missed_scans: int = 0
 
     def add_position(self, timestamp: datetime, obj: DetectedObject) -> None:

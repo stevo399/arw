@@ -31,6 +31,8 @@ def _format_motion(motion: MotionVector | None) -> str:
     """Format motion info for speech."""
     if motion is None:
         return ""
+    if motion.heading_label == "uncertain":
+        return ", tracking uncertain"
     if motion.heading_label == "stationary":
         return ", stationary"
     if motion.heading_label == "nearly stationary":

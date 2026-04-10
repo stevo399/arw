@@ -108,6 +108,26 @@ def test_generate_summary_with_merge_event():
     assert "merged" in text.lower()
 
 
+def test_generate_summary_uncertain_motion():
+    obj = _make_object()
+    track = _make_track(obj=obj)
+    track._motion_override = MotionVector(
+        speed_kmh=220.0,
+        speed_mph=137,
+        heading_deg=None,
+        heading_label="uncertain",
+    )
+    text = generate_summary(
+        site_id="KTLX",
+        site_name="Oklahoma City",
+        timestamp="2026-04-08T18:30:00Z",
+        objects=[obj],
+        tracks=[track],
+    )
+    assert "tracking uncertain" in text
+    assert "moving" not in text
+
+
 def test_generate_summary_multiple_objects():
     obj1 = _make_object(obj_id=1, peak_dbz=55.0, peak_label="intense rain", area_km2=200.0)
     obj2 = _make_object(obj_id=2, peak_dbz=30.0, peak_label="moderate rain", area_km2=50.0)

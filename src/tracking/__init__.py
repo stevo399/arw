@@ -9,6 +9,7 @@ from src.tracking.motion_field import (
     predict_latlon_position,
     predict_pixel_position,
 )
+from src.tracking.motion import MotionVector, compute_motion
 from src.tracking.segmentation import SegmentationResult, adapt_detection_result, segment_storm_objects
 from src.tracking.types import (
     AssociationScore,
@@ -24,6 +25,7 @@ __all__ = [
     "AssociationScore",
     "GeographicMotionFieldEstimate",
     "MotionFieldEstimate",
+    "MotionVector",
     "MotionConfidence",
     "PeakEntry",
     "SegmentedStormObject",
@@ -31,6 +33,7 @@ __all__ = [
     "Track",
     "TrackPosition",
     "adapt_detection_result",
+    "compute_motion",
     "estimate_geographic_motion_field",
     "estimate_motion_field",
     "predict_bbox",
