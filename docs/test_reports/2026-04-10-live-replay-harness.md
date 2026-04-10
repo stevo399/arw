@@ -104,3 +104,52 @@ Representative summary lines:
 
 - Unit verification: `uv run pytest tests/unit/test_live_replay_contracts.py -q`
 - Smoke tests: not required for this task because no server runtime or API behavior changed
+
+## Follow-Up Validation After Summary Stability Fix
+
+### Dense live replay after summary fix
+
+Command:
+
+```powershell
+uv run python scripts/live_replay.py KTLX --scans 12
+```
+
+Observed behavior:
+
+- total coverage now stays scene-level instead of collapsing to the currently selected focal object
+- coverage stayed in a consistent `7236` to `8582` square-mile band across the replay
+- summaries continued to suppress unreliable motion with `tracking uncertain`
+- dense scenes can still produce very large raw track speeds in diagnostics, but those tracks are being downgraded in spoken output rather than announced as fact
+
+Representative output:
+
+- `2026-04-10T21:12:30Z objects=111 active=113 uncertain_tracks=10 max_speed_mph=42 merges=20 splits=15`
+- `2026-04-10T21:49:29Z objects=123 active=133 uncertain_tracks=14 max_speed_mph=289 merges=21 splits=21`
+- `2026-04-10T21:54:00Z objects=130 active=149 uncertain_tracks=16 max_speed_mph=222 merges=27 splits=23`
+
+Representative summary lines:
+
+- `Oklahoma City: 111 rain objects detected. Strongest: severe core, 26 miles NE of the radar, tracking uncertain. Note: 20 storms merged in the last scan. Note: 15 storms split in the last scan. Covering approximately 7184 square miles.`
+- `Oklahoma City: 123 rain objects detected. Strongest: severe core, 135 miles E of the radar, tracking uncertain. Note: 21 storms merged in the last scan. Note: 21 storms split in the last scan. Covering approximately 7354 square miles.`
+
+### Lower-complexity live replay
+
+Command:
+
+```powershell
+uv run python scripts/live_replay.py KSOX --scans 5
+```
+
+Observed behavior:
+
+- low-complexity scene remained stable across five live scans
+- strongest-object summaries stayed geographically consistent
+- coverage remained small and plausible at `14` to `39` square miles
+- max reported speed remained low at `0` to `36` mph
+
+Representative output:
+
+- `2026-04-10T22:35:03Z objects=4 active=4 uncertain_tracks=0 max_speed_mph=0 merges=0 splits=0`
+- `2026-04-10T22:52:26Z objects=6 active=6 uncertain_tracks=0 max_speed_mph=36 merges=2 splits=3`
+- `2026-04-10T23:09:40Z objects=5 active=9 uncertain_tracks=1 max_speed_mph=5 merges=1 splits=2`

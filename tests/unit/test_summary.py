@@ -1,6 +1,8 @@
 # tests/unit/test_summary.py
+from datetime import datetime, timedelta
+
 from src.summary import generate_summary, km_to_miles
-from src.detection import DetectedObject, IntensityLayerData, degrees_to_bearing
+from src.detection import DetectedObject
 from src.motion import MotionVector
 from src.tracker import Track
 
@@ -24,7 +26,7 @@ def _make_track(track_id=1, obj: DetectedObject | None = None,
                 speed_kmh=56.3, heading_label="NE") -> Track:
     track = Track(track_id=track_id, status="active")
     if obj is not None:
-        track.current_object = obj
+        track.add_position(datetime(2026, 4, 8, 18, 0), obj)
     return track
 
 
@@ -139,3 +141,47 @@ def test_generate_summary_multiple_objects():
     )
     assert "2 rain objects" in text
     assert "intense rain" in text
+
+
+def test_generate_summary_uses_total_coverage_area():
+    obj1 = _make_object(obj_id=1, peak_dbz=55.0, peak_label="intense rain", area_km2=200.0)
+    obj2 = _make_object(obj_id=2, peak_dbz=30.0, peak_label="moderate rain", area_km2=50.0)
+    text = generate_summary(
+        site_id="KTLX",
+        site_name="Oklahoma City",
+        timestamp="2026-04-08T18:30:00Z",
+        objects=[obj1, obj2],
+    )
+    assert "97 square miles" in text
+
+
+def test_generate_summary_prefers_stable_larger_tracked_object_over_tiny_peak_spike():
+    stable = _make_object(
+        obj_id=1,
+        distance_km=30.0,
+        bearing_deg=45.0,
+        peak_dbz=58.0,
+        peak_label="intense rain",
+        area_km2=800.0,
+    )
+    spiky = _make_object(
+        obj_id=2,
+        distance_km=120.0,
+        bearing_deg=90.0,
+        peak_dbz=61.0,
+        peak_label="severe core",
+        area_km2=8.0,
+    )
+    stable_track = _make_track(track_id=1, obj=stable)
+    for minutes in range(5, 25, 5):
+        stable_track.add_position(datetime(2026, 4, 8, 18, 0) + timedelta(minutes=minutes), stable)
+
+    text = generate_summary(
+        site_id="KTLX",
+        site_name="Oklahoma City",
+        timestamp="2026-04-08T18:30:00Z",
+        objects=[spiky, stable],
+        tracks=[stable_track],
+    )
+    assert "intense rain" in text
+    assert "19 miles NE of the radar" in text

@@ -1,4 +1,6 @@
 # src/summary.py
+import math
+
 from src.detection import DetectedObject, degrees_to_bearing
 from src.motion import MotionVector
 
@@ -25,6 +27,40 @@ def _get_motion_for_object(obj: DetectedObject, tracks) -> MotionVector | None:
                 return track._motion_override
             return track.get_motion()
     return None
+
+
+def _get_track_for_object(obj: DetectedObject, tracks):
+    """Find the active track currently associated with a detected object."""
+    if tracks is None:
+        return None
+    for track in tracks:
+        if track.current_object is not None and track.current_object.object_id == obj.object_id:
+            return track
+    return None
+
+
+def _summary_strength_score(obj: DetectedObject, track) -> float:
+    """Prefer intense storms, but damp tiny-core jitter with area and track continuity."""
+    area_bonus = min(math.log1p(max(obj.area_km2, 0.0)), 6.0)
+    track_bonus = 0.0
+    if track is not None:
+        history_bonus = min(len(track.positions), 6) * 0.5
+        confidence_bonus = max(min(track.identity_confidence, 1.0), 0.0)
+        track_bonus = history_bonus + confidence_bonus
+    return obj.peak_dbz + area_bonus + track_bonus
+
+
+def _pick_summary_object(objects: list[DetectedObject], tracks) -> DetectedObject:
+    """Choose a summary focal object with less scan-to-scan jitter than raw peak ordering."""
+    return max(
+        objects,
+        key=lambda obj: (
+            _summary_strength_score(obj, _get_track_for_object(obj, tracks)),
+            obj.peak_dbz,
+            obj.area_km2,
+            -obj.distance_km,
+        ),
+    )
 
 
 def _format_motion(motion: MotionVector | None) -> str:
@@ -63,10 +99,10 @@ def generate_summary(
 
     count = len(objects)
     obj_word = "rain object" if count == 1 else "rain objects"
-    strongest = objects[0]
+    strongest = _pick_summary_object(objects, tracks)
     distance_mi = km_to_miles(strongest.distance_km)
     bearing = degrees_to_bearing(strongest.bearing_deg)
-    area_mi2 = km2_to_mi2(strongest.area_km2)
+    area_mi2 = km2_to_mi2(sum(obj.area_km2 for obj in objects))
 
     motion = _get_motion_for_object(strongest, tracks)
     motion_str = _format_motion(motion)

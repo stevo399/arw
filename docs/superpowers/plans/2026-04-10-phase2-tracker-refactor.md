@@ -265,14 +265,14 @@ Compatibility goal:
 - Modify or add: `docs/test_reports/*.md`
 - Modify: this plan file
 
-- [ ] Run the full test suite
-- [ ] Run smoke tests explicitly
-- [ ] Run live validation on a known merge/split regression case, a dense convective scene, and one lower-complexity site
-- [ ] Review current summaries for motion plausibility and event sanity
-- [ ] Update `PROGRESS.md` with completed work, current state, next work, and any remaining blockers
-- [ ] Update test-report docs with live validation outcomes and dates
-- [ ] Commit when green
-- [ ] Mark this task done in this file
+- [x] Run the full test suite
+- [x] Run smoke tests explicitly
+- [x] Run live validation on a known merge/split regression case, a dense convective scene, and one lower-complexity site
+- [x] Review current summaries for motion plausibility and event sanity
+- [x] Update `PROGRESS.md` with completed work, current state, next work, and any remaining blockers
+- [x] Update test-report docs with live validation outcomes and dates
+- [x] Commit when green
+- [x] Mark this task done in this file
 
 ---
 
