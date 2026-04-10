@@ -1,3 +1,4 @@
+from src.tracking.association import AssociationResult, associate_tracks, compute_overlap
 from src.tracking.events import normalize_merge_event, normalize_split_event
 from src.tracking.motion_field import (
     GeographicMotionFieldEstimate,
@@ -19,6 +20,7 @@ from src.tracking.types import (
 )
 
 __all__ = [
+    "AssociationResult",
     "AssociationScore",
     "GeographicMotionFieldEstimate",
     "MotionFieldEstimate",
@@ -35,6 +37,8 @@ __all__ = [
     "predict_latlon_position",
     "predict_pixel_position",
     "segment_storm_objects",
+    "associate_tracks",
+    "compute_overlap",
     "normalize_merge_event",
     "normalize_split_event",
 ]

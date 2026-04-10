@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from src.buffer import BufferedScan
 from src.detection import DetectionResult, detect_objects_with_grid
 from src.tracking.types import SegmentedStormObject
 
@@ -38,6 +39,16 @@ def adapt_detection_result(result: DetectionResult) -> SegmentationResult:
         labeled_grid=result.labeled_grid,
         object_masks=result.object_masks,
     )
+
+
+def segment_buffered_scan(scan: BufferedScan) -> SegmentationResult:
+    """Wrap a buffered scan's detected objects in segmentation metadata."""
+    detection = DetectionResult(
+        objects=scan.detected_objects,
+        labeled_grid=scan.labeled_grid,
+        object_masks=scan.object_masks,
+    )
+    return adapt_detection_result(detection)
 
 
 def segment_storm_objects(

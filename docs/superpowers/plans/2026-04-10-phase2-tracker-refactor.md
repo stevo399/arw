@@ -169,20 +169,20 @@ Compatibility goal:
 - Create: `tests/unit/test_tracking_association.py`
 - Modify: `src/tracking/tracker.py` or equivalent orchestrator
 
-- [ ] Build a cost matrix for prior tracks vs new segmented objects
-- [ ] Include overlap, centroid distance, predicted position from the motion field, area change, and intensity change in the score
-- [ ] Solve 1:1 assignments globally
-- [ ] Detect merge and split candidates after primary assignment rather than by ad hoc reuse of the same tracks
-- [ ] Guarantee one prior track cannot be claimed by multiple new objects in the same primary assignment pass
-- [ ] Guarantee event lists cannot contain duplicate IDs or self-merges
-- [ ] Add regression tests for known duplicate/self-merge failures
-- [ ] Add crowded-scene synthetic tests with ambiguous neighbors
-- [ ] Run targeted unit tests
-- [ ] Run smoke tests
-- [ ] Run live replay checks on a known merge/split regression case and a dense convective scene
-- [ ] Inspect output for assignment stability, merge/split sanity, and active-track plausibility
-- [ ] Commit when green
-- [ ] Mark this task done in this file
+- [x] Build a cost matrix for prior tracks vs new segmented objects
+- [x] Include overlap, centroid distance, predicted position from the motion field, area change, and intensity change in the score
+- [x] Solve 1:1 assignments globally
+- [x] Detect merge and split candidates after primary assignment rather than by ad hoc reuse of the same tracks
+- [x] Guarantee one prior track cannot be claimed by multiple new objects in the same primary assignment pass
+- [x] Guarantee event lists cannot contain duplicate IDs or self-merges
+- [x] Add regression tests for known duplicate/self-merge failures
+- [x] Add crowded-scene synthetic tests with ambiguous neighbors
+- [x] Run targeted unit tests
+- [x] Run smoke tests
+- [x] Run live replay checks on a known merge/split regression case and a dense convective scene
+- [x] Inspect output for assignment stability, merge/split sanity, and active-track plausibility
+- [x] Commit when green
+- [x] Mark this task done in this file
 
 ---
 
