@@ -34,6 +34,17 @@ class AssociationScore:
 
 
 @dataclass
+class SegmentedStormObject:
+    object_id: int
+    detected_object: DetectedObject
+    mask: object
+    bbox: tuple[int, int, int, int]
+    pixel_count: int
+    threshold_parent_id: int | None = None
+    threshold_level: float | None = None
+
+
+@dataclass
 class MotionConfidence:
     label: str
     score: float
@@ -74,4 +85,3 @@ class Track:
         self._missed_scans = 0
         if self.first_seen is None:
             self.first_seen = timestamp
-

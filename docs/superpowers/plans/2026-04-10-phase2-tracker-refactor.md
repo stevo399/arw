@@ -125,17 +125,17 @@ Compatibility goal:
 - Modify: `src/detection.py`
 - Create: `tests/unit/test_tracking_segmentation.py`
 
-- [ ] Introduce a segmentation adapter that wraps current detection output into tracking-friendly storm objects
-- [ ] Preserve current detection behavior as the baseline implementation
-- [ ] Include hooks for future multi-threshold / hierarchical storm structure without changing endpoint outputs yet
-- [ ] Ensure segmentation returns stable geometry, masks, centroids, area, and peak metadata required by association
-- [ ] Add unit tests for segmentation contracts
-- [ ] Run targeted unit tests
-- [ ] Run smoke tests
-- [ ] Run live object extraction checks for at least one dense scene and one lower-complexity scene
-- [ ] Review live output for obviously unstable segmentation artifacts
-- [ ] Commit when green
-- [ ] Mark this task done in this file
+- [x] Introduce a segmentation adapter that wraps current detection output into tracking-friendly storm objects
+- [x] Preserve current detection behavior as the baseline implementation
+- [x] Include hooks for future multi-threshold / hierarchical storm structure without changing endpoint outputs yet
+- [x] Ensure segmentation returns stable geometry, masks, centroids, area, and peak metadata required by association
+- [x] Add unit tests for segmentation contracts
+- [x] Run targeted unit tests
+- [x] Run smoke tests
+- [x] Run live object extraction checks for at least one dense scene and one lower-complexity scene
+- [x] Review live output for obviously unstable segmentation artifacts
+- [x] Commit when green
+- [x] Mark this task done in this file
 
 ---
 
