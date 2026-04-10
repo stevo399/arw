@@ -4,9 +4,9 @@
 
 **Goal:** Replace the current monolithic overlap-first tracker with a tracking architecture that can survive dense convective scenes without requiring repeated rewrites. The target is a generic radar-object tracker that separates segmentation, association, motion-field guidance, motion estimation, and event generation, while preserving the current API shape where practical.
 
-**Why this refactor exists:** Live `KEYX` and `KTLX` validation showed that the current tracker can still produce unreliable motion in crowded scenes. The current design mixes object matching, event generation, and motion estimation inside one module, which makes later improvements expensive and fragile.
+**Why this refactor exists:** Live validation showed that the current tracker can still produce unreliable motion in crowded scenes. The current design mixes object matching, event generation, and motion estimation inside one module, which makes later improvements expensive and fragile.
 
-**Key requirement:** This refactor must be generic. No site-specific logic, thresholds keyed to one radar, or one-off behavior tuned to `KEYX`, `KTLX`, or any other site.
+**Key requirement:** This refactor must be generic. No site-specific logic, thresholds keyed to one radar, or one-off behavior tuned to any individual site.
 
 ## Mandatory Completion Protocol
 
@@ -244,15 +244,15 @@ Compatibility goal:
 - Create: `docs/test_reports/2026-04-10-*.md` updates as needed
 - Create: `tests/unit/test_live_replay_contracts.py` if a pure unit wrapper is helpful
 
-- [ ] Add a reusable command/script for replaying multiple scans from a site and printing summary/track diagnostics
-- [ ] Support at least one known merge/split regression case and one dense convective scene
-- [ ] Ensure output includes object counts, strongest object summary, merge/split events, and motion sanity flags
-- [ ] Document how and when to run it
-- [ ] Run the live regression harness for a known merge/split regression case
-- [ ] Run the live regression harness for a dense convective scene
-- [ ] Run smoke tests if script/server changes affected runtime behavior
-- [ ] Commit when green
-- [ ] Mark this task done in this file
+- [x] Add a reusable command/script for replaying multiple scans from a site and printing summary/track diagnostics
+- [x] Support at least one known merge/split regression case and one dense convective scene
+- [x] Ensure output includes object counts, strongest object summary, merge/split events, and motion sanity flags
+- [x] Document how and when to run it
+- [x] Run the live regression harness for a known merge/split regression case
+- [x] Run the live regression harness for a dense convective scene
+- [x] Run smoke tests if script/server changes affected runtime behavior (not required for this script-only task)
+- [x] Commit when green
+- [x] Mark this task done in this file
 
 ---
 

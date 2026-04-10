@@ -1,0 +1,66 @@
+from datetime import datetime
+
+import numpy as np
+
+from src.buffer import BufferedScan
+from src.detection import DetectedObject
+from src.motion import MotionVector
+from src.parser import ReflectivityData
+from src.tracker import StormTracker, Track
+from scripts.live_replay import summarize_scan
+
+
+def _make_buffered_scan() -> BufferedScan:
+    reflectivity = ReflectivityData(
+        reflectivity=np.full((360, 500), np.nan),
+        azimuths=np.linspace(0, 359, 360),
+        ranges_m=np.linspace(2000, 250000, 500),
+        radar_lat=35.0,
+        radar_lon=-97.0,
+        elevation_angle=0.5,
+        elevation_angles=[0.5],
+        timestamp="2026-04-10T20:00:00Z",
+    )
+    detected = DetectedObject(
+        object_id=1,
+        centroid_lat=35.5,
+        centroid_lon=-97.3,
+        distance_km=40.0,
+        bearing_deg=270.0,
+        peak_dbz=45.0,
+        peak_label="heavy rain",
+        area_km2=100.0,
+        layers=[],
+    )
+    mask = np.zeros((360, 500), dtype=bool)
+    mask[85:95, 195:205] = True
+    labeled = np.zeros((360, 500), dtype=int)
+    labeled[mask] = 1
+    return BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0),
+        site_id="KTLX",
+        reflectivity_data=reflectivity,
+        detected_objects=[detected],
+        labeled_grid=labeled,
+        object_masks={1: mask},
+    )
+
+
+def test_summarize_scan_reports_motion_sanity_fields():
+    buffered = _make_buffered_scan()
+    tracker = StormTracker()
+    tracker.update(buffered)
+    track = tracker.active_tracks[0]
+    track._motion_override = MotionVector(
+        speed_kmh=220.0,
+        speed_mph=137,
+        heading_deg=None,
+        heading_label="uncertain",
+    )
+    track.get_motion = lambda: track._motion_override
+    diagnostics = summarize_scan("Oklahoma City", buffered, tracker)
+    assert diagnostics.object_count == 1
+    assert diagnostics.active_count == 1
+    assert diagnostics.uncertain_tracks == 1
+    assert diagnostics.max_speed_mph == 137
+    assert "tracking uncertain" in diagnostics.summary
