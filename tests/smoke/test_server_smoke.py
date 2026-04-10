@@ -103,6 +103,31 @@ def test_tracks_endpoint_returns_200():
     assert "recent_events" in data
 
 
+def test_tracks_endpoint_includes_motion_confidence_fields():
+    mock_ref = MagicMock()
+    mock_ref.reflectivity = np.full((360, 500), np.nan)
+    mock_ref.azimuths = np.linspace(0, 359, 360)
+    mock_ref.ranges_m = np.linspace(2000, 250000, 500)
+    mock_ref.radar_lat = 35.3331
+    mock_ref.radar_lon = -97.2778
+    mock_ref.timestamp = "2026-04-08T18:30:00Z"
+    mock_ref.elevation_angle = 0.5
+    mock_ref.elevation_angles = [0.5]
+    with patch("src.server.fetch_scan", return_value="/fake/path"), \
+         patch("src.server.extract_reflectivity", return_value=mock_ref):
+        client.get("/tracks/KTLX")
+    with patch("src.server.fetch_scan", return_value="/fake/path"), \
+         patch("src.server.extract_reflectivity", return_value=mock_ref):
+        resp = client.get("/tracks/KTLX")
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["tracks"]:
+        motion = data["tracks"][0]["motion"]
+        assert "confidence_label" in motion
+        assert "confidence_score" in motion
+        assert "confidence_reason" in motion
+
+
 def test_motion_endpoint_missing_track_returns_404():
     resp = client.get("/motion/KTLX/999")
     assert resp.status_code == 404

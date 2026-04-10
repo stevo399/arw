@@ -62,6 +62,9 @@ class TrackMotion(BaseModel):
     speed_mph: int
     heading_deg: float | None
     heading_label: str
+    confidence_label: str | None = None
+    confidence_score: float | None = None
+    confidence_reason: str | None = None
 
 
 class PeakHistoryEntry(BaseModel):

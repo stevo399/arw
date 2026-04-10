@@ -220,18 +220,18 @@ Compatibility goal:
 - Modify: `src/summary.py`
 - Create/Modify tests in `tests/smoke/` and `tests/e2e/`
 
-- [ ] Replace direct use of the legacy tracker logic with the new pipeline
-- [ ] Preserve `/tracks` and `/motion` response shapes where possible
-- [ ] Surface motion confidence in internal models; decide whether to expose it publicly now or keep it internal
-- [ ] Make summary generation confidence-aware so uncertain motion is not spoken as fact
-- [ ] Add smoke tests for `/summary`, `/tracks`, and `/motion`
-- [ ] Add e2e tests covering dense scenes, merge/split reporting, and uncertain-motion summaries
-- [ ] Run targeted tests
-- [ ] Run smoke tests
-- [ ] Run live API fetches for a known merge/split regression case, a dense convective scene, and at least one lower-complexity site
-- [ ] Inspect rendered output, not just status codes
-- [ ] Commit when green
-- [ ] Mark this task done in this file
+- [x] Replace direct use of the legacy tracker logic with the new pipeline
+- [x] Preserve `/tracks` and `/motion` response shapes where possible
+- [x] Surface motion confidence in internal models; decide whether to expose it publicly now or keep it internal
+- [x] Make summary generation confidence-aware so uncertain motion is not spoken as fact
+- [x] Add smoke tests for `/summary`, `/tracks`, and `/motion`
+- [x] Add e2e tests covering dense scenes, merge/split reporting, and uncertain-motion summaries
+- [x] Run targeted tests
+- [x] Run smoke tests
+- [x] Run live API fetches for a known merge/split regression case, a dense convective scene, and at least one lower-complexity site
+- [x] Inspect rendered output, not just status codes
+- [x] Commit when green
+- [x] Mark this task done in this file
 
 ---
 

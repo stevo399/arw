@@ -160,3 +160,7 @@ def test_tracks_accumulate_across_calls():
     assert resp2.status_code == 200
     data = resp2.json()
     assert data["active_count"] >= 1
+    if data["tracks"]:
+        motion = data["tracks"][0]["motion"]
+        assert "confidence_label" in motion
+        assert "confidence_score" in motion

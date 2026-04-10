@@ -9,7 +9,7 @@ from src.models import (
 from src.sites import geocode_city_state, rank_sites, NEXRAD_SITES
 from src.ingest import fetch_scan
 from src.parser import extract_reflectivity
-from src.detection import detect_objects, detect_objects_with_grid
+from src.detection import detect_objects_with_grid
 from src.summary import generate_summary
 from src.buffer import ReplayBuffer, BufferedScan
 from src.tracker import StormTracker
@@ -61,6 +61,19 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
     return buffered
 
 
+def _motion_to_model(motion) -> TrackMotion:
+    confidence = getattr(motion, "confidence", None)
+    return TrackMotion(
+        speed_kmh=motion.speed_kmh,
+        speed_mph=motion.speed_mph,
+        heading_deg=motion.heading_deg,
+        heading_label=motion.heading_label,
+        confidence_label=confidence.label if confidence is not None else None,
+        confidence_score=confidence.score if confidence is not None else None,
+        confidence_reason=confidence.reason if confidence is not None else None,
+    )
+
+
 def _track_to_model(track) -> StormTrack:
     """Convert internal Track to Pydantic StormTrack model."""
     motion = track.get_motion()
@@ -77,12 +90,7 @@ def _track_to_model(track) -> StormTrack:
             )
             for p in track.positions
         ],
-        motion=TrackMotion(
-            speed_kmh=motion.speed_kmh,
-            speed_mph=motion.speed_mph,
-            heading_deg=motion.heading_deg,
-            heading_label=motion.heading_label,
-        ),
+        motion=_motion_to_model(motion),
         peak_dbz=track.peak_history[-1].peak_dbz if track.peak_history else 0.0,
         peak_label=track.peak_history[-1].peak_label if track.peak_history else "unknown",
         merged_into=track.merged_into,
@@ -211,12 +219,7 @@ def get_motion(site_id: str, track_id: int):
             )
             for p in track.positions
         ],
-        motion=TrackMotion(
-            speed_kmh=motion.speed_kmh,
-            speed_mph=motion.speed_mph,
-            heading_deg=motion.heading_deg,
-            heading_label=motion.heading_label,
-        ),
+        motion=_motion_to_model(motion),
         peak_history=[
             PeakHistoryEntry(
                 timestamp=p.timestamp.isoformat() if isinstance(p.timestamp, datetime) else p.timestamp,
