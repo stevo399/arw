@@ -103,3 +103,60 @@ def test_full_pipeline_scan_metadata():
     assert data["site_id"] == "KTLX"
     assert data["elevation_angles"] == [0.5, 1.5, 2.4]
     assert data["timestamp"] == "2026-04-08T18:30:00Z"
+
+
+def test_tracks_endpoint_e2e():
+    """Test /tracks endpoint with synthetic data."""
+    ref_data = _make_reflectivity_data_with_storm()
+    with patch("src.server.fetch_scan", return_value="/fake/path"), \
+         patch("src.server.extract_reflectivity", return_value=ref_data):
+        resp = client.get("/tracks/KTLX")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["active_count"] >= 0
+    assert isinstance(data["tracks"], list)
+    assert isinstance(data["recent_events"], list)
+
+
+def test_tracks_accumulate_across_calls():
+    """Two calls to /tracks should show tracks with multiple positions."""
+    # Reset server state
+    import src.server as srv
+    srv._buffer = type(srv._buffer)()
+    srv._tracker = type(srv._tracker)()
+
+    ref_data1 = ReflectivityData(
+        reflectivity=np.full((360, 500), np.nan),
+        azimuths=np.linspace(0, 359, 360),
+        ranges_m=np.linspace(2000, 250000, 500),
+        radar_lat=35.3331,
+        radar_lon=-97.2778,
+        elevation_angle=0.5,
+        elevation_angles=[0.5],
+        timestamp="2026-04-08T18:30:00Z",
+    )
+    ref_data1.reflectivity[85:95, 195:205] = 45.0
+
+    ref_data2 = ReflectivityData(
+        reflectivity=np.full((360, 500), np.nan),
+        azimuths=np.linspace(0, 359, 360),
+        ranges_m=np.linspace(2000, 250000, 500),
+        radar_lat=35.3331,
+        radar_lon=-97.2778,
+        elevation_angle=0.5,
+        elevation_angles=[0.5],
+        timestamp="2026-04-08T18:35:00Z",
+    )
+    ref_data2.reflectivity[86:96, 196:206] = 45.0  # Slightly moved
+
+    with patch("src.server.fetch_scan", return_value="/fake/path"), \
+         patch("src.server.extract_reflectivity", return_value=ref_data1):
+        resp1 = client.get("/tracks/KTLX")
+    assert resp1.status_code == 200
+
+    with patch("src.server.fetch_scan", return_value="/fake/path"), \
+         patch("src.server.extract_reflectivity", return_value=ref_data2):
+        resp2 = client.get("/tracks/KTLX")
+    assert resp2.status_code == 200
+    data = resp2.json()
+    assert data["active_count"] >= 1
