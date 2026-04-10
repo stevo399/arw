@@ -2,6 +2,7 @@ import math
 import numpy as np
 from src.detection import (
     detect_objects,
+    detect_objects_with_grid,
     classify_intensity,
     compute_object_properties,
     degrees_to_bearing,
@@ -9,6 +10,7 @@ from src.detection import (
     MIN_OBJECT_AREA_KM2,
     INTENSITY_THRESHOLDS,
     DetectedObject,
+    DetectionResult,
 )
 
 
@@ -140,9 +142,6 @@ def test_detect_objects_filters_small_objects():
         radar_lon=-97.0,
     )
     assert len(objects) == 0
-
-
-from src.detection import detect_objects_with_grid, DetectionResult
 
 
 def test_detect_objects_with_grid_returns_result():

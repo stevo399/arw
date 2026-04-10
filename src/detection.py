@@ -173,36 +173,6 @@ def compute_object_properties(
     )
 
 
-def detect_objects(
-    reflectivity: np.ndarray,
-    azimuths: np.ndarray,
-    ranges_m: np.ndarray,
-    radar_lat: float,
-    radar_lon: float,
-) -> list[DetectedObject]:
-    """Detect rain objects in a reflectivity grid. Returns list sorted by peak_dbz descending."""
-    valid = ~np.isnan(reflectivity) & (reflectivity >= MIN_DBZ_THRESHOLD)
-    labeled, num_features = label(valid)
-
-    objects = []
-    for i in range(1, num_features + 1):
-        obj_mask = labeled == i
-        obj = compute_object_properties(
-            obj_mask=obj_mask,
-            reflectivity=reflectivity,
-            azimuths=azimuths,
-            ranges_m=ranges_m,
-            radar_lat=radar_lat,
-            radar_lon=radar_lon,
-            object_id=i,
-        )
-        if obj is not None:
-            objects.append(obj)
-
-    objects.sort(key=lambda o: o.peak_dbz, reverse=True)
-    return objects
-
-
 @dataclass
 class DetectionResult:
     """Result of object detection including labeled grid for tracking."""
@@ -249,3 +219,23 @@ def detect_objects_with_grid(
         labeled_grid=labeled,
         object_masks=object_masks,
     )
+
+
+def detect_objects(
+    reflectivity: np.ndarray,
+    azimuths: np.ndarray,
+    ranges_m: np.ndarray,
+    radar_lat: float,
+    radar_lon: float,
+) -> list[DetectedObject]:
+    """Detect rain objects from reflectivity data.
+    Returns list of DetectedObject sorted by peak_dbz descending.
+    """
+    result = detect_objects_with_grid(
+        reflectivity=reflectivity,
+        azimuths=azimuths,
+        ranges_m=ranges_m,
+        radar_lat=radar_lat,
+        radar_lon=radar_lon,
+    )
+    return result.objects
