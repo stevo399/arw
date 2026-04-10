@@ -147,16 +147,16 @@ Compatibility goal:
 - Create: `src/tracking/motion_field.py`
 - Create: `tests/unit/test_tracking_motion_field.py`
 
-- [ ] Implement background motion-field estimation from successive scans
-- [ ] Start with a design that can later support optical flow / cross-correlation without changing the tracker interface
-- [ ] Expose predicted displacement for track association
-- [ ] Define confidence/quality metrics for the motion field
-- [ ] Add unit tests for simple motion-field cases and degenerate/noisy cases
-- [ ] Run targeted unit tests
-- [ ] Run smoke tests if any API-visible behavior changes
-- [ ] Run live replay checks on one known merge/split regression case and one dense scene to inspect raw motion-field reasonableness
-- [ ] Commit when green
-- [ ] Mark this task done in this file
+- [x] Implement background motion-field estimation from successive scans
+- [x] Start with a design that can later support optical flow / cross-correlation without changing the tracker interface
+- [x] Expose predicted displacement for track association
+- [x] Define confidence/quality metrics for the motion field
+- [x] Add unit tests for simple motion-field cases and degenerate/noisy cases
+- [x] Run targeted unit tests
+- [x] Run smoke tests if any API-visible behavior changes
+- [x] Run live replay checks on one known merge/split regression case and one dense scene to inspect raw motion-field reasonableness
+- [x] Commit when green
+- [x] Mark this task done in this file
 
 ---
 
