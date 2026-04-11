@@ -16,8 +16,10 @@ def test_render_markdown_includes_heading_flip_metric():
         total_splits=8,
         mean_uncertain_tracks=0.0,
         mean_focus_identity_confidence=0.52,
+        mean_focus_continuity=0.38,
         mean_focus_motion_confidence=0.41,
         focus_low_identity_scans=1,
+        focus_low_continuity_scans=2,
         focus_low_motion_scans=2,
         focus_switches=1,
         focus_heading_flips_ge_90=2,
@@ -41,6 +43,8 @@ def test_render_markdown_includes_heading_flip_metric():
                 focus_track_id=1,
                 focus_identity_label="medium",
                 focus_identity_score=0.52,
+                focus_continuity_label="low",
+                focus_continuity_score=0.38,
                 focus_heading_deg=None,
                 focus_heading_label="stationary",
                 focus_speed_mph=0,
@@ -55,5 +59,7 @@ def test_render_markdown_includes_heading_flip_metric():
     markdown = render_markdown([result])
     assert "focus heading flips >=90 deg" in markdown
     assert "focus flips with low motion confidence" in markdown
+    assert "focus low-continuity scans" in markdown
+    assert "focus_continuity=low:0.38" in markdown
     assert "focus_identity=medium:0.52" in markdown
     assert "`2`" in markdown

@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import FastAPI, Query, HTTPException
 from src.models import (
     RadarSite, ScanMeta, ObjectsResponse, SummaryResponse, RainObject, IntensityLayer,
-    TracksResponse, StormTrack, TrackPosition, TrackMotion, TrackEvent, TrackIdentity,
+    TracksResponse, StormTrack, TrackPosition, TrackMotion, TrackEvent, TrackIdentity, TrackFocus,
     TrackDetailResponse, PeakHistoryEntry,
 )
 from src.sites import geocode_city_state, rank_sites, NEXRAD_SITES
@@ -82,6 +82,7 @@ def _track_to_model(track) -> StormTrack:
     """Convert internal Track to Pydantic StormTrack model."""
     motion = track.get_motion()
     identity = getattr(track, "identity_diagnostics", None)
+    focus = getattr(track, "focus_continuity", None)
     return StormTrack(
         track_id=track.track_id,
         status=track.status,
@@ -106,6 +107,14 @@ def _track_to_model(track) -> StormTrack:
             missed_scans=identity.missed_scans if identity is not None else None,
             lineage_complexity=identity.lineage_complexity if identity is not None else None,
             event_context=identity.event_context if identity is not None else None,
+        ),
+        focus=TrackFocus(
+            label=focus.label if focus is not None else None,
+            score=focus.score if focus is not None else None,
+            reason=focus.reason if focus is not None else None,
+            recent_heading_flip_count=focus.recent_heading_flip_count if focus is not None else None,
+            recent_focus_switch_count=focus.recent_focus_switch_count if focus is not None else None,
+            recent_structural_event_count=focus.recent_structural_event_count if focus is not None else None,
         ),
         peak_dbz=track.peak_history[-1].peak_dbz if track.peak_history else 0.0,
         peak_label=track.peak_history[-1].peak_label if track.peak_history else "unknown",
@@ -223,6 +232,7 @@ def get_motion(site_id: str, track_id: int):
         raise HTTPException(status_code=404, detail=f"Track {track_id} not found")
     motion = track.get_motion()
     identity = getattr(track, "identity_diagnostics", None)
+    focus = getattr(track, "focus_continuity", None)
     return TrackDetailResponse(
         track_id=track.track_id,
         status=track.status,
@@ -247,6 +257,14 @@ def get_motion(site_id: str, track_id: int):
             missed_scans=identity.missed_scans if identity is not None else None,
             lineage_complexity=identity.lineage_complexity if identity is not None else None,
             event_context=identity.event_context if identity is not None else None,
+        ),
+        focus=TrackFocus(
+            label=focus.label if focus is not None else None,
+            score=focus.score if focus is not None else None,
+            reason=focus.reason if focus is not None else None,
+            recent_heading_flip_count=focus.recent_heading_flip_count if focus is not None else None,
+            recent_focus_switch_count=focus.recent_focus_switch_count if focus is not None else None,
+            recent_structural_event_count=focus.recent_structural_event_count if focus is not None else None,
         ),
         peak_history=[
             PeakHistoryEntry(

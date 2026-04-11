@@ -67,6 +67,16 @@ class IdentityConfidence:
 
 
 @dataclass
+class FocusContinuity:
+    label: str
+    score: float
+    reason: str | None = None
+    recent_heading_flip_count: int = 0
+    recent_focus_switch_count: int = 0
+    recent_structural_event_count: int = 0
+
+
+@dataclass
 class Track:
     track_id: int
     status: str  # "active", "merged", "split", "lost"
@@ -82,6 +92,7 @@ class Track:
     last_seen: datetime | None = None
     identity_confidence: float = 1.0
     identity_diagnostics: IdentityConfidence | None = None
+    focus_continuity: FocusContinuity | None = None
     motion_confidence: MotionConfidence | None = None
     last_motion: Any | None = None
     diagnostic_motion: Any | None = None

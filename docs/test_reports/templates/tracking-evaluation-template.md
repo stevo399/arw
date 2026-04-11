@@ -27,8 +27,10 @@ uv run python scripts/evaluate_tracking.py --manifest docs/benchmarks/tracking_b
 - total splits:
 - mean uncertain tracks:
 - mean focus identity confidence:
+- mean focus continuity:
 - mean focus motion confidence:
 - focus low-identity scans:
+- focus low-continuity scans:
 - focus low-motion scans:
 - focus switches:
 - focus heading flips >=90 deg:
@@ -44,4 +46,5 @@ Representative snapshots:
 
 - call out regressions explicitly
 - note whether any heading-flip or focus-switch metrics worsened
+- note whether focus continuity tracked the same windows that were downgraded in summary output
 - compare against the prior clean report when one exists

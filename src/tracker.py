@@ -5,7 +5,7 @@ from src.motion import resolve_reported_motion, MotionVector
 from src.tracking.motion import MotionContinuityContext
 from src.tracking.association import associate_tracks
 from src.tracking.events import normalize_merge_event, normalize_split_event
-from src.tracking.types import IdentityConfidence, Track
+from src.tracking.types import FocusContinuity, IdentityConfidence, Track
 
 MAX_MISSED_SCANS = 2
 FOCUS_SWITCH_MARGIN = 2.0
@@ -25,6 +25,13 @@ def _confidence_label(score: float) -> str:
     if score >= MEDIUM_CONFIDENCE:
         return "medium"
     return "low"
+
+
+def _heading_delta_deg(a: float | None, b: float | None) -> float:
+    if a is None or b is None:
+        return 0.0
+    delta = abs(a - b) % 360.0
+    return min(delta, 360.0 - delta)
 
 
 def _get_track_motion(track: Track) -> MotionVector:
@@ -55,6 +62,7 @@ class StormTracker:
         self._recent_events: list[dict] = []
         self._prev_scan: BufferedScan | None = None
         self._obj_to_track: dict[int, int] = {}  # object_id -> track_id for current scan
+        self._focus_history: list[int | None] = []
 
     def _reset_for_site(self) -> None:
         """Clear tracker state when switching radar sites."""
@@ -63,6 +71,7 @@ class StormTracker:
         self._recent_events.clear()
         self._prev_scan = None
         self._obj_to_track.clear()
+        self._focus_history.clear()
 
     def _create_track(self, timestamp: datetime, obj: DetectedObject) -> Track:
         track = Track(track_id=self._next_id, status="active")
@@ -223,6 +232,55 @@ class StormTracker:
         distance_penalty = min(current.distance_km / 40.0, 6.0)
         return peak_bonus + area_bonus + persistence + confidence + prior_focus_bonus - distance_penalty
 
+    def _build_focus_continuity(
+        self,
+        track: Track,
+        previous_focus_track_id: int | None,
+        structural_event_count: int,
+    ) -> FocusContinuity:
+        identity_score = track.identity_diagnostics.score if track.identity_diagnostics is not None else track.identity_confidence
+        motion = track.last_motion
+        recent_heading_flip_count = 0
+        if motion is not None and motion.heading_deg is not None and len(track.positions) >= 3:
+            recent_positions = [(p.timestamp, p.latitude, p.longitude) for p in track.positions[-3:]]
+            previous_motion, _ = resolve_reported_motion(
+                recent_positions[:-1],
+                identity_confidence=track.identity_confidence,
+            )
+            if previous_motion.heading_deg is not None and _heading_delta_deg(previous_motion.heading_deg, motion.heading_deg) >= 90.0:
+                recent_heading_flip_count = 1
+
+        recent_focus_switch_count = 1 if previous_focus_track_id is not None and previous_focus_track_id != track.track_id else 0
+        score = 1.0
+        reason = "stable focus continuity"
+        if recent_focus_switch_count:
+            score -= 0.35
+            reason = "recent focus handoff"
+        if recent_heading_flip_count:
+            score -= 0.4
+            reason = "recent focus heading reversal"
+        if structural_event_count >= 6:
+            score -= 0.3
+            reason = "high structural event pressure around focus"
+        elif structural_event_count >= 4:
+            score -= 0.15
+            reason = "elevated structural event pressure around focus"
+        if identity_score < 0.45:
+            score -= 0.25
+            reason = "weak focus identity continuity"
+        elif identity_score < 0.75:
+            score -= 0.1
+            reason = "moderate focus identity continuity"
+        score = round(max(0.0, min(1.0, score)), 2)
+        return FocusContinuity(
+            label=_confidence_label(score),
+            score=score,
+            reason=reason,
+            recent_heading_flip_count=recent_heading_flip_count,
+            recent_focus_switch_count=recent_focus_switch_count,
+            recent_structural_event_count=structural_event_count,
+        )
+
     def _update_primary_focus(self) -> None:
         active_tracks = [track for track in self._tracks if track.status == "active" and track.current_object is not None]
         previous_focus_track_id = next((track.track_id for track in active_tracks if track.is_primary_focus), None)
@@ -247,6 +305,13 @@ class StormTracker:
             if primary.track_id != previous_focus_track.track_id and challenger_score < previous_score + FOCUS_SWITCH_MARGIN:
                 primary = previous_focus_track
         primary.is_primary_focus = True
+        self._focus_history.append(primary.track_id)
+        if len(self._focus_history) > 6:
+            self._focus_history = self._focus_history[-6:]
+        structural_event_count = sum(1 for event in self._recent_events if event["event_type"] in {"merge", "split"})
+        for track in active_tracks:
+            track.focus_continuity = None
+        primary.focus_continuity = self._build_focus_continuity(primary, previous_focus_track_id, structural_event_count)
 
     def _append_merge_event(self, timestamp: datetime, surviving_track_id: int, merged_track_ids: list[int]) -> None:
         """Record a merge event with deduplicated track ids."""

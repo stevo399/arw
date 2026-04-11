@@ -80,6 +80,15 @@ class TrackIdentity(BaseModel):
     event_context: str | None = None
 
 
+class TrackFocus(BaseModel):
+    label: str | None = None
+    score: float | None = None
+    reason: str | None = None
+    recent_heading_flip_count: int | None = None
+    recent_focus_switch_count: int | None = None
+    recent_structural_event_count: int | None = None
+
+
 class PeakHistoryEntry(BaseModel):
     timestamp: str
     peak_dbz: float
@@ -92,6 +101,7 @@ class StormTrack(BaseModel):
     positions: list[TrackPosition]
     motion: TrackMotion
     identity: TrackIdentity | None = None
+    focus: TrackFocus | None = None
     peak_dbz: float
     peak_label: str
     merged_into: int | None
@@ -121,6 +131,7 @@ class TrackDetailResponse(BaseModel):
     positions: list[TrackPosition]
     motion: TrackMotion
     identity: TrackIdentity | None = None
+    focus: TrackFocus | None = None
     peak_history: list[PeakHistoryEntry]
     merged_into: int | None
     split_from: int | None

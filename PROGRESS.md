@@ -35,6 +35,7 @@
   - confidence-calibration replay now keeps simpler and merge/split-sensitive focus tracks at medium/high identity confidence while still flagging the dense heading-reversal scan as a low-identity case
   - dense 5-scan follow-up now downgrades unstable spoken focus motion to `tracking uncertain` across the reversal-heavy middle of the window instead of speaking each turn as fact
   - motion publication now carries a deeper continuity-ambiguity suppression path, while focus-summary publishability remains a separate product-layer guard
+  - focus continuity is now a first-class diagnostic with reviewable evaluation metrics instead of being inferred indirectly from motion confidence
   - dense-scene strongest-object summaries are materially more stable across short replay windows
   - longer dense-scene replay windows now keep the late-window focus anchored on the nearer active storm field
   - local-only regression replay now works reliably even when only part of the requested day is cached

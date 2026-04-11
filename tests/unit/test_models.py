@@ -1,5 +1,5 @@
 from src.models import RadarSite, ScanMeta, IntensityLayer, RainObject, ObjectsResponse, SummaryResponse
-from src.models import TrackPosition, TrackMotion, StormTrack, TracksResponse, TrackDetailResponse, TrackEvent
+from src.models import TrackPosition, TrackMotion, TrackFocus, StormTrack, TracksResponse, TrackDetailResponse, TrackEvent
 
 
 def test_radar_site_model():
@@ -108,6 +108,19 @@ def test_track_motion_model_stationary():
     assert motion.heading_deg is None
 
 
+def test_track_focus_model():
+    focus = TrackFocus(
+        label="medium",
+        score=0.58,
+        reason="recent focus handoff",
+        recent_heading_flip_count=1,
+        recent_focus_switch_count=1,
+        recent_structural_event_count=6,
+    )
+    assert focus.label == "medium"
+    assert focus.recent_heading_flip_count == 1
+
+
 def test_storm_track_model():
     track = StormTrack(
         track_id=1,
@@ -116,6 +129,7 @@ def test_storm_track_model():
             TrackPosition(timestamp="2026-04-08T18:30:00Z", latitude=35.5, longitude=-97.3, distance_km=40.2, bearing_deg=270.0),
         ],
         motion=TrackMotion(speed_kmh=56.3, speed_mph=35, heading_deg=45.0, heading_label="NE"),
+        focus=TrackFocus(label="high", score=0.9),
         peak_dbz=55.0,
         peak_label="intense rain",
         merged_into=None,
@@ -154,6 +168,7 @@ def test_track_detail_response_model():
         status="active",
         positions=[],
         motion=TrackMotion(speed_kmh=0.0, speed_mph=0, heading_deg=None, heading_label="stationary"),
+        focus=TrackFocus(label="medium", score=0.6),
         peak_history=[],
         merged_into=None,
         split_from=None,
