@@ -27,6 +27,9 @@ def test_track_shared_type_add_position():
     assert len(track.peak_history) == 1
     assert track.first_seen == now
     assert track.last_seen == now
+    assert track.parent_track_ids == []
+    assert track.child_track_ids == []
+    assert track.absorbed_track_ids == []
 
 
 def test_association_score_type():

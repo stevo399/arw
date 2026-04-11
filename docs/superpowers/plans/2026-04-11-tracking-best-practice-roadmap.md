@@ -176,7 +176,7 @@ Completion notes:
 
 ## Task 4: Move from event bookkeeping toward lineage state
 
-Status: pending
+Status: completed
 
 Goal:
 
@@ -203,6 +203,23 @@ Validation:
 - smoke tests
 - live replay of known merge/split-sensitive windows
 - output analysis verifying no duplicate/self-merge regressions and better lineage coherence across multiple scans
+
+Completion notes:
+
+- added persistent lineage fields to track state: `parent_track_ids`, `child_track_ids`, and `absorbed_track_ids`
+- merge and split handling now records lineage relationships in track state while keeping the latest-scan event list as a derived compatibility view
+- kept public API behavior stable for this task; lineage is now an internal source of truth rather than a required public contract
+- targeted verification:
+  - `uv run pytest tests/unit/test_tracker.py tests/unit/test_tracking_types.py tests/unit/test_tracking_association.py tests/unit/test_summary.py tests/smoke/test_server_smoke.py -q`
+  - `45 passed in 3.24s`
+- live replay validation:
+  - `uv run python scripts/live_replay.py KTLX --date 2026-04-10 --quick --local-only`
+  - `uv run python scripts/live_replay.py KSOX --date 2026-04-10 --quick`
+- observed behavior:
+  - no summary, motion, or merge/split regressions in the checked windows
+  - dense replay remained stable at `48 / 50 / 50` objects with unchanged focal summaries
+  - lower-complexity replay remained stable at `3 / 2 / 7` objects
+  - the primary gain is persistent lineage state for debugging and future API evolution, not an intentional public-output change in this task
 
 ## Task 5: Upgrade motion guidance beyond one global prior
 

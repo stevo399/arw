@@ -62,6 +62,9 @@ class Track:
     current_object: DetectedObject | None = None
     merged_into: int | None = None
     split_from: int | None = None
+    parent_track_ids: list[int] = field(default_factory=list)
+    child_track_ids: list[int] = field(default_factory=list)
+    absorbed_track_ids: list[int] = field(default_factory=list)
     first_seen: datetime | None = None
     last_seen: datetime | None = None
     identity_confidence: float = 1.0

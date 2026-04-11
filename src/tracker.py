@@ -56,6 +56,19 @@ class StormTracker:
         self._tracks.append(track)
         return track
 
+    @staticmethod
+    def _append_unique(track_ids: list[int], track_id: int) -> None:
+        if track_id not in track_ids:
+            track_ids.append(track_id)
+
+    def _record_split_lineage(self, parent_track: Track, child_track: Track) -> None:
+        self._append_unique(parent_track.child_track_ids, child_track.track_id)
+        self._append_unique(child_track.parent_track_ids, parent_track.track_id)
+
+    def _record_merge_lineage(self, surviving_track: Track, merged_track: Track) -> None:
+        self._append_unique(surviving_track.absorbed_track_ids, merged_track.track_id)
+        self._append_unique(merged_track.parent_track_ids, surviving_track.track_id)
+
     def _score_confidence(self, association, new_object_id: int, track_id: int, scan: BufferedScan) -> float:
         for score in association.candidate_scores:
             if score.object_id == new_object_id and score.track_id == track_id:
@@ -167,6 +180,7 @@ class StormTracker:
             for new_id in related_new_ids[1:]:
                 child = self._create_track(timestamp, new_objects[new_id])
                 child.split_from = parent_tid
+                self._record_split_lineage(parent_track, child)
                 child.identity_confidence = round(0.35 * _scan_quality_factor(scan), 2)
                 new_obj_to_track[new_id] = child.track_id
                 child_ids.append(child.track_id)
@@ -193,6 +207,7 @@ class StormTracker:
                 if merged_track is not None and merged_track.status == "active":
                     merged_track.status = "merged"
                     merged_track.merged_into = surviving_track_id
+                    self._record_merge_lineage(surviving, merged_track)
                     merged_track_ids.append(merged_track_id)
             self._append_merge_event(timestamp, surviving_track_id, merged_track_ids)
             handled_merge_new_ids.add(new_id)

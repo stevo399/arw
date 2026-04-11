@@ -178,6 +178,12 @@ def test_tracker_split_detection():
     events = tracker.recent_events
     split_events = [e for e in events if e["event_type"] == "split"]
     assert len(split_events) >= 1
+    parent = next(track for track in tracker.all_tracks if track.track_id == 1)
+    children = [track for track in tracker.all_tracks if track.split_from == 1]
+    assert children
+    for child in children:
+        assert 1 in child.parent_track_ids
+        assert child.track_id in parent.child_track_ids
 
 
 def test_tracker_get_track_by_id():
@@ -250,6 +256,14 @@ def test_tracker_merge_event_excludes_surviving_and_dedupes():
     assert f"merged into track {surviving}" in event["description"]
     merged_part = event["description"].split("merged into")[0]
     assert str(surviving) not in merged_part
+    surviving_track = tracker.get_track(surviving)
+    assert surviving_track is not None
+    for merged_track_id in involved[1:]:
+        merged_track = tracker.get_track(merged_track_id)
+        assert merged_track is not None
+        assert merged_track.merged_into == surviving
+        assert surviving in merged_track.parent_track_ids
+        assert merged_track_id in surviving_track.absorbed_track_ids
 
 
 def test_tracker_leftover_after_merge_becomes_new_track():
@@ -394,3 +408,42 @@ def test_tracker_initial_confidence_is_penalized_by_scan_quality():
     tracker.update(scan)
     assert len(tracker.active_tracks) == 1
     assert tracker.active_tracks[0].identity_confidence == 0.5
+
+
+def test_tracker_lineage_persists_after_followup_scan():
+    tracker = StormTracker()
+    t1 = datetime(2026, 4, 8, 18, 30)
+    t2 = datetime(2026, 4, 8, 18, 35)
+    t3 = datetime(2026, 4, 8, 18, 40)
+
+    obj1 = _make_object(1, 35.5, -97.3, peak_dbz=50.0)
+    mask1 = np.zeros((360, 500), dtype=bool)
+    mask1[85:95, 195:215] = True
+    scan1 = _make_scan("KTLX", t1, [obj1], masks={1: mask1})
+
+    obj_a = _make_object(1, 35.5, -97.31, peak_dbz=48.0)
+    obj_b = _make_object(2, 35.5, -97.28, peak_dbz=35.0)
+    mask_a = np.zeros((360, 500), dtype=bool)
+    mask_a[85:95, 195:205] = True
+    mask_b = np.zeros((360, 500), dtype=bool)
+    mask_b[85:95, 205:215] = True
+    scan2 = _make_scan("KTLX", t2, [obj_a, obj_b], masks={1: mask_a, 2: mask_b})
+
+    obj_follow = _make_object(1, 35.5, -97.305, peak_dbz=47.0)
+    obj_child = _make_object(2, 35.5, -97.275, peak_dbz=34.0)
+    mask_follow = np.zeros((360, 500), dtype=bool)
+    mask_follow[85:95, 195:205] = True
+    mask_child = np.zeros((360, 500), dtype=bool)
+    mask_child[85:95, 205:215] = True
+    scan3 = _make_scan("KTLX", t3, [obj_follow, obj_child], masks={1: mask_follow, 2: mask_child})
+
+    tracker.update(scan1)
+    tracker.update(scan2)
+    tracker.update(scan3)
+
+    parent = tracker.get_track(1)
+    assert parent is not None
+    assert parent.child_track_ids
+    child = tracker.get_track(parent.child_track_ids[0])
+    assert child is not None
+    assert parent.track_id in child.parent_track_ids
