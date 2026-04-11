@@ -8,6 +8,7 @@
   - Global association: single-use per-scan track assignment, deduplicated merge events, no self-merges
   - Geometry-aware association: primary matching now also considers motion-advected mask overlap instead of relying only on raw overlap and distance
   - Lineage state: tracks now retain persistent parent/child/absorbed relationships while latest-scan events remain a derived view
+  - Motion guidance: per-track local ROI motion now blends with the global phase-correlation prior under conservative consistency rules
   - Motion: confidence-aware output with uncertain/stationary/nearly-stationary states
   - Motion provenance: reported motion now distinguishes track-history, motion-field, and suppressed outputs
   - Motion guidance: scan-based phase correlation is now preferred over weighted centroid drift for scene motion
@@ -27,6 +28,7 @@
   - hierarchy-based segmentation further reduced dense-scene fragmentation without destabilizing summary focus
   - geometry-aware association passed regression replay without reintroducing continuity or event noise
   - lineage-state refactor preserved replay behavior while giving merges and splits persistent internal relationships
+  - local-plus-global motion guidance passed replay validation after rejecting inconsistent local motion in simpler scenes
   - dense-scene strongest-object summaries are materially more stable across short replay windows
   - longer dense-scene replay windows now keep the late-window focus anchored on the nearer active storm field
   - local-only regression replay now works reliably even when only part of the requested day is cached

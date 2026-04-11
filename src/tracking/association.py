@@ -8,8 +8,11 @@ from scipy.optimize import linear_sum_assignment
 from src.buffer import BufferedScan
 from src.sites import haversine_distance_km
 from src.tracking.motion_field import (
+    blend_geographic_motion_fields,
     estimate_geographic_motion_field,
     estimate_motion_field,
+    estimate_local_motion_field,
+    estimate_local_scan_geographic_motion_field,
     estimate_scan_geographic_motion_field,
     predict_latlon_position,
 )
@@ -31,6 +34,7 @@ class AssociationResult:
     unmatched_track_ids: set[int] = field(default_factory=set)
     candidate_scores: list[AssociationScore] = field(default_factory=list)
     geo_motion: object | None = None
+    track_geo_motion: dict[int, object] = field(default_factory=dict)
     dt_hours: float = 0.0
 
 
@@ -155,7 +159,6 @@ def associate_tracks(
         geo_motion = estimate_geographic_motion_field(previous_segmentation.objects, current_segmentation.objects)
     result.geo_motion = geo_motion
 
-    previous_objects = {obj.object_id: obj for obj in previous_scan.detected_objects}
     new_objects = {obj.object_id: obj for obj in current_scan.detected_objects}
     prev_masks = previous_scan.object_masks
     new_masks = current_scan.object_masks
@@ -176,11 +179,6 @@ def associate_tracks(
         current_object = track.current_object
         if current_object is None:
             continue
-        predicted_lat, predicted_lon = predict_latlon_position(
-            current_object.centroid_lat,
-            current_object.centroid_lon,
-            geo_motion,
-        )
         prev_object_id = None
         for object_id, track_id in obj_to_track.items():
             if track_id == track.track_id:
@@ -189,6 +187,46 @@ def associate_tracks(
         if prev_object_id is None or prev_object_id not in prev_masks:
             continue
         prev_mask = prev_masks[prev_object_id]
+        prev_segment = next((seg for seg in previous_segmentation.objects if seg.object_id == prev_object_id), None)
+        local_geo_motion = None
+        local_pixel_motion = None
+        if prev_segment is not None:
+            local_geo_motion = estimate_local_scan_geographic_motion_field(
+                previous_scan,
+                current_scan,
+                prev_segment.bbox,
+            )
+            local_pixel_motion = estimate_local_motion_field(
+                previous_scan.reflectivity_data.reflectivity,
+                current_scan.reflectivity_data.reflectivity,
+                prev_segment.bbox,
+                downsample=1,
+            )
+        blended_geo_motion = blend_geographic_motion_fields(geo_motion, local_geo_motion)
+        result.track_geo_motion[track.track_id] = blended_geo_motion
+        predicted_lat, predicted_lon = predict_latlon_position(
+            current_object.centroid_lat,
+            current_object.centroid_lon,
+            blended_geo_motion,
+        )
+        blended_shift_rows = -pixel_motion.shift_rows
+        blended_shift_cols = -pixel_motion.shift_cols
+        use_local_pixel_guidance = (
+            local_pixel_motion is not None
+            and local_pixel_motion.quality > 0.0
+            and blended_geo_motion.source.startswith("blended:")
+        ) or (
+            local_pixel_motion is not None
+            and local_pixel_motion.quality > 0.0
+            and blended_geo_motion.source == "local_phase_correlation"
+        )
+        if use_local_pixel_guidance:
+            local_weight = max(local_pixel_motion.quality, 0.0)
+            global_weight = max(pixel_motion.quality * 0.6, 0.0)
+            total_weight = local_weight + global_weight
+            if total_weight > 0.0:
+                blended_shift_rows = -(((local_pixel_motion.shift_rows * local_weight) + (pixel_motion.shift_rows * global_weight)) / total_weight)
+                blended_shift_cols = -(((local_pixel_motion.shift_cols * local_weight) + (pixel_motion.shift_cols * global_weight)) / total_weight)
         for new_id, new_object in new_objects.items():
             score = _candidate_score(
                 track=track,
@@ -198,8 +236,8 @@ def associate_tracks(
                 max_distance_km=max_distance_km,
                 predicted_lat=predicted_lat,
                 predicted_lon=predicted_lon,
-                motion_shift_rows=pixel_motion.shift_rows,
-                motion_shift_cols=pixel_motion.shift_cols,
+                motion_shift_rows=blended_shift_rows,
+                motion_shift_cols=blended_shift_cols,
             )
             if score is None:
                 continue

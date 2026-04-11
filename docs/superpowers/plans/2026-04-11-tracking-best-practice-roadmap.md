@@ -223,7 +223,7 @@ Completion notes:
 
 ## Task 5: Upgrade motion guidance beyond one global prior
 
-Status: pending
+Status: completed
 
 Goal:
 
@@ -250,6 +250,25 @@ Validation:
 - smoke tests
 - live replay over broader windows with spatially heterogeneous storm motion
 - API rendering and output analysis focused on reduced false-motion fires and stable spoken motion behavior
+
+Completion notes:
+
+- kept the global phase-correlation motion prior and added a per-track local ROI phase-correlation estimate
+- blended local and global guidance conservatively by quality and consistency
+- used per-track blended motion guidance for association prediction and track-level fallback motion
+- corrected an initial simple-scene regression by requiring local guidance to be both strong and consistent before it influences reported motion
+- targeted verification:
+  - `uv run pytest tests/unit/test_tracking_motion_field.py tests/unit/test_motion.py tests/unit/test_tracking_association.py tests/unit/test_tracker.py tests/unit/test_summary.py tests/smoke/test_server_smoke.py -q`
+  - `64 passed in 3.14s`
+- live replay validation:
+  - `uv run python scripts/live_replay.py KTLX --date 2026-04-10 --quick --local-only`
+  - `uv run python scripts/live_replay.py KSOX --date 2026-04-10 --quick`
+- clean-data report:
+  - `docs/test_reports/2026-04-11-task5-motion-guidance-report.md`
+- observed behavior:
+  - dense replay remained stable with plausible spoken motion and no new uncertainty noise
+  - lower-complexity replay returned to stationary/nearly-stationary output after the conservative blend gate was added
+  - this task now has a dedicated reviewable report with raw replay lines and clean summary text for later comparison
 
 ## Task 6: Add quantitative tracking evaluation
 

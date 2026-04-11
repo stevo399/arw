@@ -76,11 +76,14 @@ class StormTracker:
                 return round(base_confidence * _scan_quality_factor(scan), 2)
         return round(0.3 * _scan_quality_factor(scan), 2)
 
-    def _refresh_track_motions(self, field_estimate, field_dt_hours: float) -> None:
+    def _refresh_track_motions(self, field_estimates, field_dt_hours: float) -> None:
         for track in self._tracks:
             if track.status != "active":
                 continue
             positions = [(p.timestamp, p.latitude, p.longitude) for p in track.positions]
+            field_estimate = None
+            if isinstance(field_estimates, dict):
+                field_estimate = field_estimates.get(track.track_id)
             reported_motion, diagnostic_motion = resolve_reported_motion(
                 positions,
                 identity_confidence=track.identity_confidence,
@@ -149,7 +152,7 @@ class StormTracker:
                 track = self._create_track(timestamp, obj)
                 track.identity_confidence = round(_scan_quality_factor(scan), 2)
                 self._obj_to_track[obj.object_id] = track.track_id
-            self._refresh_track_motions(field_estimate=None, field_dt_hours=0.0)
+            self._refresh_track_motions(field_estimates=None, field_dt_hours=0.0)
             self._update_primary_focus()
             self._prev_scan = scan
             return
@@ -239,7 +242,7 @@ class StormTracker:
                     track.status = "lost"
 
         self._obj_to_track = new_obj_to_track
-        self._refresh_track_motions(field_estimate=association.geo_motion, field_dt_hours=association.dt_hours)
+        self._refresh_track_motions(field_estimates=association.track_geo_motion, field_dt_hours=association.dt_hours)
         self._update_primary_focus()
         self._prev_scan = scan
 

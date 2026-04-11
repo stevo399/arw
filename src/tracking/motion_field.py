@@ -9,6 +9,9 @@ from src.tracking.types import SegmentedStormObject
 
 DEFAULT_DOWNSAMPLE = 4
 DEFAULT_MIN_DBZ = 20.0
+DEFAULT_LOCAL_PADDING = 24
+MIN_LOCAL_BLEND_QUALITY = 0.6
+MAX_LOCAL_GLOBAL_VECTOR_DELTA = 0.03
 
 
 @dataclass
@@ -44,6 +47,14 @@ def _preprocess_reflectivity(
 def _wrap_shift(index: int, size: int) -> int:
     """Convert FFT peak index into a signed shift."""
     return index - size if index > size // 2 else index
+
+
+def _clip_window(start: int, end: int, limit: int) -> tuple[int, int]:
+    start = max(0, start)
+    end = min(limit, end)
+    if start >= end:
+        return 0, limit
+    return start, end
 
 
 def _weighted_centroid(grid: np.ndarray) -> tuple[float, float]:
@@ -113,6 +124,36 @@ def estimate_motion_field(
         quality=round(quality, 3),
         source="phase_correlation",
         downsample=downsample,
+    )
+
+
+def estimate_local_motion_field(
+    previous_reflectivity: np.ndarray,
+    current_reflectivity: np.ndarray,
+    bbox: tuple[int, int, int, int],
+    *,
+    padding: int = DEFAULT_LOCAL_PADDING,
+    min_dbz: float = DEFAULT_MIN_DBZ,
+    downsample: int = 1,
+) -> MotionFieldEstimate:
+    """Estimate motion in a padded local neighborhood around a tracked object."""
+    min_row, min_col, max_row, max_col = bbox
+    row_start, row_end = _clip_window(min_row - padding, max_row + padding + 1, previous_reflectivity.shape[0])
+    col_start, col_end = _clip_window(min_col - padding, max_col + padding + 1, previous_reflectivity.shape[1])
+    previous_crop = previous_reflectivity[row_start:row_end, col_start:col_end]
+    current_crop = current_reflectivity[row_start:row_end, col_start:col_end]
+    estimate = estimate_motion_field(
+        previous_crop,
+        current_crop,
+        min_dbz=min_dbz,
+        downsample=downsample,
+    )
+    return MotionFieldEstimate(
+        shift_rows=estimate.shift_rows,
+        shift_cols=estimate.shift_cols,
+        quality=estimate.quality,
+        source="local_phase_correlation",
+        downsample=estimate.downsample,
     )
 
 
@@ -199,6 +240,118 @@ def estimate_scan_geographic_motion_field(
         delta_lon=round(curr_lon - prev_lon, 4),
         quality=estimate.quality,
         source="phase_correlation",
+    )
+
+
+def estimate_local_scan_geographic_motion_field(
+    previous_scan: BufferedScan,
+    current_scan: BufferedScan,
+    bbox: tuple[int, int, int, int],
+    *,
+    padding: int = DEFAULT_LOCAL_PADDING,
+    min_dbz: float = DEFAULT_MIN_DBZ,
+) -> GeographicMotionFieldEstimate:
+    """Estimate geographic displacement in a padded neighborhood around a bbox."""
+    previous_ref = previous_scan.reflectivity_data
+    current_ref = current_scan.reflectivity_data
+    estimate = estimate_local_motion_field(
+        previous_ref.reflectivity,
+        current_ref.reflectivity,
+        bbox,
+        padding=padding,
+        min_dbz=min_dbz,
+        downsample=1,
+    )
+    if estimate.quality <= 0.0:
+        return GeographicMotionFieldEstimate(
+            delta_lat=0.0,
+            delta_lon=0.0,
+            quality=0.0,
+            source="local_phase_correlation",
+        )
+
+    min_row, min_col, max_row, max_col = bbox
+    prev_row = (min_row + max_row) / 2.0
+    prev_col = (min_col + max_col) / 2.0
+    curr_row = prev_row - estimate.shift_rows
+    curr_col = prev_col - estimate.shift_cols
+
+    row_coords = np.arange(len(previous_ref.azimuths))
+    col_coords = np.arange(len(previous_ref.ranges_m))
+    prev_azimuth = float(np.interp(prev_row, row_coords, previous_ref.azimuths))
+    prev_range_m = float(np.interp(prev_col, col_coords, previous_ref.ranges_m))
+    curr_azimuth = float(np.interp(curr_row, row_coords, current_ref.azimuths))
+    curr_range_m = float(np.interp(curr_col, col_coords, current_ref.ranges_m))
+
+    prev_lat, prev_lon = polar_to_latlon(
+        previous_ref.radar_lat,
+        previous_ref.radar_lon,
+        prev_azimuth,
+        prev_range_m,
+    )
+    curr_lat, curr_lon = polar_to_latlon(
+        current_ref.radar_lat,
+        current_ref.radar_lon,
+        curr_azimuth,
+        curr_range_m,
+    )
+    return GeographicMotionFieldEstimate(
+        delta_lat=round(curr_lat - prev_lat, 4),
+        delta_lon=round(curr_lon - prev_lon, 4),
+        quality=estimate.quality,
+        source="local_phase_correlation",
+    )
+
+
+def blend_geographic_motion_fields(
+    global_estimate: GeographicMotionFieldEstimate | None,
+    local_estimate: GeographicMotionFieldEstimate | None,
+) -> GeographicMotionFieldEstimate:
+    """Blend global and local motion guidance with a quality-weighted average."""
+    if local_estimate is None or local_estimate.quality <= 0.0:
+        if global_estimate is None:
+            return GeographicMotionFieldEstimate(delta_lat=0.0, delta_lon=0.0, quality=0.0, source="blended_motion")
+        return GeographicMotionFieldEstimate(
+            delta_lat=global_estimate.delta_lat,
+            delta_lon=global_estimate.delta_lon,
+            quality=global_estimate.quality,
+            source=global_estimate.source,
+        )
+    if global_estimate is None or global_estimate.quality <= 0.0:
+        return GeographicMotionFieldEstimate(
+            delta_lat=local_estimate.delta_lat,
+            delta_lon=local_estimate.delta_lon,
+            quality=local_estimate.quality,
+            source=local_estimate.source,
+        )
+    vector_delta = float(np.hypot(
+        local_estimate.delta_lat - global_estimate.delta_lat,
+        local_estimate.delta_lon - global_estimate.delta_lon,
+    ))
+    if local_estimate.quality < MIN_LOCAL_BLEND_QUALITY:
+        return GeographicMotionFieldEstimate(
+            delta_lat=global_estimate.delta_lat,
+            delta_lon=global_estimate.delta_lon,
+            quality=global_estimate.quality,
+            source=global_estimate.source,
+        )
+    if global_estimate.quality >= 0.35 and vector_delta > MAX_LOCAL_GLOBAL_VECTOR_DELTA:
+        return GeographicMotionFieldEstimate(
+            delta_lat=global_estimate.delta_lat,
+            delta_lon=global_estimate.delta_lon,
+            quality=global_estimate.quality,
+            source=global_estimate.source,
+        )
+    local_weight = max(local_estimate.quality, 0.0)
+    global_weight = max(global_estimate.quality * 0.6, 0.0)
+    total_weight = local_weight + global_weight
+    if total_weight <= 0.0:
+        return GeographicMotionFieldEstimate(delta_lat=0.0, delta_lon=0.0, quality=0.0, source="blended_motion")
+    return GeographicMotionFieldEstimate(
+        delta_lat=round(((local_estimate.delta_lat * local_weight) + (global_estimate.delta_lat * global_weight)) / total_weight, 4),
+        delta_lon=round(((local_estimate.delta_lon * local_weight) + (global_estimate.delta_lon * global_weight)) / total_weight, 4),
+        quality=round(min(1.0, max(local_estimate.quality, global_estimate.quality)), 3),
+        source=f"blended:{global_estimate.source}+{local_estimate.source}",
     )
 
 
