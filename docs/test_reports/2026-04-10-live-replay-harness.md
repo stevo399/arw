@@ -355,3 +355,42 @@ Representative summary lines:
 - `Oklahoma City: 53 rain objects detected. Strongest: intense rain, 98 miles NNE of the radar, stationary. Covering approximately 3634 square miles.`
 - `Oklahoma City: 64 rain objects detected. Strongest: intense rain, 98 miles NNE of the radar, moving NE at 7 mph. Note: 9 storms merged in the last scan. Note: 8 storms split in the last scan. Covering approximately 3714 square miles.`
 - `Oklahoma City: 65 rain objects detected. Strongest: intense rain, 98 miles NNE of the radar, moving SE at 20 mph. Note: 11 storms merged in the last scan. Note: 10 storms split in the last scan. Covering approximately 3815 square miles.`
+
+### Longer-window follow-up after focus hysteresis
+
+What changed:
+
+- focus continuity is now part of the tracker handoff decision rather than a passive bonus
+- an existing focus track is kept unless a challenger wins by a meaningful score margin
+- this prevents frequent focus flapping across scans
+
+Verification:
+
+- `uv run pytest tests/unit/test_tracking_focus.py tests/unit/test_summary.py tests/smoke/test_server_smoke.py tests/e2e/test_full_pipeline.py -q`
+- `28 passed in 3.48s`
+
+Dense replay:
+
+```powershell
+uv run python scripts/live_replay.py KTLX --date 2026-04-10 --scans 12 --local-only
+```
+
+Observed behavior:
+
+- strongest-object focus remained coherent over the back half of the replay window instead of repeatedly jumping between unrelated distant storms
+- the focus transitioned from the distant ENE/NNE cluster into the nearer eastern storm field and then stayed there through the end of the replay
+- late-scan summaries stabilized to `26` to `27` miles east of the radar instead of flipping back out to `150+` miles east
+
+Representative late-window output:
+
+- `2026-04-10T23:40:53Z objects=54 active=61 uncertain_tracks=0 max_speed_mph=33 merges=7 splits=5`
+- `2026-04-10T23:46:05Z objects=53 active=62 uncertain_tracks=0 max_speed_mph=32 merges=5 splits=8`
+- `2026-04-10T23:51:18Z objects=64 active=70 uncertain_tracks=0 max_speed_mph=22 merges=9 splits=7`
+- `2026-04-10T23:56:21Z objects=65 active=73 uncertain_tracks=0 max_speed_mph=31 merges=10 splits=11`
+
+Representative summary lines:
+
+- `Oklahoma City: 54 rain objects detected. Strongest: intense rain, 29 miles E of the radar, moving SE at 18 mph. Note: 7 storms merged in the last scan. Note: 5 storms split in the last scan. Covering approximately 3620 square miles.`
+- `Oklahoma City: 53 rain objects detected. Strongest: severe core, 26 miles E of the radar, moving WNW at 20 mph. Note: 5 storms merged in the last scan. Note: 8 storms split in the last scan. Covering approximately 3634 square miles.`
+- `Oklahoma City: 64 rain objects detected. Strongest: severe core, 27 miles E of the radar, moving NE at 7 mph. Note: 9 storms merged in the last scan. Note: 7 storms split in the last scan. Covering approximately 3714 square miles.`
+- `Oklahoma City: 65 rain objects detected. Strongest: intense rain, 26 miles E of the radar, moving SE at 20 mph. Note: 10 storms merged in the last scan. Note: 11 storms split in the last scan. Covering approximately 3815 square miles.`

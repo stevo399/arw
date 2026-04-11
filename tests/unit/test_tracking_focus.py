@@ -46,3 +46,26 @@ def test_update_primary_focus_prefers_nearer_relevant_track():
 
     assert nearer.is_primary_focus is True
     assert distant.is_primary_focus is False
+
+
+def test_update_primary_focus_keeps_existing_focus_without_clear_winner():
+    tracker = StormTracker()
+    current_focus = tracker._create_track(
+        datetime(2026, 4, 8, 18, 0),
+        _make_object(1, 60.0, 0.0, 52.0, "intense rain", 220.0),
+    )
+    challenger = tracker._create_track(
+        datetime(2026, 4, 8, 18, 0),
+        _make_object(2, 55.0, 10.0, 53.0, "intense rain", 215.0),
+    )
+    current_focus.identity_confidence = 0.9
+    challenger.identity_confidence = 0.9
+    current_focus.is_primary_focus = True
+    for minutes in range(5, 20, 5):
+        current_focus.add_position(datetime(2026, 4, 8, 18, 0) + timedelta(minutes=minutes), current_focus.current_object)
+        challenger.add_position(datetime(2026, 4, 8, 18, 0) + timedelta(minutes=minutes), challenger.current_object)
+
+    tracker._update_primary_focus()
+
+    assert current_focus.is_primary_focus is True
+    assert challenger.is_primary_focus is False

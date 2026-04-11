@@ -7,6 +7,7 @@ from src.tracking.events import normalize_merge_event, normalize_split_event
 from src.tracking.types import Track
 
 MAX_MISSED_SCANS = 2
+FOCUS_SWITCH_MARGIN = 2.0
 
 
 def _get_track_motion(track: Track) -> MotionVector:
@@ -70,7 +71,7 @@ class StormTracker:
             track.diagnostic_motion = diagnostic_motion
             track.motion_confidence = reported_motion.confidence
 
-    def _focus_score(self, track: Track) -> float:
+    def _focus_score(self, track: Track, previous_focus_track_id: int | None = None) -> float:
         if track.current_object is None:
             return float("-inf")
         current = track.current_object
@@ -78,24 +79,33 @@ class StormTracker:
         confidence = track.identity_confidence * 2.0
         area_bonus = min(current.area_km2 / 150.0, 8.0)
         peak_bonus = current.peak_dbz / 10.0
-        prior_focus_bonus = 2.5 if track.is_primary_focus else 0.0
+        prior_focus_bonus = 2.5 if previous_focus_track_id is not None and track.track_id == previous_focus_track_id else 0.0
         distance_penalty = min(current.distance_km / 40.0, 6.0)
         return peak_bonus + area_bonus + persistence + confidence + prior_focus_bonus - distance_penalty
 
     def _update_primary_focus(self) -> None:
         active_tracks = [track for track in self._tracks if track.status == "active" and track.current_object is not None]
+        previous_focus_track_id = next((track.track_id for track in active_tracks if track.is_primary_focus), None)
+        previous_focus_track = next((track for track in active_tracks if track.track_id == previous_focus_track_id), None)
         for track in active_tracks:
             track.is_primary_focus = False
         if not active_tracks:
             return
-        primary = max(
+        ranked_tracks = sorted(
             active_tracks,
             key=lambda track: (
-                self._focus_score(track),
+                self._focus_score(track, previous_focus_track_id),
                 track.current_object.peak_dbz if track.current_object is not None else 0.0,
                 track.current_object.area_km2 if track.current_object is not None else 0.0,
             ),
+            reverse=True,
         )
+        primary = ranked_tracks[0]
+        if previous_focus_track is not None:
+            previous_score = self._focus_score(previous_focus_track, previous_focus_track_id)
+            challenger_score = self._focus_score(primary, previous_focus_track_id)
+            if primary.track_id != previous_focus_track.track_id and challenger_score < previous_score + FOCUS_SWITCH_MARGIN:
+                primary = previous_focus_track
         primary.is_primary_focus = True
 
     def _append_merge_event(self, timestamp: datetime, surviving_track_id: int, merged_track_ids: list[int]) -> None:
