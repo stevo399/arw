@@ -272,7 +272,7 @@ Completion notes:
 
 ## Task 6: Add quantitative tracking evaluation
 
-Status: pending
+Status: completed
 
 Goal:
 
@@ -300,6 +300,25 @@ Validation:
 - smoke tests only if runtime/API paths changed
 - live replay and evaluation runs on the benchmark set
 - output analysis that compares before/after metrics, not only anecdotal examples
+
+Completion notes:
+
+- added a benchmark manifest at `docs/benchmarks/tracking_benchmark_manifest.json` covering dense, lower-complexity, and merge/split-sensitive live replay windows
+- added `scripts/evaluate_tracking.py` to compute replay metrics and emit both JSON and Markdown reports
+- added a reusable reporting template at `docs/test_reports/templates/tracking-evaluation-template.md`
+- added focused unit coverage for report rendering and metric output structure
+- targeted verification:
+  - `uv run pytest tests/unit/test_tracking_evaluation.py tests/unit/test_live_replay_contracts.py tests/smoke/test_server_smoke.py -q`
+  - `14 passed in 3.09s`
+- benchmark evaluation run:
+  - `uv run python scripts/evaluate_tracking.py --manifest docs/benchmarks/tracking_benchmark_manifest.json --output-json docs/test_reports/2026-04-11-task6-tracking-evaluation.json --output-md docs/test_reports/2026-04-11-task6-tracking-evaluation.md`
+- clean-data report artifacts:
+  - `docs/test_reports/2026-04-11-task6-tracking-evaluation.md`
+  - `docs/test_reports/2026-04-11-task6-tracking-evaluation.json`
+- observed behavior:
+  - dense benchmark stayed locked on one focus track across the three-scan window, but the new `focus_heading_flips_ge_90` metric correctly flagged one abrupt heading reversal for review
+  - lower-complexity benchmark stayed effectively stationary with zero heading-flip events and no uncertainty inflation
+  - merge/split-sensitive benchmark recorded one focus switch without duplicate/self-merge regression, giving a quantitative baseline for future continuity improvements
 
 ## Task 7: Calibrate confidence scores and diagnostics
 
