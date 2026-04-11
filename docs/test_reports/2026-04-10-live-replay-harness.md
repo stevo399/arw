@@ -28,6 +28,8 @@ Cached-only replay with no downloads:
 uv run python scripts/live_replay.py <SITE_ID> --date 2026-04-10 --quick --local-only
 ```
 
+If the exact final `N` scans for that date are not cached, `--local-only` now falls back to the most recent cached scans available for that date instead of failing immediately.
+
 ## Output
 
 For each replayed scan the harness prints:
@@ -394,3 +396,28 @@ Representative summary lines:
 - `Oklahoma City: 53 rain objects detected. Strongest: severe core, 26 miles E of the radar, moving WNW at 20 mph. Note: 5 storms merged in the last scan. Note: 8 storms split in the last scan. Covering approximately 3634 square miles.`
 - `Oklahoma City: 64 rain objects detected. Strongest: severe core, 27 miles E of the radar, moving NE at 7 mph. Note: 9 storms merged in the last scan. Note: 7 storms split in the last scan. Covering approximately 3714 square miles.`
 - `Oklahoma City: 65 rain objects detected. Strongest: intense rain, 26 miles E of the radar, moving SE at 20 mph. Note: 10 storms merged in the last scan. Note: 11 storms split in the last scan. Covering approximately 3815 square miles.`
+
+### Smarter local-only replay selection
+
+Verification:
+
+- `uv run pytest tests/unit/test_live_replay_contracts.py -q`
+- `4 passed in 2.77s`
+
+Regression replay with cached-date fallback:
+
+```powershell
+uv run python scripts/live_replay.py KEYX --date 2026-04-10 --scans 5 --local-only
+```
+
+Observed behavior:
+
+- the harness now replays the most recent cached scans for the requested date even when the exact final date-window is not fully cached
+- this avoids unnecessary failures during local-only validation
+- merge/split regression replay remained sane with plausible motion values
+
+Representative output:
+
+- `2026-04-10T23:37:55Z objects=18 active=18 uncertain_tracks=0 max_speed_mph=0 merges=0 splits=0`
+- `2026-04-10T23:47:20Z objects=18 active=19 uncertain_tracks=0 max_speed_mph=18 merges=5 splits=1`
+- `2026-04-10T23:56:44Z objects=20 active=20 uncertain_tracks=0 max_speed_mph=35 merges=2 splits=1`

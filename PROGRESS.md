@@ -13,6 +13,7 @@
   - Echo significance: very small weak echoes are filtered so they do not inflate object counts in simpler scenes
   - Summary focus: strongest-object selection now follows a relevance-aware primary focus track across scans
   - Focus hysteresis: focus handoff now requires a meaningful challenger win instead of switching on minor score changes
+  - Replay harness: local-only mode now falls back to the most recent cached scans for a requested date
   - Live replay harness: multi-scan replay script for summary, merge/split, and motion sanity diagnostics
   - Updated speech summaries with confidence-aware motion and total scene coverage
   - New endpoints: /tracks/{site_id}, /motion/{site_id}/{track_id}
@@ -22,6 +23,7 @@
   - lower-complexity replay count noise improved further after small-weak-object filtering
   - dense-scene strongest-object summaries are materially more stable across short replay windows
   - longer dense-scene replay windows now keep the late-window focus anchored on the nearer active storm field
+  - local-only regression replay now works reliably even when only part of the requested day is cached
 - Full test suite: 112 tests all passing
 
 ## In Progress

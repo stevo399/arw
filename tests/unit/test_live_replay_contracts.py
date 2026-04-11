@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 
@@ -7,7 +8,7 @@ from src.detection import DetectedObject
 from src.motion import MotionVector
 from src.parser import ReflectivityData
 from src.tracker import StormTracker, Track
-from scripts.live_replay import _cached_scans, _select_scan_count, summarize_scan
+from scripts.live_replay import _cached_scans, _local_only_scans, _select_scan_count, summarize_scan
 
 
 def _make_buffered_scan() -> BufferedScan:
@@ -83,3 +84,30 @@ def test_cached_scans_filters_missing_entries(monkeypatch):
     monkeypatch.setattr("scripts.live_replay.scan_is_cached", lambda site_id, filename: filename in {"A", "C"})
     cached = _cached_scans("KTLX", scans)
     assert [scan.filename for scan in cached] == ["A", "C"]
+
+
+def test_local_only_scans_falls_back_to_most_recent_cached_for_date(monkeypatch, tmp_path):
+    site_cache_dir = tmp_path / "KTLX"
+    site_cache_dir.mkdir()
+    for filename in [
+        "KTLX20260410_170000_V06",
+        "KTLX20260410_171000_V06",
+        "KTLX20260410_172000_V06",
+    ]:
+        (site_cache_dir / filename).write_text("")
+
+    class Scan:
+        def __init__(self, filename: str):
+            self.filename = filename
+
+    monkeypatch.setattr("scripts.live_replay._cached_scans", lambda site_id, scans: [])
+    monkeypatch.setattr(
+        "scripts.live_replay.get_cache_path",
+        lambda site_id, filename: str(Path(tmp_path) / site_id / filename),
+    )
+
+    selected = _local_only_scans("KTLX", "2026-04-10", [Scan("missing")], 2)
+    assert [scan.filename for scan in selected] == [
+        "KTLX20260410_171000_V06",
+        "KTLX20260410_172000_V06",
+    ]

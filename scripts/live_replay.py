@@ -107,6 +107,43 @@ def _scan_timestamp(scan) -> datetime:
     return datetime.strptime(_scan_filename(scan).split("_V")[0][-15:], "%Y%m%d_%H%M%S")
 
 
+def _cached_scan_records_for_date(site_id: str, date_str: str) -> list[tuple[datetime, str]]:
+    site_cache_dir = Path(get_cache_path(site_id, "placeholder")).parent
+    if not site_cache_dir.exists():
+        return []
+
+    records: list[tuple[datetime, str]] = []
+    date_prefix = date_str.replace("-", "")
+    for entry in site_cache_dir.iterdir():
+        if not entry.is_file():
+            continue
+        filename = entry.name
+        if date_prefix not in filename:
+            continue
+        try:
+            timestamp = datetime.strptime(filename.split("_V")[0][-15:], "%Y%m%d_%H%M%S")
+        except ValueError:
+            continue
+        records.append((timestamp, filename))
+    records.sort(key=lambda item: item[0])
+    return records
+
+
+def _local_only_scans(site_id: str, date_str: str | None, scans: list, count: int) -> list:
+    cached = _cached_scans(site_id, scans)
+    if cached:
+        return cached
+    if date_str:
+        cached_records = _cached_scan_records_for_date(site_id, date_str)
+        if cached_records:
+            class CachedScan:
+                def __init__(self, filename: str):
+                    self.filename = filename
+
+            return [CachedScan(filename) for _, filename in cached_records[-count:]]
+    return []
+
+
 def main() -> None:
     args = _parse_args()
     site_id = args.site_id.upper()
@@ -114,7 +151,7 @@ def main() -> None:
     scan_count = _select_scan_count(args)
     scans = _select_scans(site_id, args.date, scan_count)
     if args.local_only:
-        scans = _cached_scans(site_id, scans)
+        scans = _local_only_scans(site_id, args.date, scans, scan_count)
         if not scans:
             raise RuntimeError(f"No cached scans available for {site_id} in the selected window")
     tracker = StormTracker()
