@@ -10,10 +10,22 @@ Run from the repo root:
 uv run python scripts/live_replay.py <SITE_ID> --scans 5
 ```
 
+Fast development replay:
+
+```powershell
+uv run python scripts/live_replay.py <SITE_ID> --quick
+```
+
 Optional historical replay for a specific day:
 
 ```powershell
 uv run python scripts/live_replay.py <SITE_ID> --date 2026-04-10 --scans 5
+```
+
+Cached-only replay with no downloads:
+
+```powershell
+uv run python scripts/live_replay.py <SITE_ID> --date 2026-04-10 --quick --local-only
 ```
 
 ## Output
@@ -35,6 +47,8 @@ This makes it easy to detect:
 - dense-scene motion blowups
 - summaries that should say `tracking uncertain` but do not
 
+The harness also prints a `MODE` line so you can tell whether it is replaying cached scans only or fetching missing files.
+
 ## When To Use
 
 Run the harness whenever a change affects:
@@ -45,6 +59,12 @@ Run the harness whenever a change affects:
 - motion estimation
 - summary generation
 - `/summary`, `/tracks`, or `/motion`
+
+For fast iteration:
+
+- use `--quick` during development
+- use `--local-only` when you want cached replay without waiting on downloads
+- reserve longer historical windows for final validation
 
 ## Notes
 

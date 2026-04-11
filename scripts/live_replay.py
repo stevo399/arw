@@ -10,7 +10,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.buffer import BufferedScan
 from src.detection import detect_objects_with_grid
-from src.ingest import list_latest_scans, list_scans_for_date, fetch_scan
+from src.ingest import get_cache_path, list_latest_scans, list_scans_for_date, fetch_scan, scan_is_cached
 from src.parser import extract_reflectivity
 from src.sites import NEXRAD_SITES
 from src.summary import generate_summary
@@ -71,8 +71,18 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Replay multiple live radar scans and print tracking diagnostics.")
     parser.add_argument("site_id", help="Radar site ID, e.g. KTLX")
     parser.add_argument("--date", help="Date to replay in YYYY-MM-DD format. Defaults to latest available scans.")
-    parser.add_argument("--scans", type=int, default=5, help="Number of scans to replay. Default: 5")
+    parser.add_argument("--scans", type=int, default=None, help="Number of scans to replay. Defaults to 5, or 3 with --quick.")
+    parser.add_argument("--quick", action="store_true", help="Use a short development replay window. Defaults to 3 scans.")
+    parser.add_argument("--local-only", action="store_true", help="Replay only scans already present in the local cache.")
     return parser.parse_args()
+
+
+def _select_scan_count(args: argparse.Namespace) -> int:
+    if args.scans is not None:
+        return args.scans
+    if args.quick:
+        return 3
+    return 5
 
 
 def _select_scans(site_id: str, date_str: str | None, count: int):
@@ -85,19 +95,37 @@ def _select_scans(site_id: str, date_str: str | None, count: int):
     return scans[-count:]
 
 
+def _scan_filename(scan) -> str:
+    return scan.filename
+
+
+def _cached_scans(site_id: str, scans: list) -> list:
+    return [scan for scan in scans if scan_is_cached(site_id, _scan_filename(scan))]
+
+
+def _scan_timestamp(scan) -> datetime:
+    return datetime.strptime(_scan_filename(scan).split("_V")[0][-15:], "%Y%m%d_%H%M%S")
+
+
 def main() -> None:
     args = _parse_args()
     site_id = args.site_id.upper()
     site_name = _site_name(site_id)
-    scans = _select_scans(site_id, args.date, args.scans)
+    scan_count = _select_scan_count(args)
+    scans = _select_scans(site_id, args.date, scan_count)
+    if args.local_only:
+        scans = _cached_scans(site_id, scans)
+        if not scans:
+            raise RuntimeError(f"No cached scans available for {site_id} in the selected window")
     tracker = StormTracker()
 
     print(f"SITE {site_id} ({site_name})")
     print(f"REPLAY_SCANS {len(scans)}")
+    print(f"MODE {'local-only' if args.local_only else 'fetch-missing'}")
 
     for scan in scans:
-        scan_dt = datetime.strptime(scan.filename.split("_V")[0][-15:], "%Y%m%d_%H%M%S")
-        filepath = fetch_scan(site_id, scan_dt)
+        scan_dt = _scan_timestamp(scan)
+        filepath = get_cache_path(site_id, _scan_filename(scan)) if args.local_only else fetch_scan(site_id, scan_dt)
         reflectivity = extract_reflectivity(filepath)
         detection = detect_objects_with_grid(
             reflectivity=reflectivity.reflectivity,

@@ -7,7 +7,7 @@ from src.detection import DetectedObject
 from src.motion import MotionVector
 from src.parser import ReflectivityData
 from src.tracker import StormTracker, Track
-from scripts.live_replay import summarize_scan
+from scripts.live_replay import _cached_scans, _select_scan_count, summarize_scan
 
 
 def _make_buffered_scan() -> BufferedScan:
@@ -64,3 +64,22 @@ def test_summarize_scan_reports_motion_sanity_fields():
     assert diagnostics.uncertain_tracks == 1
     assert diagnostics.max_speed_mph == 137
     assert "tracking uncertain" in diagnostics.summary
+
+
+def test_select_scan_count_defaults_to_quick_window():
+    class Args:
+        scans = None
+        quick = True
+
+    assert _select_scan_count(Args()) == 3
+
+
+def test_cached_scans_filters_missing_entries(monkeypatch):
+    class Scan:
+        def __init__(self, filename: str):
+            self.filename = filename
+
+    scans = [Scan("A"), Scan("B"), Scan("C")]
+    monkeypatch.setattr("scripts.live_replay.scan_is_cached", lambda site_id, filename: filename in {"A", "C"})
+    cached = _cached_scans("KTLX", scans)
+    assert [scan.filename for scan in cached] == ["A", "C"]
