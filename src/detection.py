@@ -5,6 +5,8 @@ from scipy.ndimage import label
 
 MIN_OBJECT_AREA_KM2 = 4.0
 MIN_DBZ_THRESHOLD = 20.0
+SEGMENTATION_SEED_THRESHOLDS = (50.0, 60.0)
+MIN_SEED_PIXELS = 6
 
 INTENSITY_THRESHOLDS = [
     (20, 30, "light rain"),
@@ -181,6 +183,75 @@ class DetectionResult:
     object_masks: dict[int, np.ndarray]
 
 
+def _find_split_seed_masks(
+    parent_mask: np.ndarray,
+    reflectivity: np.ndarray,
+) -> list[np.ndarray]:
+    """Return higher-threshold core masks that justify splitting a parent blob."""
+    for threshold in SEGMENTATION_SEED_THRESHOLDS:
+        seed_grid = parent_mask & ~np.isnan(reflectivity) & (reflectivity >= threshold)
+        labeled_seeds, num_seeds = label(seed_grid)
+        if num_seeds <= 1:
+            continue
+        seed_masks: list[np.ndarray] = []
+        for seed_id in range(1, num_seeds + 1):
+            seed_mask = labeled_seeds == seed_id
+            if int(np.count_nonzero(seed_mask)) < MIN_SEED_PIXELS:
+                continue
+            seed_masks.append(seed_mask)
+        if len(seed_masks) >= 2:
+            return seed_masks
+    return []
+
+
+def _seed_centroids(
+    seed_masks: list[np.ndarray],
+    reflectivity: np.ndarray,
+) -> list[tuple[float, float]]:
+    """Compute weighted centroids for seed masks."""
+    centroids: list[tuple[float, float]] = []
+    for mask in seed_masks:
+        rows, cols = np.where(mask)
+        weights = np.nan_to_num(reflectivity[mask], nan=0.0, posinf=0.0, neginf=0.0)
+        if float(np.sum(weights)) <= 0.0:
+            centroids.append((float(rows.mean()), float(cols.mean())))
+            continue
+        centroids.append((
+            float(np.average(rows, weights=weights)),
+            float(np.average(cols, weights=weights)),
+        ))
+    return centroids
+
+
+def _split_parent_mask(
+    parent_mask: np.ndarray,
+    reflectivity: np.ndarray,
+) -> list[np.ndarray]:
+    """Partition a low-threshold blob around multiple higher-threshold cores."""
+    seed_masks = _find_split_seed_masks(parent_mask, reflectivity)
+    if len(seed_masks) < 2:
+        return [parent_mask]
+
+    centroids = _seed_centroids(seed_masks, reflectivity)
+    child_masks = [np.zeros_like(parent_mask, dtype=bool) for _ in seed_masks]
+    claimed_seed_pixels = np.zeros_like(parent_mask, dtype=bool)
+    for index, seed_mask in enumerate(seed_masks):
+        child_masks[index][seed_mask] = True
+        claimed_seed_pixels |= seed_mask
+
+    remaining_mask = parent_mask & ~claimed_seed_pixels
+    rows, cols = np.where(remaining_mask)
+    for row, col in zip(rows, cols):
+        distances = [
+            (row - seed_row) ** 2 + (col - seed_col) ** 2
+            for seed_row, seed_col in centroids
+        ]
+        child_masks[int(np.argmin(distances))][row, col] = True
+
+    non_empty_children = [mask for mask in child_masks if np.any(mask)]
+    return non_empty_children if len(non_empty_children) >= 2 else [parent_mask]
+
+
 def detect_objects_with_grid(
     reflectivity: np.ndarray,
     azimuths: np.ndarray,
@@ -198,25 +269,32 @@ def detect_objects_with_grid(
 
     objects = []
     object_masks = {}
+    next_object_id = 1
     for i in range(1, num_features + 1):
-        obj_mask = labeled == i
-        obj = compute_object_properties(
-            obj_mask=obj_mask,
-            reflectivity=reflectivity,
-            azimuths=azimuths,
-            ranges_m=ranges_m,
-            radar_lat=radar_lat,
-            radar_lon=radar_lon,
-            object_id=i,
-        )
-        if obj is not None:
+        parent_mask = labeled == i
+        for obj_mask in _split_parent_mask(parent_mask, reflectivity):
+            obj = compute_object_properties(
+                obj_mask=obj_mask,
+                reflectivity=reflectivity,
+                azimuths=azimuths,
+                ranges_m=ranges_m,
+                radar_lat=radar_lat,
+                radar_lon=radar_lon,
+                object_id=next_object_id,
+            )
+            if obj is None:
+                continue
             objects.append(obj)
             object_masks[obj.object_id] = obj_mask
+            next_object_id += 1
 
-    objects.sort(key=lambda o: o.peak_dbz, reverse=True)
+    objects.sort(key=lambda o: (o.peak_dbz, o.area_km2), reverse=True)
+    final_labeled = np.zeros_like(labeled)
+    for obj in objects:
+        final_labeled[object_masks[obj.object_id]] = obj.object_id
     return DetectionResult(
         objects=objects,
-        labeled_grid=labeled,
+        labeled_grid=final_labeled,
         object_masks=object_masks,
     )
 

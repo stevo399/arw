@@ -181,3 +181,43 @@ def test_detect_objects_with_grid_masks_match_objects():
     assert len(result.object_masks) == 2
     for obj in result.objects:
         assert obj.object_id in result.object_masks
+
+
+def test_detect_objects_splits_broad_blob_with_multiple_strong_cores():
+    reflectivity = np.full((360, 500), np.nan)
+    reflectivity[80:110, 190:230] = 25.0
+    reflectivity[85:100, 195:208] = 40.0
+    reflectivity[85:100, 212:225] = 40.0
+    reflectivity[88:96, 198:204] = 55.0
+    reflectivity[88:96, 216:222] = 55.0
+    azimuths = np.linspace(0, 359, 360)
+    ranges_m = np.linspace(2000, 250000, 500)
+    result = detect_objects_with_grid(
+        reflectivity=reflectivity,
+        azimuths=azimuths,
+        ranges_m=ranges_m,
+        radar_lat=35.0,
+        radar_lon=-97.0,
+    )
+    assert len(result.objects) == 2
+    assert len(result.object_masks) == 2
+    sorted_objects = sorted(result.objects, key=lambda obj: obj.centroid_lon)
+    assert sorted_objects[0].peak_label == "intense rain"
+    assert sorted_objects[1].peak_label == "intense rain"
+
+
+def test_detect_objects_does_not_split_single_core_blob():
+    reflectivity = np.full((360, 500), np.nan)
+    reflectivity[80:110, 190:230] = 25.0
+    reflectivity[85:105, 198:222] = 40.0
+    reflectivity[90:100, 204:216] = 55.0
+    azimuths = np.linspace(0, 359, 360)
+    ranges_m = np.linspace(2000, 250000, 500)
+    result = detect_objects_with_grid(
+        reflectivity=reflectivity,
+        azimuths=azimuths,
+        ranges_m=ranges_m,
+        radar_lat=35.0,
+        radar_lon=-97.0,
+    )
+    assert len(result.objects) == 1

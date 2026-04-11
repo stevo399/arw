@@ -214,3 +214,57 @@ Representative summary lines:
 - targeted regression set:
   - `uv run pytest tests/unit/test_tracking_motion_field.py tests/unit/test_motion.py tests/unit/test_tracker.py tests/unit/test_summary.py tests/smoke/test_server_smoke.py -q`
   - `52 passed in 2.94s`
+
+## Follow-Up Validation After Segmentation Upgrade
+
+### What changed
+
+- low-threshold parent blobs can now be partitioned around multiple intense internal cores
+- the split trigger is intentionally conservative: it requires multiple intense cores rather than splitting on every moderate pocket
+- endpoint contracts stay the same; only mask/object partitioning changed
+
+### Verification
+
+- targeted regression set:
+  - `uv run pytest tests/unit/test_detection.py tests/unit/test_tracking_segmentation.py tests/unit/test_tracking_association.py tests/unit/test_motion.py tests/unit/test_summary.py tests/smoke/test_server_smoke.py tests/e2e/test_full_pipeline.py -q`
+  - `57 passed in 3.29s`
+
+### Dense replay after segmentation upgrade
+
+Command:
+
+```powershell
+uv run python scripts/live_replay.py KTLX --date 2026-04-10 --quick --local-only
+```
+
+Observed behavior:
+
+- crowded-scene summaries remained plausible
+- scene coverage remained stable in the `3692` to `3863` square-mile range
+- object counts and merge/split counts remained high, but no absurd summary motion returned
+
+Representative output:
+
+- `2026-04-10T23:46:05Z objects=80 active=80 uncertain_tracks=0 max_speed_mph=0 merges=0 splits=0`
+- `2026-04-10T23:51:18Z objects=96 active=102 uncertain_tracks=0 max_speed_mph=23 merges=15 splits=16`
+- `2026-04-10T23:56:21Z objects=86 active=103 uncertain_tracks=0 max_speed_mph=37 merges=19 splits=15`
+
+### Lower-complexity replay after segmentation upgrade
+
+Command:
+
+```powershell
+uv run python scripts/live_replay.py KSOX --date 2026-04-10 --quick
+```
+
+Observed behavior:
+
+- the stricter split trigger avoided the earlier extreme over-segmentation on the first two scans
+- first two scans stayed in a plausible `5` to `6` object range with low speeds
+- the third scan still rose to `20` objects, which is acceptable for now but should be watched as part of future segmentation tuning
+
+Representative output:
+
+- `2026-04-10T23:35:42Z objects=5 active=5 uncertain_tracks=0 max_speed_mph=0 merges=0 splits=0`
+- `2026-04-10T23:44:23Z objects=6 active=6 uncertain_tracks=0 max_speed_mph=2 merges=1 splits=1`
+- `2026-04-10T23:53:02Z objects=20 active=18 uncertain_tracks=0 max_speed_mph=2 merges=1 splits=2`
