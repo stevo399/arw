@@ -407,7 +407,39 @@ def test_tracker_initial_confidence_is_penalized_by_scan_quality():
     )
     tracker.update(scan)
     assert len(tracker.active_tracks) == 1
-    assert tracker.active_tracks[0].identity_confidence == 0.5
+    assert tracker.active_tracks[0].identity_confidence == 0.62
+    assert tracker.active_tracks[0].identity_diagnostics is not None
+    assert tracker.active_tracks[0].identity_diagnostics.scan_quality == 0.5
+
+
+def test_tracker_identity_diagnostics_capture_ambiguous_match():
+    tracker = StormTracker()
+    t1 = datetime(2026, 4, 8, 18, 30)
+    t2 = datetime(2026, 4, 8, 18, 35)
+
+    obj_a = _make_object(1, 35.5, -97.30, peak_dbz=50.0)
+    obj_b = _make_object(2, 35.5, -97.28, peak_dbz=48.0)
+    mask_a = np.zeros((360, 500), dtype=bool)
+    mask_a[85:95, 195:205] = True
+    mask_b = np.zeros((360, 500), dtype=bool)
+    mask_b[85:95, 205:215] = True
+    scan1 = _make_scan("KTLX", t1, [obj_a, obj_b], masks={1: mask_a, 2: mask_b})
+
+    obj_follow = _make_object(1, 35.5, -97.29, peak_dbz=49.0)
+    mask_follow = np.zeros((360, 500), dtype=bool)
+    mask_follow[85:95, 200:210] = True
+    scan2 = _make_scan("KTLX", t2, [obj_follow], masks={1: mask_follow})
+
+    tracker.update(scan1)
+    tracker.update(scan2)
+
+    active = tracker.active_tracks
+    assert active
+    survivor = next(track for track in active if track.current_object is not None)
+    assert survivor.identity_diagnostics is not None
+    assert survivor.identity_diagnostics.event_context in {"merge_survivor", "matched"}
+    assert survivor.identity_diagnostics.ambiguity_margin is not None
+    assert survivor.identity_diagnostics.reason is not None
 
 
 def test_tracker_lineage_persists_after_followup_scan():

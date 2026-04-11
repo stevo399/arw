@@ -10,6 +10,7 @@
   - Lineage state: tracks now retain persistent parent/child/absorbed relationships while latest-scan events remain a derived view
   - Motion guidance: per-track local ROI motion now blends with the global phase-correlation prior under conservative consistency rules
   - Quantitative evaluation: benchmark-manifest replay metrics now track focus switches, heading flips, fragmentation proxy, and lineage/event totals across reviewable live windows
+  - Confidence calibration: tracks now expose machine-readable identity diagnostics alongside motion confidence, with ambiguity-aware identity scoring and benchmarked focus-confidence metrics
   - Motion: confidence-aware output with uncertain/stationary/nearly-stationary states
   - Motion provenance: reported motion now distinguishes track-history, motion-field, and suppressed outputs
   - Motion guidance: scan-based phase correlation is now preferred over weighted centroid drift for scene motion
@@ -31,21 +32,21 @@
   - lineage-state refactor preserved replay behavior while giving merges and splits persistent internal relationships
   - local-plus-global motion guidance passed replay validation after rejecting inconsistent local motion in simpler scenes
   - benchmark evaluation now produces reviewable metric reports with clean replay snapshots for dense, simpler, and merge/split-sensitive live windows
+  - confidence-calibration replay now keeps simpler and merge/split-sensitive focus tracks at medium/high identity confidence while still flagging the dense heading-reversal scan as a low-identity case
   - dense-scene strongest-object summaries are materially more stable across short replay windows
   - longer dense-scene replay windows now keep the late-window focus anchored on the nearer active storm field
   - local-only regression replay now works reliably even when only part of the requested day is cached
 - Full test suite: 112 tests all passing
 
 ## In Progress
-- Task 7 confidence calibration and diagnostics
 - Residual dense-scene validation for broader replay periods and focus-lineage edge cases, including heading-flip behavior in evolving rain objects
 
 ## Next
 - Validate focus stability over more replay periods and more storm morphologies
-- Calibrate confidence scores against the new benchmark manifest and reviewable evaluation reports
+- Stress-test the new confidence diagnostics across broader replay windows and future benchmark additions
 - Continue refining conservative multithreshold segmentation so simpler scenes do not fragment unnecessarily
 - Phase 3: Velocity ingestion, velocity region detection
 - NVGT frontend integration with the REST API
 
 ## Blockers / Decisions
-- No blocker for current API behavior. Remaining work is quality-related: focus stability is materially improved over the tested windows, but dense evolving scenes still need broader validation and confidence calibration.
+- No blocker for current API behavior. Remaining work is quality-related: focus stability and dense-scene continuity are improved in the tested windows, but broader replay coverage is still needed for evolving scenes with abrupt heading changes.

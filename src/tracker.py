@@ -4,16 +4,26 @@ from src.detection import DetectedObject
 from src.motion import resolve_reported_motion, MotionVector
 from src.tracking.association import associate_tracks
 from src.tracking.events import normalize_merge_event, normalize_split_event
-from src.tracking.types import Track
+from src.tracking.types import IdentityConfidence, Track
 
 MAX_MISSED_SCANS = 2
 FOCUS_SWITCH_MARGIN = 2.0
+HIGH_CONFIDENCE = 0.75
+MEDIUM_CONFIDENCE = 0.45
 
 
 def _scan_quality_factor(scan: BufferedScan | None) -> float:
     if scan is None or scan.scan_quality is None:
         return 1.0
     return max(0.25, min(scan.scan_quality.score, 1.0))
+
+
+def _confidence_label(score: float) -> str:
+    if score >= HIGH_CONFIDENCE:
+        return "high"
+    if score >= MEDIUM_CONFIDENCE:
+        return "medium"
+    return "low"
 
 
 def _get_track_motion(track: Track) -> MotionVector:
@@ -53,6 +63,13 @@ class StormTracker:
         self._next_id += 1
         track.add_position(timestamp, obj)
         track.identity_confidence = 0.3
+        track.identity_diagnostics = self._build_identity_diagnostics(
+            score_value=0.3,
+            scan=None,
+            track=track,
+            reason="new track initialized before scan-quality adjustment",
+            event_context="new_track",
+        )
         self._tracks.append(track)
         return track
 
@@ -69,12 +86,97 @@ class StormTracker:
         self._append_unique(surviving_track.absorbed_track_ids, merged_track.track_id)
         self._append_unique(merged_track.parent_track_ids, surviving_track.track_id)
 
-    def _score_confidence(self, association, new_object_id: int, track_id: int, scan: BufferedScan) -> float:
+    @staticmethod
+    def _lineage_complexity(track: Track) -> int:
+        return len(track.parent_track_ids) + len(track.child_track_ids) + len(track.absorbed_track_ids)
+
+    @staticmethod
+    def _match_quality(score) -> float:
+        return round(max(0.0, min(1.0, 1.0 - (score.total_cost / 10.0))), 2)
+
+    def _association_ambiguity_margin(self, association, new_object_id: int, track_id: int) -> float | None:
+        object_scores = sorted(
+            score.total_cost for score in association.candidate_scores if score.object_id == new_object_id
+        )
+        track_scores = sorted(
+            score.total_cost for score in association.candidate_scores if score.track_id == track_id
+        )
+        margins = []
+        if len(object_scores) > 1:
+            margins.append(object_scores[1] - object_scores[0])
+        if len(track_scores) > 1:
+            margins.append(track_scores[1] - track_scores[0])
+        if not margins:
+            return None
+        return round(min(margins), 2)
+
+    def _build_identity_diagnostics(
+        self,
+        *,
+        score_value: float,
+        scan: BufferedScan | None,
+        track: Track,
+        reason: str,
+        match_quality: float | None = None,
+        ambiguity_margin: float | None = None,
+        event_context: str | None = None,
+    ) -> IdentityConfidence:
+        return IdentityConfidence(
+            label=_confidence_label(score_value),
+            score=round(max(0.0, min(1.0, score_value)), 2),
+            reason=reason,
+            match_quality=match_quality,
+            ambiguity_margin=ambiguity_margin,
+            scan_quality=round(_scan_quality_factor(scan), 2) if scan is not None else None,
+            missed_scans=track._missed_scans,
+            lineage_complexity=self._lineage_complexity(track),
+            event_context=event_context,
+        )
+
+    def _score_confidence(self, association, new_object_id: int, track_id: int, scan: BufferedScan, track: Track) -> float:
         for score in association.candidate_scores:
             if score.object_id == new_object_id and score.track_id == track_id:
-                base_confidence = max(0.0, min(1.0, 1.0 - (score.total_cost / 10.0)))
-                return round(base_confidence * _scan_quality_factor(scan), 2)
-        return round(0.3 * _scan_quality_factor(scan), 2)
+                match_quality = self._match_quality(score)
+                ambiguity_margin = self._association_ambiguity_margin(association, new_object_id, track_id)
+                ambiguity_reason = "well-separated association candidate"
+                if ambiguity_margin is None:
+                    ambiguity_score = 0.7
+                    ambiguity_reason = "single viable association candidate"
+                else:
+                    ambiguity_score = max(0.0, min(1.0, ambiguity_margin / 0.75))
+                if ambiguity_margin is not None and ambiguity_margin < 0.15:
+                    ambiguity_reason = "ambiguous association margin"
+                elif ambiguity_margin is not None and ambiguity_margin < 0.4:
+                    ambiguity_reason = "moderately ambiguous association margin"
+                lineage_score = max(0.55, 1.0 - (0.08 * self._lineage_complexity(track)))
+                score_value = round(
+                    (match_quality * 0.45)
+                    + (ambiguity_score * 0.2)
+                    + (_scan_quality_factor(scan) * 0.15)
+                    + (lineage_score * 0.2),
+                    2,
+                )
+                if ambiguity_margin is not None and ambiguity_margin < 0.15:
+                    score_value = min(score_value, 0.4)
+                track.identity_diagnostics = self._build_identity_diagnostics(
+                    score_value=score_value,
+                    scan=scan,
+                    track=track,
+                    reason=ambiguity_reason,
+                    match_quality=match_quality,
+                    ambiguity_margin=ambiguity_margin,
+                    event_context="matched",
+                )
+                return score_value
+        fallback = round(0.3 * _scan_quality_factor(scan), 2)
+        track.identity_diagnostics = self._build_identity_diagnostics(
+            score_value=fallback,
+            scan=scan,
+            track=track,
+            reason="no scored association candidate",
+            event_context="fallback",
+        )
+        return fallback
 
     def _refresh_track_motions(self, field_estimates, field_dt_hours: float) -> None:
         for track in self._tracks:
@@ -150,7 +252,14 @@ class StormTracker:
             self._obj_to_track.clear()
             for obj in scan.detected_objects:
                 track = self._create_track(timestamp, obj)
-                track.identity_confidence = round(_scan_quality_factor(scan), 2)
+                track.identity_confidence = round(0.45 + (_scan_quality_factor(scan) * 0.35), 2)
+                track.identity_diagnostics = self._build_identity_diagnostics(
+                    score_value=track.identity_confidence,
+                    scan=scan,
+                    track=track,
+                    reason="first-scan track initialization",
+                    event_context="initial",
+                )
                 self._obj_to_track[obj.object_id] = track.track_id
             self._refresh_track_motions(field_estimates=None, field_dt_hours=0.0)
             self._update_primary_focus()
@@ -177,14 +286,23 @@ class StormTracker:
                 continue
             primary_new_id = related_new_ids[0]
             parent_track.add_position(timestamp, new_objects[primary_new_id])
-            parent_track.identity_confidence = self._score_confidence(association, primary_new_id, parent_tid, scan)
+            parent_track.identity_confidence = self._score_confidence(association, primary_new_id, parent_tid, scan, parent_track)
+            if parent_track.identity_diagnostics is not None:
+                parent_track.identity_diagnostics.event_context = "split_parent"
             new_obj_to_track[primary_new_id] = parent_tid
             child_ids = []
             for new_id in related_new_ids[1:]:
                 child = self._create_track(timestamp, new_objects[new_id])
                 child.split_from = parent_tid
                 self._record_split_lineage(parent_track, child)
-                child.identity_confidence = round(0.35 * _scan_quality_factor(scan), 2)
+                child.identity_confidence = round(0.25 + (_scan_quality_factor(scan) * 0.2), 2)
+                child.identity_diagnostics = self._build_identity_diagnostics(
+                    score_value=child.identity_confidence,
+                    scan=scan,
+                    track=child,
+                    reason="new split child inherits limited confidence until track history forms",
+                    event_context="split_child",
+                )
                 new_obj_to_track[new_id] = child.track_id
                 child_ids.append(child.track_id)
             event = normalize_split_event(timestamp, parent_tid, child_ids)
@@ -202,7 +320,9 @@ class StormTracker:
                 continue
             if surviving_track_id not in handled_split_parents:
                 surviving.add_position(timestamp, new_objects[new_id])
-                surviving.identity_confidence = self._score_confidence(association, new_id, surviving_track_id, scan)
+                surviving.identity_confidence = self._score_confidence(association, new_id, surviving_track_id, scan, surviving)
+                if surviving.identity_diagnostics is not None:
+                    surviving.identity_diagnostics.event_context = "merge_survivor"
                 new_obj_to_track[new_id] = surviving_track_id
             merged_track_ids = []
             for merged_track_id in related_track_ids[1:]:
@@ -222,14 +342,21 @@ class StormTracker:
             if track is None or track.status != "active":
                 continue
             track.add_position(timestamp, new_objects[new_id])
-            track.identity_confidence = self._score_confidence(association, new_id, track_id, scan)
+            track.identity_confidence = self._score_confidence(association, new_id, track_id, scan, track)
             new_obj_to_track[new_id] = track_id
 
         # Create new tracks for unmatched new objects
         for new_id, obj in new_objects.items():
             if new_id not in new_obj_to_track:
                 track = self._create_track(timestamp, obj)
-                track.identity_confidence = round(0.3 * _scan_quality_factor(scan), 2)
+                track.identity_confidence = round(0.2 + (_scan_quality_factor(scan) * 0.2), 2)
+                track.identity_diagnostics = self._build_identity_diagnostics(
+                    score_value=track.identity_confidence,
+                    scan=scan,
+                    track=track,
+                    reason="unmatched object created a new track",
+                    event_context="new_track",
+                )
                 new_obj_to_track[new_id] = track.track_id
 
         # Increment missed scans for unmatched active tracks
@@ -238,6 +365,13 @@ class StormTracker:
             if track.status == "active" and track.track_id not in matched_track_ids:
                 track._missed_scans += 1
                 track.identity_confidence = max(0.0, round(track.identity_confidence - 0.2, 2))
+                track.identity_diagnostics = self._build_identity_diagnostics(
+                    score_value=track.identity_confidence,
+                    scan=scan,
+                    track=track,
+                    reason="track missed a scan",
+                    event_context="missed_scan",
+                )
                 if track._missed_scans >= MAX_MISSED_SCANS:
                     track.status = "lost"
 

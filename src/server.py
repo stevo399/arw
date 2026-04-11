@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import FastAPI, Query, HTTPException
 from src.models import (
     RadarSite, ScanMeta, ObjectsResponse, SummaryResponse, RainObject, IntensityLayer,
-    TracksResponse, StormTrack, TrackPosition, TrackMotion, TrackEvent,
+    TracksResponse, StormTrack, TrackPosition, TrackMotion, TrackEvent, TrackIdentity,
     TrackDetailResponse, PeakHistoryEntry,
 )
 from src.sites import geocode_city_state, rank_sites, NEXRAD_SITES
@@ -81,6 +81,7 @@ def _motion_to_model(motion) -> TrackMotion:
 def _track_to_model(track) -> StormTrack:
     """Convert internal Track to Pydantic StormTrack model."""
     motion = track.get_motion()
+    identity = getattr(track, "identity_diagnostics", None)
     return StormTrack(
         track_id=track.track_id,
         status=track.status,
@@ -95,6 +96,17 @@ def _track_to_model(track) -> StormTrack:
             for p in track.positions
         ],
         motion=_motion_to_model(motion),
+        identity=TrackIdentity(
+            label=identity.label if identity is not None else None,
+            score=identity.score if identity is not None else track.identity_confidence,
+            reason=identity.reason if identity is not None else None,
+            match_quality=identity.match_quality if identity is not None else None,
+            ambiguity_margin=identity.ambiguity_margin if identity is not None else None,
+            scan_quality=identity.scan_quality if identity is not None else None,
+            missed_scans=identity.missed_scans if identity is not None else None,
+            lineage_complexity=identity.lineage_complexity if identity is not None else None,
+            event_context=identity.event_context if identity is not None else None,
+        ),
         peak_dbz=track.peak_history[-1].peak_dbz if track.peak_history else 0.0,
         peak_label=track.peak_history[-1].peak_label if track.peak_history else "unknown",
         merged_into=track.merged_into,
@@ -210,6 +222,7 @@ def get_motion(site_id: str, track_id: int):
     if track is None:
         raise HTTPException(status_code=404, detail=f"Track {track_id} not found")
     motion = track.get_motion()
+    identity = getattr(track, "identity_diagnostics", None)
     return TrackDetailResponse(
         track_id=track.track_id,
         status=track.status,
@@ -224,6 +237,17 @@ def get_motion(site_id: str, track_id: int):
             for p in track.positions
         ],
         motion=_motion_to_model(motion),
+        identity=TrackIdentity(
+            label=identity.label if identity is not None else None,
+            score=identity.score if identity is not None else track.identity_confidence,
+            reason=identity.reason if identity is not None else None,
+            match_quality=identity.match_quality if identity is not None else None,
+            ambiguity_margin=identity.ambiguity_margin if identity is not None else None,
+            scan_quality=identity.scan_quality if identity is not None else None,
+            missed_scans=identity.missed_scans if identity is not None else None,
+            lineage_complexity=identity.lineage_complexity if identity is not None else None,
+            event_context=identity.event_context if identity is not None else None,
+        ),
         peak_history=[
             PeakHistoryEntry(
                 timestamp=p.timestamp.isoformat() if isinstance(p.timestamp, datetime) else p.timestamp,

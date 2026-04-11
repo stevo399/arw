@@ -102,6 +102,10 @@ def test_tracks_endpoint_includes_motion_confidence_fields():
         assert "confidence_score" in motion
         assert "confidence_reason" in motion
         assert "source" in motion
+        identity = data["tracks"][0]["identity"]
+        assert "label" in identity
+        assert "score" in identity
+        assert "reason" in identity
 
 
 def test_motion_endpoint_missing_track_returns_404():

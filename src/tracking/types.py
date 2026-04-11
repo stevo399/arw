@@ -54,6 +54,19 @@ class MotionConfidence:
 
 
 @dataclass
+class IdentityConfidence:
+    label: str
+    score: float
+    reason: str | None = None
+    match_quality: float | None = None
+    ambiguity_margin: float | None = None
+    scan_quality: float | None = None
+    missed_scans: int = 0
+    lineage_complexity: int = 0
+    event_context: str | None = None
+
+
+@dataclass
 class Track:
     track_id: int
     status: str  # "active", "merged", "split", "lost"
@@ -68,6 +81,7 @@ class Track:
     first_seen: datetime | None = None
     last_seen: datetime | None = None
     identity_confidence: float = 1.0
+    identity_diagnostics: IdentityConfidence | None = None
     motion_confidence: MotionConfidence | None = None
     last_motion: Any | None = None
     diagnostic_motion: Any | None = None

@@ -36,9 +36,13 @@ class ReplaySnapshot:
     merge_count: int
     split_count: int
     focus_track_id: int | None
+    focus_identity_label: str | None
+    focus_identity_score: float | None
     focus_heading_deg: float | None
     focus_heading_label: str | None
     focus_speed_mph: int | None
+    focus_motion_confidence_label: str | None
+    focus_motion_confidence_score: float | None
     new_tracks: int
     total_tracks_seen: int
     summary: str
@@ -58,8 +62,13 @@ class BenchmarkResult:
     total_merges: int
     total_splits: int
     mean_uncertain_tracks: float
+    mean_focus_identity_confidence: float
+    mean_focus_motion_confidence: float
+    focus_low_identity_scans: int
+    focus_low_motion_scans: int
     focus_switches: int
     focus_heading_flips_ge_90: int
+    focus_flips_with_low_motion_confidence: int
     focus_track_distance_changes: int
     total_new_tracks_after_first_scan: int
     merged_tracks_total: int
@@ -75,6 +84,26 @@ def _heading_delta_deg(a: float | None, b: float | None) -> float:
         return 0.0
     delta = abs(a - b) % 360.0
     return min(delta, 360.0 - delta)
+
+
+def _mean(values) -> float:
+    normalized = [float(value) for value in values]
+    if not normalized:
+        return 0.0
+    return float(statistics.mean(normalized))
+
+
+def _normalize_json_value(value):
+    if isinstance(value, dict):
+        return {key: _normalize_json_value(inner) for key, inner in value.items()}
+    if isinstance(value, list):
+        return [_normalize_json_value(inner) for inner in value]
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except ValueError:
+            return value
+    return value
 
 
 def _load_manifest(path: str) -> list[dict]:
@@ -101,9 +130,27 @@ def _snapshot(site_name: str, buffered: BufferedScan, tracker: StormTracker, see
         merge_count=diagnostics.merge_count,
         split_count=diagnostics.split_count,
         focus_track_id=focus_track.track_id if focus_track is not None else None,
+        focus_identity_label=(
+            focus_track.identity_diagnostics.label
+            if focus_track is not None and getattr(focus_track, "identity_diagnostics", None) is not None
+            else None
+        ),
+        focus_identity_score=(
+            round(float(focus_track.identity_diagnostics.score), 2)
+            if focus_track is not None and getattr(focus_track, "identity_diagnostics", None) is not None
+            else (round(float(focus_track.identity_confidence), 2) if focus_track is not None else None)
+        ),
         focus_heading_deg=focus_motion.heading_deg if focus_motion is not None else None,
         focus_heading_label=focus_motion.heading_label if focus_motion is not None else None,
         focus_speed_mph=focus_motion.speed_mph if focus_motion is not None else None,
+        focus_motion_confidence_label=(
+            focus_motion.confidence.label if focus_motion is not None and focus_motion.confidence is not None else None
+        ),
+        focus_motion_confidence_score=(
+            round(float(focus_motion.confidence.score), 2)
+            if focus_motion is not None and focus_motion.confidence is not None
+            else None
+        ),
         new_tracks=len(new_track_ids),
         total_tracks_seen=len(seen_track_ids),
         summary=diagnostics.summary,
@@ -151,6 +198,7 @@ def run_benchmark(entry: dict) -> BenchmarkResult:
 
     focus_switches = 0
     focus_heading_flips_ge_90 = 0
+    focus_flips_with_low_motion_confidence = 0
     focus_track_distance_changes = 0
     previous_focus_track_id = None
     previous_focus_heading_deg = None
@@ -161,6 +209,8 @@ def run_benchmark(entry: dict) -> BenchmarkResult:
             if _heading_delta_deg(previous_focus_heading_deg, snapshot.focus_heading_deg) >= 90.0:
                 focus_heading_flips_ge_90 += 1
                 focus_track_distance_changes += 1
+                if snapshot.focus_motion_confidence_score is not None and snapshot.focus_motion_confidence_score < 0.45:
+                    focus_flips_with_low_motion_confidence += 1
         previous_focus_track_id = snapshot.focus_track_id
         previous_focus_heading_deg = snapshot.focus_heading_deg
 
@@ -179,14 +229,35 @@ def run_benchmark(entry: dict) -> BenchmarkResult:
         date=date_str,
         local_only=local_only,
         scan_count=len(snapshots),
-        mean_objects=round(statistics.mean(snapshot.object_count for snapshot in snapshots), 2),
-        mean_active_tracks=round(statistics.mean(snapshot.active_count for snapshot in snapshots), 2),
+        mean_objects=round(_mean(snapshot.object_count for snapshot in snapshots), 2),
+        mean_active_tracks=round(_mean(snapshot.active_count for snapshot in snapshots), 2),
         max_speed_mph=max(snapshot.max_speed_mph for snapshot in snapshots),
         total_merges=sum(snapshot.merge_count for snapshot in snapshots),
         total_splits=sum(snapshot.split_count for snapshot in snapshots),
-        mean_uncertain_tracks=round(statistics.mean(snapshot.uncertain_tracks for snapshot in snapshots), 2),
+        mean_uncertain_tracks=round(_mean(snapshot.uncertain_tracks for snapshot in snapshots), 2),
+        mean_focus_identity_confidence=round(
+            _mean(snapshot.focus_identity_score for snapshot in snapshots if snapshot.focus_identity_score is not None),
+            2,
+        ),
+        mean_focus_motion_confidence=round(
+            _mean(
+                snapshot.focus_motion_confidence_score
+                for snapshot in snapshots
+                if snapshot.focus_motion_confidence_score is not None
+            ),
+            2,
+        ),
+        focus_low_identity_scans=sum(
+            1 for snapshot in snapshots if snapshot.focus_identity_score is not None and snapshot.focus_identity_score < 0.45
+        ),
+        focus_low_motion_scans=sum(
+            1
+            for snapshot in snapshots
+            if snapshot.focus_motion_confidence_score is not None and snapshot.focus_motion_confidence_score < 0.45
+        ),
         focus_switches=focus_switches,
         focus_heading_flips_ge_90=focus_heading_flips_ge_90,
+        focus_flips_with_low_motion_confidence=focus_flips_with_low_motion_confidence,
         focus_track_distance_changes=focus_track_distance_changes,
         total_new_tracks_after_first_scan=total_new_tracks_after_first_scan,
         merged_tracks_total=merged_tracks_total,
@@ -220,8 +291,13 @@ def render_markdown(results: list[BenchmarkResult]) -> str:
             f"- total merges: `{result.total_merges}`",
             f"- total splits: `{result.total_splits}`",
             f"- mean uncertain tracks: `{result.mean_uncertain_tracks}`",
+            f"- mean focus identity confidence: `{result.mean_focus_identity_confidence}`",
+            f"- mean focus motion confidence: `{result.mean_focus_motion_confidence}`",
+            f"- focus low-identity scans: `{result.focus_low_identity_scans}`",
+            f"- focus low-motion scans: `{result.focus_low_motion_scans}`",
             f"- focus switches: `{result.focus_switches}`",
             f"- focus heading flips >=90 deg: `{result.focus_heading_flips_ge_90}`",
+            f"- focus flips with low motion confidence: `{result.focus_flips_with_low_motion_confidence}`",
             f"- total new tracks after first scan: `{result.total_new_tracks_after_first_scan}`",
             f"- fragmentation proxy: `{result.fragmentation_proxy}`",
             "",
@@ -233,7 +309,9 @@ def render_markdown(results: list[BenchmarkResult]) -> str:
                 f"- `{snapshot.timestamp} objects={snapshot.object_count} active={snapshot.active_count} "
                 f"uncertain={snapshot.uncertain_tracks} max_speed_mph={snapshot.max_speed_mph} "
                 f"merges={snapshot.merge_count} splits={snapshot.split_count} focus_track={snapshot.focus_track_id} "
-                f"focus_heading={snapshot.focus_heading_label}`"
+                f"focus_identity={snapshot.focus_identity_label}:{snapshot.focus_identity_score} "
+                f"focus_heading={snapshot.focus_heading_label} "
+                f"focus_motion_conf={snapshot.focus_motion_confidence_label}:{snapshot.focus_motion_confidence_score}`"
             )
         lines.append("")
     return "\n".join(lines)
@@ -248,7 +326,7 @@ def main() -> None:
 
     manifest = _load_manifest(args.manifest)
     results = [run_benchmark(entry) for entry in manifest]
-    payload = [asdict(result) for result in results]
+    payload = [_normalize_json_value(asdict(result)) for result in results]
 
     if args.output_json:
         Path(args.output_json).write_text(json.dumps(payload, indent=2))

@@ -68,6 +68,18 @@ class TrackMotion(BaseModel):
     confidence_reason: str | None = None
 
 
+class TrackIdentity(BaseModel):
+    label: str | None = None
+    score: float | None = None
+    reason: str | None = None
+    match_quality: float | None = None
+    ambiguity_margin: float | None = None
+    scan_quality: float | None = None
+    missed_scans: int | None = None
+    lineage_complexity: int | None = None
+    event_context: str | None = None
+
+
 class PeakHistoryEntry(BaseModel):
     timestamp: str
     peak_dbz: float
@@ -79,6 +91,7 @@ class StormTrack(BaseModel):
     status: str
     positions: list[TrackPosition]
     motion: TrackMotion
+    identity: TrackIdentity | None = None
     peak_dbz: float
     peak_label: str
     merged_into: int | None
@@ -107,6 +120,7 @@ class TrackDetailResponse(BaseModel):
     status: str
     positions: list[TrackPosition]
     motion: TrackMotion
+    identity: TrackIdentity | None = None
     peak_history: list[PeakHistoryEntry]
     merged_into: int | None
     split_from: int | None

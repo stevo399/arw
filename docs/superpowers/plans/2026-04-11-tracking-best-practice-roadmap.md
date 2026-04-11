@@ -322,7 +322,7 @@ Completion notes:
 
 ## Task 7: Calibrate confidence scores and diagnostics
 
-Status: pending
+Status: completed
 
 Goal:
 
@@ -349,6 +349,25 @@ Validation:
 - smoke tests
 - live replay plus benchmark evaluation
 - output analysis verifying that confidence downgrades align with actual ambiguous tracking situations
+
+Completion notes:
+
+- added explicit `IdentityConfidence` diagnostics to track state so identity confidence now carries machine-readable label, score, reason, ambiguity margin, scan-quality factor, lineage complexity, and event context
+- exposed identity diagnostics in the `/tracks/{site_id}` and `/motion/{site_id}/{track_id}` API models without changing summary text behavior
+- recalibrated identity scoring so continuity evidence leads the score while scan quality acts as a penalty instead of dominating all focus tracks
+- extended the benchmark evaluation harness and report template with focus identity and motion confidence metrics
+- targeted verification:
+  - `uv run pytest tests/unit/test_tracker.py tests/unit/test_motion.py tests/unit/test_tracking_evaluation.py tests/unit/test_models.py tests/unit/test_live_replay_contracts.py tests/smoke/test_server_smoke.py -q`
+  - `54 passed in 3.11s`
+- benchmark evaluation run:
+  - `uv run python scripts/evaluate_tracking.py --manifest docs/benchmarks/tracking_benchmark_manifest.json --output-json docs/test_reports/2026-04-11-task7-confidence-evaluation.json --output-md docs/test_reports/2026-04-11-task7-confidence-evaluation.md`
+- clean-data report artifacts:
+  - `docs/test_reports/2026-04-11-task7-confidence-evaluation.md`
+  - `docs/test_reports/2026-04-11-task7-confidence-evaluation.json`
+- observed behavior:
+  - lower-complexity benchmark focus identity moved to `0.58 / 0.83 / 0.77`, eliminating the prior all-low-confidence pattern in the simpler scene
+  - merge/split-sensitive benchmark focus identity stayed medium/high across the window while still recording one focus switch and one heading flip for later continuity review
+  - dense benchmark kept one low-identity focus scan (`0.40`) at the abrupt heading reversal while the surrounding scans stayed medium/high, which is the intended calibration direction for ambiguous continuity
 
 ## Task Order
 
