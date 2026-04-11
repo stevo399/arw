@@ -13,6 +13,8 @@ KM_PER_MILE = 1.60934
 NEARLY_STATIONARY_KMH = 2.0
 MAX_REASONABLE_SPEED_KMH = 160.0
 HIGH_JUMP_RATIO = 2.5
+MIN_HEADING_CHECK_SPEED_KMH = 5.0
+MAX_STEP_HEADING_DELTA_DEG = 90.0
 HIGH_IDENTITY_CONFIDENCE = 0.75
 MEDIUM_IDENTITY_CONFIDENCE = 0.45
 MIN_FIELD_QUALITY = 0.35
@@ -57,6 +59,23 @@ def _step_speeds_kmh(positions: list[tuple[datetime, float, float]]) -> list[flo
     return speeds
 
 
+def _step_headings_deg(positions: list[tuple[datetime, float, float]]) -> list[float]:
+    headings = []
+    for (t1, lat1, lon1), (t2, lat2, lon2) in zip(positions, positions[1:]):
+        hours = (t2 - t1).total_seconds() / 3600.0
+        if hours <= 0:
+            continue
+        mean_lat = (lat1 + lat2) / 2.0
+        delta_lat_km = (lat2 - lat1) * KM_PER_DEGREE_LAT
+        delta_lon_km = (lon2 - lon1) * KM_PER_DEGREE_LAT * math.cos(math.radians(mean_lat))
+        speed_kmh = math.sqrt(delta_lat_km ** 2 + delta_lon_km ** 2) / hours
+        if speed_kmh < MIN_HEADING_CHECK_SPEED_KMH:
+            continue
+        heading_rad = math.atan2(delta_lon_km, delta_lat_km)
+        headings.append(math.degrees(heading_rad) % 360)
+    return headings
+
+
 def _motion_confidence(
     positions: list[tuple[datetime, float, float]],
     speed_kmh: float,
@@ -81,6 +100,14 @@ def _motion_confidence(
             return MotionConfidence(label="low", score=0.2, reason="step speeds are inconsistent")
         if max_step > MAX_REASONABLE_SPEED_KMH:
             return MotionConfidence(label="low", score=0.0, reason="step speed exceeds plausibility threshold")
+    step_headings = _step_headings_deg(positions)
+    if len(step_headings) >= 2:
+        heading_deltas = [
+            _heading_delta_deg(previous_heading, current_heading)
+            for previous_heading, current_heading in zip(step_headings, step_headings[1:])
+        ]
+        if any(delta >= MAX_STEP_HEADING_DELTA_DEG for delta in heading_deltas):
+            return MotionConfidence(label="low", score=0.2, reason="step headings are inconsistent")
 
     if len(positions) == 2:
         return MotionConfidence(label="medium", score=0.6, reason="two-point estimate")

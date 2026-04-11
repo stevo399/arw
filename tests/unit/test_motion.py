@@ -105,6 +105,18 @@ def test_motion_inconsistent_steps_becomes_uncertain():
     assert motion.confidence.label == "low"
 
 
+def test_motion_inconsistent_step_headings_becomes_uncertain():
+    positions = [
+        (datetime(2026, 4, 8, 18, 0), 35.00, -97.00),
+        (datetime(2026, 4, 8, 18, 5), 35.00, -96.94),
+        (datetime(2026, 4, 8, 18, 10), 35.03, -96.98),
+    ]
+    motion = compute_motion(positions)
+    assert motion.heading_label == "uncertain"
+    assert motion.confidence is not None
+    assert motion.confidence.reason == "step headings are inconsistent"
+
+
 def test_motion_from_field_returns_publishable_vector():
     estimate = GeographicMotionFieldEstimate(
         delta_lat=0.1,

@@ -72,11 +72,13 @@ def test_tracker_uses_motion_field_for_weak_identity_track_motion():
     track = tracker.active_tracks[0]
     track.identity_confidence = 0.2
     tracker._refresh_track_motions(
-        field_estimate=type(
-            "Field",
-            (),
-            {"delta_lat": 0.02, "delta_lon": 0.0, "quality": 0.8, "source": "object_weighted_centroid"},
-        )(),
+        field_estimates={
+            track.track_id: type(
+                "Field",
+                (),
+                {"delta_lat": 0.02, "delta_lon": 0.0, "quality": 0.8, "source": "object_weighted_centroid"},
+            )()
+        },
         field_dt_hours=1.0,
     )
     motion = track.get_motion()

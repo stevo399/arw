@@ -39,6 +39,37 @@ def _get_track_for_object(obj: DetectedObject, tracks):
     return None
 
 
+def _identity_score(track) -> float:
+    diagnostics = getattr(track, "identity_diagnostics", None)
+    if diagnostics is not None and diagnostics.score is not None:
+        return float(diagnostics.score)
+    return float(getattr(track, "identity_confidence", 0.0))
+
+
+def _should_downgrade_focus_motion(track, motion: MotionVector | None, events: list[dict] | None) -> bool:
+    if track is None or motion is None:
+        return False
+    if motion.heading_label in {"uncertain", "stationary", "nearly stationary"}:
+        return False
+    if not getattr(track, "is_primary_focus", False):
+        return False
+
+    identity_score = _identity_score(track)
+    diagnostics = getattr(track, "identity_diagnostics", None)
+    event_context = diagnostics.event_context if diagnostics is not None else None
+    structural_event_count = 0
+    if events:
+        structural_event_count = sum(1 for event in events if event["event_type"] in {"merge", "split"})
+
+    if identity_score < 0.45:
+        return True
+    if structural_event_count >= 6 and identity_score < 0.75:
+        return True
+    if event_context in {"new_track", "split_child", "merge_survivor"} and identity_score < 0.75:
+        return True
+    return False
+
+
 def _summary_strength_score(obj: DetectedObject, track) -> float:
     """Prefer intense storms, but damp tiny-core jitter with area and track continuity."""
     area_bonus = min(math.log1p(max(obj.area_km2, 0.0)), 6.0)
@@ -68,10 +99,12 @@ def _pick_summary_object(objects: list[DetectedObject], tracks) -> DetectedObjec
     )
 
 
-def _format_motion(motion: MotionVector | None) -> str:
+def _format_motion(motion: MotionVector | None, track=None, events: list[dict] | None = None) -> str:
     """Format motion info for speech."""
     if motion is None:
         return ""
+    if _should_downgrade_focus_motion(track, motion, events):
+        return ", tracking uncertain"
     if motion.heading_label == "uncertain":
         return ", tracking uncertain"
     if motion.heading_label == "stationary":
@@ -109,8 +142,9 @@ def generate_summary(
     bearing = degrees_to_bearing(strongest.bearing_deg)
     area_mi2 = km2_to_mi2(sum(obj.area_km2 for obj in objects))
 
+    focus_track = _get_track_for_object(strongest, tracks)
     motion = _get_motion_for_object(strongest, tracks)
-    motion_str = _format_motion(motion)
+    motion_str = _format_motion(motion, track=focus_track, events=events)
 
     parts = [
         f"{site_name}: {count} {obj_word} detected. "

@@ -130,6 +130,45 @@ def test_generate_summary_uncertain_motion():
     assert "moving" not in text
 
 
+def test_generate_summary_downgrades_low_identity_primary_focus_motion():
+    obj = _make_object()
+    track = _make_track(obj=obj)
+    track.is_primary_focus = True
+    track.identity_confidence = 0.4
+    track._motion_override = MotionVector(speed_kmh=56.3, speed_mph=35, heading_deg=45.0, heading_label="NE")
+    text = generate_summary(
+        site_id="KTLX",
+        site_name="Oklahoma City",
+        timestamp="2026-04-08T18:30:00Z",
+        objects=[obj],
+        tracks=[track],
+        events=[{"event_type": "merge", "description": "Tracks 2, 3 merged into track 1"}],
+    )
+    assert "tracking uncertain" in text
+    assert "moving NE" not in text
+
+
+def test_generate_summary_downgrades_primary_focus_motion_under_high_event_pressure():
+    obj = _make_object()
+    track = _make_track(obj=obj)
+    track.is_primary_focus = True
+    track.identity_confidence = 0.7
+    track._motion_override = MotionVector(speed_kmh=32.0, speed_mph=20, heading_deg=292.0, heading_label="WNW")
+    events = [{"event_type": "merge", "description": "merge"} for _ in range(4)] + [
+        {"event_type": "split", "description": "split"} for _ in range(2)
+    ]
+    text = generate_summary(
+        site_id="KTLX",
+        site_name="Oklahoma City",
+        timestamp="2026-04-08T18:30:00Z",
+        objects=[obj],
+        tracks=[track],
+        events=events,
+    )
+    assert "tracking uncertain" in text
+    assert "moving WNW" not in text
+
+
 def test_generate_summary_multiple_objects():
     obj1 = _make_object(obj_id=1, peak_dbz=55.0, peak_label="intense rain", area_km2=200.0)
     obj2 = _make_object(obj_id=2, peak_dbz=30.0, peak_label="moderate rain", area_km2=50.0)
@@ -255,4 +294,3 @@ def test_generate_summary_uses_primary_focus_object_directly_when_available():
     )
     assert "intense rain" in text
     assert "37 miles N of the radar" in text
-
