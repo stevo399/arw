@@ -144,6 +144,37 @@ def test_detect_objects_filters_small_objects():
     assert len(objects) == 0
 
 
+def test_detect_objects_filters_small_weak_objects():
+    reflectivity = np.full((360, 500), np.nan)
+    reflectivity[90:95, 100:105] = 35.0
+    azimuths = np.linspace(0, 359, 360)
+    ranges_m = np.linspace(2000, 120000, 500)
+    objects = detect_objects(
+        reflectivity=reflectivity,
+        azimuths=azimuths,
+        ranges_m=ranges_m,
+        radar_lat=35.0,
+        radar_lon=-97.0,
+    )
+    assert len(objects) == 0
+
+
+def test_detect_objects_keeps_small_intense_objects():
+    reflectivity = np.full((360, 500), np.nan)
+    reflectivity[90:97, 100:107] = 50.0
+    azimuths = np.linspace(0, 359, 360)
+    ranges_m = np.linspace(2000, 120000, 500)
+    objects = detect_objects(
+        reflectivity=reflectivity,
+        azimuths=azimuths,
+        ranges_m=ranges_m,
+        radar_lat=35.0,
+        radar_lon=-97.0,
+    )
+    assert len(objects) == 1
+    assert objects[0].peak_label == "intense rain"
+
+
 def test_detect_objects_with_grid_returns_result():
     reflectivity = np.full((360, 500), np.nan)
     reflectivity[85:95, 195:205] = 45.0

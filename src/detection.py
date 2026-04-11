@@ -4,6 +4,8 @@ import numpy as np
 from scipy.ndimage import label
 
 MIN_OBJECT_AREA_KM2 = 4.0
+MIN_SIGNIFICANT_WEAK_OBJECT_AREA_KM2 = 8.0
+MIN_SMALL_OBJECT_PEAK_DBZ = 40.0
 MIN_DBZ_THRESHOLD = 20.0
 SEGMENTATION_SEED_THRESHOLDS = (50.0, 60.0)
 MIN_SEED_PIXELS = 6
@@ -141,6 +143,11 @@ def compute_object_properties(
 
     peak_dbz = float(np.nanmax(obj_dbz))
     peak_label = classify_intensity(peak_dbz)
+
+    # Filter out very small weak echoes so simple scenes do not fragment into
+    # many low-significance objects while compact intense cores still survive.
+    if total_area_km2 < MIN_SIGNIFICANT_WEAK_OBJECT_AREA_KM2 and peak_dbz < MIN_SMALL_OBJECT_PEAK_DBZ:
+        return None
 
     layers = []
     for min_dbz, max_dbz, layer_label in INTENSITY_THRESHOLDS:

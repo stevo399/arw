@@ -268,3 +268,51 @@ Representative output:
 - `2026-04-10T23:35:42Z objects=5 active=5 uncertain_tracks=0 max_speed_mph=0 merges=0 splits=0`
 - `2026-04-10T23:44:23Z objects=6 active=6 uncertain_tracks=0 max_speed_mph=2 merges=1 splits=1`
 - `2026-04-10T23:53:02Z objects=20 active=18 uncertain_tracks=0 max_speed_mph=2 merges=1 splits=2`
+
+### Follow-up after small-weak-object filtering
+
+What changed:
+
+- very small weak/moderate echoes are now filtered out as non-significant standalone objects
+- compact intense cores are still kept
+
+Verification:
+
+- `uv run pytest tests/unit/test_detection.py tests/unit/test_tracking_segmentation.py tests/unit/test_tracking_association.py tests/unit/test_motion.py tests/unit/test_summary.py tests/smoke/test_server_smoke.py tests/e2e/test_full_pipeline.py -q`
+- `59 passed in 3.24s`
+
+Lower-complexity replay:
+
+```powershell
+uv run python scripts/live_replay.py KSOX --date 2026-04-10 --quick
+```
+
+Observed behavior:
+
+- simpler-scene counts dropped from `5/6/20` to `3/2/7`
+- motion remained low and stable
+- merge/split reporting also became less noisy
+
+Representative output:
+
+- `2026-04-10T23:35:42Z objects=3 active=3 uncertain_tracks=0 max_speed_mph=0 merges=0 splits=0`
+- `2026-04-10T23:44:23Z objects=2 active=2 uncertain_tracks=0 max_speed_mph=2 merges=1 splits=0`
+- `2026-04-10T23:53:02Z objects=7 active=7 uncertain_tracks=0 max_speed_mph=0 merges=1 splits=1`
+
+Dense cached replay:
+
+```powershell
+uv run python scripts/live_replay.py KTLX --date 2026-04-10 --quick --local-only
+```
+
+Observed behavior:
+
+- crowded-scene summaries remained plausible after the additional filtering
+- dense-scene counts dropped from `80/96/86` to `53/64/65`, indicating less fragmentation from weak objects
+- coverage stayed stable in the `3634` to `3815` square-mile range
+
+Representative output:
+
+- `2026-04-10T23:46:05Z objects=53 active=53 uncertain_tracks=0 max_speed_mph=0 merges=0 splits=0`
+- `2026-04-10T23:51:18Z objects=64 active=71 uncertain_tracks=0 max_speed_mph=23 merges=9 splits=8`
+- `2026-04-10T23:56:21Z objects=65 active=73 uncertain_tracks=0 max_speed_mph=37 merges=11 splits=10`
