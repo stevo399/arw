@@ -7,7 +7,7 @@ MIN_OBJECT_AREA_KM2 = 4.0
 MIN_SIGNIFICANT_WEAK_OBJECT_AREA_KM2 = 8.0
 MIN_SMALL_OBJECT_PEAK_DBZ = 40.0
 MIN_DBZ_THRESHOLD = 20.0
-SEGMENTATION_SEED_THRESHOLDS = (50.0, 60.0)
+SEGMENTATION_HIERARCHY_THRESHOLDS = (20.0, 30.0, 40.0, 50.0, 60.0)
 MIN_SEED_PIXELS = 6
 
 INTENSITY_THRESHOLDS = [
@@ -188,27 +188,147 @@ class DetectionResult:
     objects: list[DetectedObject]
     labeled_grid: np.ndarray
     object_masks: dict[int, np.ndarray]
+    object_hierarchy: dict[int, list["ThresholdHierarchyNode"]] = field(default_factory=dict)
 
 
-def _find_split_seed_masks(
+@dataclass
+class ThresholdHierarchyNode:
+    node_id: int
+    threshold: float
+    parent_node_id: int | None
+    pixel_count: int
+    peak_dbz: float
+    mask: np.ndarray = field(repr=False)
+
+
+def _assign_parent_node_id(
+    candidate_mask: np.ndarray,
+    previous_level_nodes: list[ThresholdHierarchyNode],
+) -> int | None:
+    best_parent_id = None
+    best_overlap = 0
+    for node in previous_level_nodes:
+        overlap = int(np.count_nonzero(candidate_mask & node.mask))
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best_parent_id = node.node_id
+    return best_parent_id
+
+
+def _build_threshold_hierarchy(
     parent_mask: np.ndarray,
     reflectivity: np.ndarray,
-) -> list[np.ndarray]:
-    """Return higher-threshold core masks that justify splitting a parent blob."""
-    for threshold in SEGMENTATION_SEED_THRESHOLDS:
-        seed_grid = parent_mask & ~np.isnan(reflectivity) & (reflectivity >= threshold)
-        labeled_seeds, num_seeds = label(seed_grid)
-        if num_seeds <= 1:
-            continue
-        seed_masks: list[np.ndarray] = []
-        for seed_id in range(1, num_seeds + 1):
-            seed_mask = labeled_seeds == seed_id
-            if int(np.count_nonzero(seed_mask)) < MIN_SEED_PIXELS:
+) -> list[ThresholdHierarchyNode]:
+    """Build nested threshold components inside a low-threshold parent blob."""
+    nodes: list[ThresholdHierarchyNode] = []
+    previous_level_nodes: list[ThresholdHierarchyNode] = []
+    next_node_id = 1
+    for threshold in SEGMENTATION_HIERARCHY_THRESHOLDS:
+        threshold_grid = parent_mask & ~np.isnan(reflectivity) & (reflectivity >= threshold)
+        labeled_grid, component_count = label(threshold_grid)
+        current_level_nodes: list[ThresholdHierarchyNode] = []
+        for component_id in range(1, component_count + 1):
+            component_mask = labeled_grid == component_id
+            pixel_count = int(np.count_nonzero(component_mask))
+            if pixel_count <= 0:
                 continue
-            seed_masks.append(seed_mask)
-        if len(seed_masks) >= 2:
-            return seed_masks
-    return []
+            current_level_nodes.append(ThresholdHierarchyNode(
+                node_id=next_node_id,
+                threshold=threshold,
+                parent_node_id=_assign_parent_node_id(component_mask, previous_level_nodes),
+                pixel_count=pixel_count,
+                peak_dbz=float(np.nanmax(reflectivity[component_mask])),
+                mask=component_mask,
+            ))
+            next_node_id += 1
+        nodes.extend(current_level_nodes)
+        previous_level_nodes = current_level_nodes
+    return nodes
+
+
+def _hierarchy_children(nodes: list[ThresholdHierarchyNode], parent_id: int) -> list[ThresholdHierarchyNode]:
+    return [node for node in nodes if node.parent_node_id == parent_id]
+
+
+def _hierarchy_leaves(nodes: list[ThresholdHierarchyNode]) -> list[ThresholdHierarchyNode]:
+    child_parent_ids = {node.parent_node_id for node in nodes if node.parent_node_id is not None}
+    return [node for node in nodes if node.node_id not in child_parent_ids]
+
+
+def _branch_threshold_path(nodes_by_id: dict[int, ThresholdHierarchyNode], leaf: ThresholdHierarchyNode) -> tuple[float, ...]:
+    path: list[float] = []
+    current = leaf
+    while current is not None:
+        path.append(current.threshold)
+        current = nodes_by_id.get(current.parent_node_id) if current.parent_node_id is not None else None
+    return tuple(sorted(path))
+
+
+def _select_hierarchy_split_masks(
+    parent_mask: np.ndarray,
+    reflectivity: np.ndarray,
+    hierarchy_nodes: list[ThresholdHierarchyNode],
+) -> list[np.ndarray]:
+    """Choose split branches from a multilevel threshold hierarchy."""
+    if not hierarchy_nodes:
+        return [parent_mask]
+
+    nodes_by_id = {node.node_id: node for node in hierarchy_nodes}
+    candidate_leaves = []
+    for leaf in _hierarchy_leaves(hierarchy_nodes):
+        if leaf.pixel_count < MIN_SEED_PIXELS:
+            continue
+        threshold_path = _branch_threshold_path(nodes_by_id, leaf)
+        if leaf.threshold < 50.0:
+            continue
+        if 40.0 not in threshold_path:
+            continue
+        candidate_leaves.append(leaf)
+
+    if len(candidate_leaves) < 2:
+        return [parent_mask]
+
+    # Collapse candidates that belong to the same immediate 40+ ancestor branch.
+    branch_groups: dict[int, ThresholdHierarchyNode] = {}
+    for leaf in candidate_leaves:
+        current = leaf
+        branch_anchor = leaf.node_id
+        while current.parent_node_id is not None:
+            parent = nodes_by_id[current.parent_node_id]
+            if parent.threshold >= 40.0:
+                branch_anchor = parent.node_id
+            current = parent
+        existing = branch_groups.get(branch_anchor)
+        if existing is None or (leaf.threshold, leaf.pixel_count, leaf.peak_dbz) > (
+            existing.threshold,
+            existing.pixel_count,
+            existing.peak_dbz,
+        ):
+            branch_groups[branch_anchor] = leaf
+
+    selected_leaves = list(branch_groups.values())
+    if len(selected_leaves) < 2:
+        return [parent_mask]
+
+    seed_masks = [leaf.mask for leaf in sorted(selected_leaves, key=lambda node: (node.threshold, node.pixel_count, node.peak_dbz), reverse=True)]
+    centroids = _seed_centroids(seed_masks, reflectivity)
+    child_masks = [np.zeros_like(parent_mask, dtype=bool) for _ in seed_masks]
+    claimed_seed_pixels = np.zeros_like(parent_mask, dtype=bool)
+    for index, seed_mask in enumerate(seed_masks):
+        child_masks[index][seed_mask] = True
+        claimed_seed_pixels |= seed_mask
+
+    remaining_mask = parent_mask & ~claimed_seed_pixels
+    rows, cols = np.where(remaining_mask)
+    for row, col in zip(rows, cols):
+        distances = [
+            (row - seed_row) ** 2 + (col - seed_col) ** 2
+            for seed_row, seed_col in centroids
+        ]
+        child_masks[int(np.argmin(distances))][row, col] = True
+
+    non_empty_children = [mask for mask in child_masks if np.any(mask)]
+    return non_empty_children if len(non_empty_children) >= 2 else [parent_mask]
 
 
 def _seed_centroids(
@@ -233,30 +353,10 @@ def _seed_centroids(
 def _split_parent_mask(
     parent_mask: np.ndarray,
     reflectivity: np.ndarray,
-) -> list[np.ndarray]:
-    """Partition a low-threshold blob around multiple higher-threshold cores."""
-    seed_masks = _find_split_seed_masks(parent_mask, reflectivity)
-    if len(seed_masks) < 2:
-        return [parent_mask]
-
-    centroids = _seed_centroids(seed_masks, reflectivity)
-    child_masks = [np.zeros_like(parent_mask, dtype=bool) for _ in seed_masks]
-    claimed_seed_pixels = np.zeros_like(parent_mask, dtype=bool)
-    for index, seed_mask in enumerate(seed_masks):
-        child_masks[index][seed_mask] = True
-        claimed_seed_pixels |= seed_mask
-
-    remaining_mask = parent_mask & ~claimed_seed_pixels
-    rows, cols = np.where(remaining_mask)
-    for row, col in zip(rows, cols):
-        distances = [
-            (row - seed_row) ** 2 + (col - seed_col) ** 2
-            for seed_row, seed_col in centroids
-        ]
-        child_masks[int(np.argmin(distances))][row, col] = True
-
-    non_empty_children = [mask for mask in child_masks if np.any(mask)]
-    return non_empty_children if len(non_empty_children) >= 2 else [parent_mask]
+) -> tuple[list[np.ndarray], list[ThresholdHierarchyNode]]:
+    """Partition a low-threshold blob around persistent multilevel branches."""
+    hierarchy_nodes = _build_threshold_hierarchy(parent_mask, reflectivity)
+    return _select_hierarchy_split_masks(parent_mask, reflectivity, hierarchy_nodes), hierarchy_nodes
 
 
 def detect_objects_with_grid(
@@ -276,10 +376,12 @@ def detect_objects_with_grid(
 
     objects = []
     object_masks = {}
+    object_hierarchy: dict[int, list[ThresholdHierarchyNode]] = {}
     next_object_id = 1
     for i in range(1, num_features + 1):
         parent_mask = labeled == i
-        for obj_mask in _split_parent_mask(parent_mask, reflectivity):
+        split_masks, hierarchy_nodes = _split_parent_mask(parent_mask, reflectivity)
+        for obj_mask in split_masks:
             obj = compute_object_properties(
                 obj_mask=obj_mask,
                 reflectivity=reflectivity,
@@ -293,6 +395,7 @@ def detect_objects_with_grid(
                 continue
             objects.append(obj)
             object_masks[obj.object_id] = obj_mask
+            object_hierarchy[obj.object_id] = hierarchy_nodes
             next_object_id += 1
 
     objects.sort(key=lambda o: (o.peak_dbz, o.area_km2), reverse=True)
@@ -303,6 +406,7 @@ def detect_objects_with_grid(
         objects=objects,
         labeled_grid=final_labeled,
         object_masks=object_masks,
+        object_hierarchy=object_hierarchy,
     )
 
 

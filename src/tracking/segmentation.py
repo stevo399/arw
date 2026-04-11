@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from src.buffer import BufferedScan
-from src.detection import DetectionResult, detect_objects_with_grid
+from src.detection import DetectionResult, ThresholdHierarchyNode, detect_objects_with_grid
 from src.tracking.types import SegmentedStormObject
 
 
@@ -27,12 +27,30 @@ def adapt_detection_result(result: DetectionResult) -> SegmentationResult:
     segmented_objects: list[SegmentedStormObject] = []
     for detected in result.objects:
         mask = result.object_masks[detected.object_id]
+        hierarchy = result.object_hierarchy.get(detected.object_id, [])
+        hierarchy_by_id = {node.node_id: node for node in hierarchy}
+        strongest_node = max(hierarchy, key=lambda node: (node.threshold, node.pixel_count, node.peak_dbz), default=None)
+        threshold_path: tuple[float, ...] = ()
+        threshold_parent_id: int | None = None
+        threshold_level: float | None = None
+        if strongest_node is not None:
+            threshold_level = strongest_node.threshold
+            threshold_parent_id = strongest_node.parent_node_id
+            path: list[float] = []
+            current: ThresholdHierarchyNode | None = strongest_node
+            while current is not None:
+                path.append(current.threshold)
+                current = hierarchy_by_id.get(current.parent_node_id) if current.parent_node_id is not None else None
+            threshold_path = tuple(sorted(path))
         segmented_objects.append(SegmentedStormObject(
             object_id=detected.object_id,
             detected_object=detected,
             mask=mask,
             bbox=compute_bbox(mask),
             pixel_count=int(np.count_nonzero(mask)),
+            threshold_parent_id=threshold_parent_id,
+            threshold_level=threshold_level,
+            threshold_path=threshold_path,
         ))
     return SegmentationResult(
         objects=segmented_objects,

@@ -11,6 +11,7 @@ from src.detection import (
     INTENSITY_THRESHOLDS,
     DetectedObject,
     DetectionResult,
+    ThresholdHierarchyNode,
 )
 
 
@@ -193,6 +194,8 @@ def test_detect_objects_with_grid_returns_result():
     assert len(result.object_masks) == 1
     assert result.object_masks[1].shape == reflectivity.shape
     assert result.object_masks[1].dtype == bool
+    assert 1 in result.object_hierarchy
+    assert all(isinstance(node, ThresholdHierarchyNode) for node in result.object_hierarchy[1])
 
 
 def test_detect_objects_with_grid_masks_match_objects():
@@ -252,3 +255,27 @@ def test_detect_objects_does_not_split_single_core_blob():
         radar_lon=-97.0,
     )
     assert len(result.objects) == 1
+
+
+def test_detect_objects_records_multilevel_threshold_hierarchy():
+    reflectivity = np.full((360, 500), np.nan)
+    reflectivity[80:110, 190:230] = 25.0
+    reflectivity[85:105, 195:225] = 38.0
+    reflectivity[90:100, 200:220] = 48.0
+    reflectivity[93:97, 206:214] = 58.0
+    azimuths = np.linspace(0, 359, 360)
+    ranges_m = np.linspace(2000, 250000, 500)
+    result = detect_objects_with_grid(
+        reflectivity=reflectivity,
+        azimuths=azimuths,
+        ranges_m=ranges_m,
+        radar_lat=35.0,
+        radar_lon=-97.0,
+    )
+    assert len(result.objects) == 1
+    hierarchy = result.object_hierarchy[result.objects[0].object_id]
+    thresholds = {node.threshold for node in hierarchy}
+    assert 20.0 in thresholds
+    assert 30.0 in thresholds
+    assert 40.0 in thresholds
+    assert 50.0 in thresholds

@@ -10,6 +10,7 @@
   - Motion provenance: reported motion now distinguishes track-history, motion-field, and suppressed outputs
   - Motion guidance: scan-based phase correlation is now preferred over weighted centroid drift for scene motion
   - Segmentation: low-threshold blobs can now be conservatively partitioned around multiple intense internal cores
+  - Segmentation hierarchy: internal segmentation now uses a multilevel threshold hierarchy instead of a one-off high-threshold seed scan
   - Echo significance: very small weak echoes are filtered so they do not inflate object counts in simpler scenes
   - Summary focus: strongest-object selection now follows a relevance-aware primary focus track across scans
   - Focus hysteresis: focus handoff now requires a meaningful challenger win instead of switching on minor score changes
@@ -21,6 +22,7 @@
   - merge/split regression replay remains free of duplicate or self-merge events
   - dense-scene replay suppresses absurd spoken motion, uses field-guided fallback motion, and reports scene-level coverage
   - lower-complexity replay count noise improved further after small-weak-object filtering
+  - hierarchy-based segmentation further reduced dense-scene fragmentation without destabilizing summary focus
   - dense-scene strongest-object summaries are materially more stable across short replay windows
   - longer dense-scene replay windows now keep the late-window focus anchored on the nearer active storm field
   - local-only regression replay now works reliably even when only part of the requested day is cached

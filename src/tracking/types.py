@@ -42,6 +42,7 @@ class SegmentedStormObject:
     pixel_count: int
     threshold_parent_id: int | None = None
     threshold_level: float | None = None
+    threshold_path: tuple[float, ...] = field(default_factory=tuple)
 
 
 @dataclass

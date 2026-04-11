@@ -80,7 +80,7 @@ Completion notes:
 
 ## Task 2: Replace heuristic core splitting with multilevel segmentation hierarchy
 
-Status: pending
+Status: completed
 
 Goal:
 
@@ -108,6 +108,23 @@ Validation:
 - smoke tests
 - live replay runs over a dense scene, a lower-complexity scene, and a known split/merge-sensitive window
 - output analysis focused on object counts, merge/split plausibility, and continuity stability
+
+Completion notes:
+
+- replaced the old two-threshold seed scan with a multilevel threshold hierarchy inside detection
+- hierarchy nodes are now built across a threshold ladder and attached to detected objects for downstream segmentation metadata
+- split selection now comes from persistent high-threshold branches rather than a one-off seed heuristic
+- kept endpoint-visible object contracts stable while enriching internal segmentation metadata
+- targeted verification:
+  - `uv run pytest tests/unit/test_detection.py tests/unit/test_tracking_segmentation.py tests/unit/test_tracking_association.py tests/unit/test_tracker.py tests/unit/test_summary.py tests/e2e/test_full_pipeline.py tests/smoke/test_server_smoke.py -q`
+  - `62 passed in 3.47s`
+- live replay validation:
+  - `uv run python scripts/live_replay.py KSOX --date 2026-04-10 --quick`
+  - `uv run python scripts/live_replay.py KTLX --date 2026-04-10 --quick --local-only`
+- observed behavior:
+  - lower-complexity replay remained stable at `3 / 2 / 7` objects with plausible motion and event counts
+  - dense replay counts dropped from the prior `53 / 64 / 65` window to `48 / 50 / 50`, indicating less fragmentation under the hierarchy-based split logic
+  - dense-scene focus and spoken motion remained stable while merge/split counts became less noisy
 
 ## Task 3: Strengthen association with advected geometry features
 

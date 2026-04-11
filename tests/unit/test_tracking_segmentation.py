@@ -62,6 +62,8 @@ def test_adapt_detection_result_returns_segmented_objects():
     assert result.objects[0].detected_object.object_id == 1
     assert result.objects[0].bbox == (10, 50, 19, 59)
     assert result.objects[0].pixel_count == 100
+    assert result.objects[0].threshold_level is None
+    assert result.objects[0].threshold_path == ()
 
 
 def test_adapt_detection_result_preserves_object_order():
@@ -87,3 +89,26 @@ def test_segment_storm_objects_wraps_existing_detection():
     assert obj.detected_object.peak_dbz == 45.0
     assert obj.pixel_count == 100
     assert obj.bbox == (85, 195, 94, 204)
+    assert obj.threshold_level == 40.0
+    assert obj.threshold_path == (20.0, 30.0, 40.0)
+
+
+def test_segment_storm_objects_exposes_multilevel_hierarchy_metadata():
+    reflectivity = np.full((360, 500), np.nan)
+    reflectivity[80:110, 190:230] = 25.0
+    reflectivity[85:105, 195:225] = 38.0
+    reflectivity[90:100, 200:220] = 48.0
+    reflectivity[93:97, 206:214] = 58.0
+    azimuths = np.linspace(0, 359, 360)
+    ranges_m = np.linspace(2000, 250000, 500)
+    result = segment_storm_objects(
+        reflectivity=reflectivity,
+        azimuths=azimuths,
+        ranges_m=ranges_m,
+        radar_lat=35.0,
+        radar_lon=-97.0,
+    )
+    assert len(result.objects) == 1
+    obj = result.objects[0]
+    assert obj.threshold_level == 50.0
+    assert obj.threshold_path == (20.0, 30.0, 40.0, 50.0)
