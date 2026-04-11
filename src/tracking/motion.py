@@ -35,6 +35,14 @@ class MotionVector:
     source: str = "track_history"
 
 
+@dataclass
+class MotionContinuityContext:
+    identity_score: float
+    event_context: str | None = None
+    ambiguity_margin: float | None = None
+    structural_event_count: int = 0
+
+
 def _speed_components_kmh(times_s: np.ndarray, lats: np.ndarray, lons: np.ndarray) -> tuple[float, float]:
     lat_slope = np.polyfit(times_s, lats, 1)[0]
     lon_slope = np.polyfit(times_s, lons, 1)[0]
@@ -286,26 +294,68 @@ def suppress_motion(reason: str) -> MotionVector:
     )
 
 
+def _history_motion_publishable(
+    history_motion: MotionVector,
+    continuity: MotionContinuityContext | None,
+) -> bool:
+    if history_motion.heading_label in {"uncertain", "stationary", "nearly stationary"}:
+        return True
+    if history_motion.confidence is None or history_motion.confidence.label == "low":
+        return False
+    if continuity is None:
+        return True
+    if continuity.identity_score < MEDIUM_IDENTITY_CONFIDENCE:
+        return False
+    if continuity.event_context in {"new_track", "split_child", "merge_survivor"} and continuity.identity_score < 0.85:
+        return False
+    if continuity.ambiguity_margin is not None and continuity.ambiguity_margin < 0.4 and continuity.identity_score < HIGH_IDENTITY_CONFIDENCE:
+        return False
+    if continuity.structural_event_count >= 6 and continuity.identity_score < HIGH_IDENTITY_CONFIDENCE:
+        return False
+    return True
+
+
+def _continuity_requires_suppression(
+    history_motion: MotionVector,
+    continuity: MotionContinuityContext | None,
+) -> bool:
+    if continuity is None:
+        return False
+    if history_motion.heading_label in {"uncertain", "stationary", "nearly stationary"}:
+        return False
+    if continuity.structural_event_count >= 6 and continuity.identity_score < HIGH_IDENTITY_CONFIDENCE:
+        return True
+    if continuity.event_context in {"new_track", "split_child", "merge_survivor"} and continuity.identity_score < HIGH_IDENTITY_CONFIDENCE:
+        return True
+    if continuity.ambiguity_margin is not None and continuity.ambiguity_margin < 0.4 and continuity.identity_score < HIGH_IDENTITY_CONFIDENCE:
+        return True
+    return False
+
+
 def resolve_reported_motion(
     positions: list[tuple[datetime, float, float]],
     *,
     identity_confidence: float,
     field_estimate: GeographicMotionFieldEstimate | None = None,
     field_dt_hours: float = 0.0,
+    continuity: MotionContinuityContext | None = None,
 ) -> tuple[MotionVector, MotionVector]:
     """Return (reported_motion, diagnostic_history_motion) using proven-practice fallbacks."""
     history_motion = compute_motion(positions)
     field_motion = motion_from_field(field_estimate, field_dt_hours)
 
+    if _continuity_requires_suppression(history_motion, continuity):
+        return suppress_motion("track continuity too ambiguous for publishable motion"), history_motion
+
     if _history_disagrees_with_field(history_motion, field_motion):
         return field_motion, history_motion
 
-    if identity_confidence >= HIGH_IDENTITY_CONFIDENCE and history_motion.confidence is not None:
-        if history_motion.confidence.label != "low":
+    if identity_confidence >= HIGH_IDENTITY_CONFIDENCE and _history_motion_publishable(history_motion, continuity):
+        if history_motion.confidence is not None and history_motion.confidence.label != "low":
             return history_motion, history_motion
 
-    if identity_confidence >= MEDIUM_IDENTITY_CONFIDENCE and history_motion.confidence is not None:
-        if history_motion.confidence.label == "medium":
+    if identity_confidence >= MEDIUM_IDENTITY_CONFIDENCE and _history_motion_publishable(history_motion, continuity):
+        if history_motion.confidence is not None and history_motion.confidence.label == "medium":
             return history_motion, history_motion
 
     if field_motion is not None and field_motion.confidence is not None:

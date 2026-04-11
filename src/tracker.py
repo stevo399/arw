@@ -2,6 +2,7 @@ from datetime import datetime
 from src.buffer import BufferedScan
 from src.detection import DetectedObject
 from src.motion import resolve_reported_motion, MotionVector
+from src.tracking.motion import MotionContinuityContext
 from src.tracking.association import associate_tracks
 from src.tracking.events import normalize_merge_event, normalize_split_event
 from src.tracking.types import IdentityConfidence, Track
@@ -33,6 +34,11 @@ def _get_track_motion(track: Track) -> MotionVector:
     reported_motion, diagnostic_motion = resolve_reported_motion(
         pos_tuples,
         identity_confidence=track.identity_confidence,
+        continuity=MotionContinuityContext(
+            identity_score=track.identity_confidence,
+            event_context=track.identity_diagnostics.event_context if track.identity_diagnostics is not None else None,
+            ambiguity_margin=track.identity_diagnostics.ambiguity_margin if track.identity_diagnostics is not None else None,
+        ),
     )
     track.last_motion = reported_motion
     track.diagnostic_motion = diagnostic_motion
@@ -179,6 +185,9 @@ class StormTracker:
         return fallback
 
     def _refresh_track_motions(self, field_estimates, field_dt_hours: float) -> None:
+        structural_event_count = sum(
+            1 for event in self._recent_events if event["event_type"] in {"merge", "split"}
+        )
         for track in self._tracks:
             if track.status != "active":
                 continue
@@ -191,6 +200,12 @@ class StormTracker:
                 identity_confidence=track.identity_confidence,
                 field_estimate=field_estimate,
                 field_dt_hours=field_dt_hours,
+                continuity=MotionContinuityContext(
+                    identity_score=track.identity_confidence,
+                    event_context=track.identity_diagnostics.event_context if track.identity_diagnostics is not None else None,
+                    ambiguity_margin=track.identity_diagnostics.ambiguity_margin if track.identity_diagnostics is not None else None,
+                    structural_event_count=structural_event_count,
+                ),
             )
             track.last_motion = reported_motion
             track.diagnostic_motion = diagnostic_motion
