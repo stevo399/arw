@@ -7,7 +7,7 @@ from scipy.optimize import linear_sum_assignment
 
 from src.buffer import BufferedScan
 from src.sites import haversine_distance_km
-from src.tracking.motion_field import estimate_geographic_motion_field, predict_latlon_position
+from src.tracking.motion_field import estimate_geographic_motion_field, estimate_scan_geographic_motion_field, predict_latlon_position
 from src.tracking.segmentation import segment_buffered_scan
 from src.tracking.types import AssociationScore, Track
 
@@ -24,6 +24,8 @@ class AssociationResult:
     unmatched_new_ids: set[int] = field(default_factory=set)
     unmatched_track_ids: set[int] = field(default_factory=set)
     candidate_scores: list[AssociationScore] = field(default_factory=list)
+    geo_motion: object | None = None
+    dt_hours: float = 0.0
 
 
 def compute_overlap(mask_a: np.ndarray, mask_b: np.ndarray) -> float:
@@ -98,7 +100,10 @@ def associate_tracks(
 
     previous_segmentation = segment_buffered_scan(previous_scan)
     current_segmentation = segment_buffered_scan(current_scan)
-    geo_motion = estimate_geographic_motion_field(previous_segmentation.objects, current_segmentation.objects)
+    geo_motion = estimate_scan_geographic_motion_field(previous_scan, current_scan)
+    if geo_motion.quality <= 0.0:
+        geo_motion = estimate_geographic_motion_field(previous_segmentation.objects, current_segmentation.objects)
+    result.geo_motion = geo_motion
 
     previous_objects = {obj.object_id: obj for obj in previous_scan.detected_objects}
     new_objects = {obj.object_id: obj for obj in current_scan.detected_objects}
@@ -106,6 +111,7 @@ def associate_tracks(
     new_masks = current_scan.object_masks
 
     dt_hours = (current_scan.timestamp - previous_scan.timestamp).total_seconds() / 3600.0
+    result.dt_hours = dt_hours
     max_distance_km = MAX_STORM_SPEED_KMH * dt_hours if dt_hours > 0 else 50.0
 
     track_ids = [track.track_id for track in active_tracks]

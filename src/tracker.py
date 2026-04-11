@@ -1,7 +1,7 @@
 from datetime import datetime
 from src.buffer import BufferedScan
 from src.detection import DetectedObject
-from src.motion import compute_motion, MotionVector
+from src.motion import resolve_reported_motion, MotionVector
 from src.tracking.association import associate_tracks
 from src.tracking.events import normalize_merge_event, normalize_split_event
 from src.tracking.types import Track
@@ -10,11 +10,17 @@ MAX_MISSED_SCANS = 2
 
 
 def _get_track_motion(track: Track) -> MotionVector:
-    pos_tuples = [
-        (p.timestamp, p.latitude, p.longitude)
-        for p in track.positions
-    ]
-    return compute_motion(pos_tuples)
+    if track.last_motion is not None:
+        return track.last_motion
+    pos_tuples = [(p.timestamp, p.latitude, p.longitude) for p in track.positions]
+    reported_motion, diagnostic_motion = resolve_reported_motion(
+        pos_tuples,
+        identity_confidence=track.identity_confidence,
+    )
+    track.last_motion = reported_motion
+    track.diagnostic_motion = diagnostic_motion
+    track.motion_confidence = reported_motion.confidence
+    return reported_motion
 
 
 class StormTracker:
@@ -39,8 +45,30 @@ class StormTracker:
         track = Track(track_id=self._next_id, status="active")
         self._next_id += 1
         track.add_position(timestamp, obj)
+        track.identity_confidence = 0.3
         self._tracks.append(track)
         return track
+
+    def _score_confidence(self, association, new_object_id: int, track_id: int) -> float:
+        for score in association.candidate_scores:
+            if score.object_id == new_object_id and score.track_id == track_id:
+                return round(max(0.0, min(1.0, 1.0 - (score.total_cost / 10.0))), 2)
+        return 0.3
+
+    def _refresh_track_motions(self, field_estimate, field_dt_hours: float) -> None:
+        for track in self._tracks:
+            if track.status != "active":
+                continue
+            positions = [(p.timestamp, p.latitude, p.longitude) for p in track.positions]
+            reported_motion, diagnostic_motion = resolve_reported_motion(
+                positions,
+                identity_confidence=track.identity_confidence,
+                field_estimate=field_estimate,
+                field_dt_hours=field_dt_hours,
+            )
+            track.last_motion = reported_motion
+            track.diagnostic_motion = diagnostic_motion
+            track.motion_confidence = reported_motion.confidence
 
     def _append_merge_event(self, timestamp: datetime, surviving_track_id: int, merged_track_ids: list[int]) -> None:
         """Record a merge event with deduplicated track ids."""
@@ -61,7 +89,9 @@ class StormTracker:
             self._obj_to_track.clear()
             for obj in scan.detected_objects:
                 track = self._create_track(timestamp, obj)
+                track.identity_confidence = 1.0
                 self._obj_to_track[obj.object_id] = track.track_id
+            self._refresh_track_motions(field_estimate=None, field_dt_hours=0.0)
             self._prev_scan = scan
             return
 
@@ -85,11 +115,13 @@ class StormTracker:
                 continue
             primary_new_id = related_new_ids[0]
             parent_track.add_position(timestamp, new_objects[primary_new_id])
+            parent_track.identity_confidence = self._score_confidence(association, primary_new_id, parent_tid)
             new_obj_to_track[primary_new_id] = parent_tid
             child_ids = []
             for new_id in related_new_ids[1:]:
                 child = self._create_track(timestamp, new_objects[new_id])
                 child.split_from = parent_tid
+                child.identity_confidence = 0.35
                 new_obj_to_track[new_id] = child.track_id
                 child_ids.append(child.track_id)
             event = normalize_split_event(timestamp, parent_tid, child_ids)
@@ -107,6 +139,7 @@ class StormTracker:
                 continue
             if surviving_track_id not in handled_split_parents:
                 surviving.add_position(timestamp, new_objects[new_id])
+                surviving.identity_confidence = self._score_confidence(association, new_id, surviving_track_id)
                 new_obj_to_track[new_id] = surviving_track_id
             merged_track_ids = []
             for merged_track_id in related_track_ids[1:]:
@@ -125,12 +158,14 @@ class StormTracker:
             if track is None or track.status != "active":
                 continue
             track.add_position(timestamp, new_objects[new_id])
+            track.identity_confidence = self._score_confidence(association, new_id, track_id)
             new_obj_to_track[new_id] = track_id
 
         # Create new tracks for unmatched new objects
         for new_id, obj in new_objects.items():
             if new_id not in new_obj_to_track:
                 track = self._create_track(timestamp, obj)
+                track.identity_confidence = 0.3
                 new_obj_to_track[new_id] = track.track_id
 
         # Increment missed scans for unmatched active tracks
@@ -138,10 +173,12 @@ class StormTracker:
         for track in self._tracks:
             if track.status == "active" and track.track_id not in matched_track_ids:
                 track._missed_scans += 1
+                track.identity_confidence = max(0.0, round(track.identity_confidence - 0.2, 2))
                 if track._missed_scans >= MAX_MISSED_SCANS:
                     track.status = "lost"
 
         self._obj_to_track = new_obj_to_track
+        self._refresh_track_motions(field_estimate=association.geo_motion, field_dt_hours=association.dt_hours)
         self._prev_scan = scan
 
     @property

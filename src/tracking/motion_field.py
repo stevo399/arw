@@ -2,6 +2,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from src.buffer import BufferedScan
+from src.detection import polar_to_latlon
 from src.tracking.types import SegmentedStormObject
 
 
@@ -77,12 +79,7 @@ def estimate_motion_field(
     min_dbz: float = DEFAULT_MIN_DBZ,
     downsample: int = DEFAULT_DOWNSAMPLE,
 ) -> MotionFieldEstimate:
-    """Estimate bulk scene displacement between two reflectivity grids.
-
-    The initial implementation uses a weighted centroid shift. The public interface is
-    intentionally method-agnostic so the estimator can later be replaced by a
-    stronger optical-flow or cross-correlation method without changing callers.
-    """
+    """Estimate bulk scene displacement between two reflectivity grids."""
     prev_grid = _preprocess_reflectivity(previous_reflectivity, min_dbz=min_dbz, downsample=downsample)
     curr_grid = _preprocess_reflectivity(current_reflectivity, min_dbz=min_dbz, downsample=downsample)
 
@@ -91,25 +88,30 @@ def estimate_motion_field(
             shift_rows=0.0,
             shift_cols=0.0,
             quality=0.0,
-            source="weighted_centroid",
+            source="phase_correlation",
             downsample=downsample,
         )
 
-    prev_row, prev_col = _weighted_centroid(prev_grid)
-    curr_row, curr_col = _weighted_centroid(curr_grid)
-    raw_row_shift = prev_row - curr_row
-    raw_col_shift = prev_col - curr_col
+    prev_fft = np.fft.fft2(prev_grid)
+    curr_fft = np.fft.fft2(curr_grid)
+    cross_power = prev_fft * np.conj(curr_fft)
+    magnitude = np.abs(cross_power)
+    cross_power /= np.where(magnitude == 0.0, 1.0, magnitude)
+    correlation = np.fft.ifft2(cross_power)
+    correlation_abs = np.abs(correlation)
+    peak_index = np.unravel_index(np.argmax(correlation_abs), correlation_abs.shape)
+    raw_row_shift = _wrap_shift(int(peak_index[0]), correlation_abs.shape[0])
+    raw_col_shift = _wrap_shift(int(peak_index[1]), correlation_abs.shape[1])
 
-    prev_signal = float(np.clip(prev_grid, a_min=0.0, a_max=None).sum())
-    curr_signal = float(np.clip(curr_grid, a_min=0.0, a_max=None).sum())
-    signal_ratio = min(prev_signal, curr_signal) / max(prev_signal, curr_signal) if max(prev_signal, curr_signal) > 0 else 0.0
-    quality = signal_ratio
+    peak_value = float(correlation_abs[peak_index])
+    mean_value = float(np.mean(correlation_abs))
+    quality = 0.0 if peak_value <= 0.0 else max(0.0, min(1.0, (peak_value - mean_value) / peak_value))
 
     return MotionFieldEstimate(
         shift_rows=round(float(raw_row_shift * downsample), 2),
         shift_cols=round(float(raw_col_shift * downsample), 2),
         quality=round(quality, 3),
-        source="weighted_centroid",
+        source="phase_correlation",
         downsample=downsample,
     )
 
@@ -135,6 +137,68 @@ def estimate_geographic_motion_field(
         delta_lon=round(curr_lon - prev_lon, 4),
         quality=round(weight_ratio, 3),
         source="object_weighted_centroid",
+    )
+
+
+def estimate_scan_geographic_motion_field(
+    previous_scan: BufferedScan,
+    current_scan: BufferedScan,
+    *,
+    min_dbz: float = DEFAULT_MIN_DBZ,
+    downsample: int = DEFAULT_DOWNSAMPLE,
+) -> GeographicMotionFieldEstimate:
+    """Estimate geographic displacement from full-scan phase correlation.
+
+    This is closer to the published first-guess motion methodology than an
+    object-centroid-only estimate and is therefore preferred for guidance.
+    """
+    previous_ref = previous_scan.reflectivity_data
+    current_ref = current_scan.reflectivity_data
+    estimate = estimate_motion_field(
+        previous_ref.reflectivity,
+        current_ref.reflectivity,
+        min_dbz=min_dbz,
+        downsample=downsample,
+    )
+
+    prev_grid = _preprocess_reflectivity(previous_ref.reflectivity, min_dbz=min_dbz, downsample=1)
+    curr_grid = _preprocess_reflectivity(current_ref.reflectivity, min_dbz=min_dbz, downsample=1)
+    if estimate.quality <= 0.0 or not np.any(prev_grid) or not np.any(curr_grid):
+        return GeographicMotionFieldEstimate(
+            delta_lat=0.0,
+            delta_lon=0.0,
+            quality=0.0,
+            source="phase_correlation",
+        )
+
+    prev_row, prev_col = _weighted_centroid(prev_grid)
+    curr_row = prev_row - estimate.shift_rows
+    curr_col = prev_col - estimate.shift_cols
+
+    row_coords = np.arange(len(previous_ref.azimuths))
+    col_coords = np.arange(len(previous_ref.ranges_m))
+    prev_azimuth = float(np.interp(prev_row, row_coords, previous_ref.azimuths))
+    prev_range_m = float(np.interp(prev_col, col_coords, previous_ref.ranges_m))
+    curr_azimuth = float(np.interp(curr_row, row_coords, current_ref.azimuths))
+    curr_range_m = float(np.interp(curr_col, col_coords, current_ref.ranges_m))
+
+    prev_lat, prev_lon = polar_to_latlon(
+        previous_ref.radar_lat,
+        previous_ref.radar_lon,
+        prev_azimuth,
+        prev_range_m,
+    )
+    curr_lat, curr_lon = polar_to_latlon(
+        current_ref.radar_lat,
+        current_ref.radar_lon,
+        curr_azimuth,
+        curr_range_m,
+    )
+    return GeographicMotionFieldEstimate(
+        delta_lat=round(curr_lat - prev_lat, 4),
+        delta_lon=round(curr_lon - prev_lon, 4),
+        quality=estimate.quality,
+        source="phase_correlation",
     )
 
 

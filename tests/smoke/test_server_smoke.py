@@ -126,6 +126,7 @@ def test_tracks_endpoint_includes_motion_confidence_fields():
         assert "confidence_label" in motion
         assert "confidence_score" in motion
         assert "confidence_reason" in motion
+        assert "source" in motion
 
 
 def test_motion_endpoint_missing_track_returns_404():

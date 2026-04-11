@@ -1,7 +1,8 @@
 # tests/unit/test_motion.py
 import math
 from datetime import datetime, timedelta
-from src.motion import compute_motion, MotionVector
+from src.motion import compute_motion, MotionVector, motion_from_field, resolve_reported_motion
+from src.tracking.motion_field import GeographicMotionFieldEstimate
 
 NEARLY_STATIONARY_KMH = 2.0
 
@@ -102,3 +103,101 @@ def test_motion_inconsistent_steps_becomes_uncertain():
     assert motion.heading_label == "uncertain"
     assert motion.confidence is not None
     assert motion.confidence.label == "low"
+
+
+def test_motion_from_field_returns_publishable_vector():
+    estimate = GeographicMotionFieldEstimate(
+        delta_lat=0.1,
+        delta_lon=0.0,
+        quality=0.8,
+        source="object_weighted_centroid",
+    )
+    motion = motion_from_field(estimate, dt_hours=1.0)
+    assert motion is not None
+    assert motion.source == "motion_field"
+    assert motion.heading_label in ("N", "NNE", "NNW")
+    assert motion.confidence is not None
+    assert motion.confidence.score >= 0.8
+
+
+def test_motion_from_field_suppresses_implausible_speed():
+    estimate = GeographicMotionFieldEstimate(
+        delta_lat=5.0,
+        delta_lon=0.0,
+        quality=0.9,
+        source="phase_correlation",
+    )
+    motion = motion_from_field(estimate, dt_hours=1.0)
+    assert motion is not None
+    assert motion.source == "suppressed"
+    assert motion.heading_label == "uncertain"
+    assert motion.speed_mph == 0
+
+
+def test_resolve_reported_motion_uses_field_when_identity_is_weak():
+    positions = [
+        (datetime(2026, 4, 8, 18, 0), 35.0, -97.0),
+        (datetime(2026, 4, 8, 18, 5), 38.0, -92.0),
+    ]
+    field = GeographicMotionFieldEstimate(
+        delta_lat=0.02,
+        delta_lon=0.0,
+        quality=0.7,
+        source="object_weighted_centroid",
+    )
+    reported, diagnostic = resolve_reported_motion(
+        positions,
+        identity_confidence=0.2,
+        field_estimate=field,
+        field_dt_hours=1.0,
+    )
+    assert diagnostic.source == "track_history"
+    assert diagnostic.heading_label == "uncertain"
+    assert reported.source == "motion_field"
+    assert reported.heading_label in ("N", "NNE", "NNW")
+
+
+def test_resolve_reported_motion_suppresses_when_identity_and_field_are_weak():
+    positions = [
+        (datetime(2026, 4, 8, 18, 0), 35.0, -97.0),
+        (datetime(2026, 4, 8, 18, 5), 38.0, -92.0),
+    ]
+    field = GeographicMotionFieldEstimate(
+        delta_lat=0.02,
+        delta_lon=0.0,
+        quality=0.1,
+        source="object_weighted_centroid",
+    )
+    reported, diagnostic = resolve_reported_motion(
+        positions,
+        identity_confidence=0.2,
+        field_estimate=field,
+        field_dt_hours=1.0,
+    )
+    assert diagnostic.heading_label == "uncertain"
+    assert reported.source == "suppressed"
+    assert reported.heading_label == "uncertain"
+    assert reported.speed_mph == 0
+
+
+def test_resolve_reported_motion_uses_field_on_strong_history_field_disagreement():
+    positions = [
+        (datetime(2026, 4, 8, 18, 0), 35.0, -97.0),
+        (datetime(2026, 4, 8, 18, 5), 35.5, -96.7),
+        (datetime(2026, 4, 8, 18, 10), 36.0, -96.4),
+    ]
+    field = GeographicMotionFieldEstimate(
+        delta_lat=0.015,
+        delta_lon=0.0,
+        quality=0.8,
+        source="object_weighted_centroid",
+    )
+    reported, diagnostic = resolve_reported_motion(
+        positions,
+        identity_confidence=0.95,
+        field_estimate=field,
+        field_dt_hours=1.0,
+    )
+    assert diagnostic.source == "track_history"
+    assert diagnostic.speed_kmh > 50
+    assert reported.source == "motion_field"

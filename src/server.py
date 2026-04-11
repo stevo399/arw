@@ -68,6 +68,7 @@ def _motion_to_model(motion) -> TrackMotion:
         speed_mph=motion.speed_mph,
         heading_deg=motion.heading_deg,
         heading_label=motion.heading_label,
+        source=getattr(motion, "source", None),
         confidence_label=confidence.label if confidence is not None else None,
         confidence_score=confidence.score if confidence is not None else None,
         confidence_reason=confidence.reason if confidence is not None else None,

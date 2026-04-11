@@ -1,14 +1,18 @@
 import numpy as np
+from datetime import datetime
 
 from src.tracking.motion_field import (
     GeographicMotionFieldEstimate,
     MotionFieldEstimate,
     estimate_geographic_motion_field,
     estimate_motion_field,
+    estimate_scan_geographic_motion_field,
     predict_bbox,
     predict_latlon_position,
     predict_pixel_position,
 )
+from src.buffer import BufferedScan
+from src.parser import ReflectivityData
 from src.tracking.types import SegmentedStormObject
 from src.detection import DetectedObject
 
@@ -119,3 +123,51 @@ def test_predict_latlon_position():
         source="object_weighted_centroid",
     )
     assert predict_latlon_position(35.0, -97.0, estimate) == (35.15, -97.2)
+
+
+def test_estimate_scan_geographic_motion_field_uses_phase_shift():
+    prev_reflectivity = np.full((64, 64), np.nan)
+    curr_reflectivity = np.full((64, 64), np.nan)
+    prev_reflectivity[20:28, 30:38] = 45.0
+    curr_reflectivity[23:31, 34:42] = 45.0
+
+    azimuths = np.linspace(0, 359, 64)
+    ranges_m = np.linspace(2000, 128000, 64)
+    prev_scan = BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0),
+        site_id="KTLX",
+        reflectivity_data=ReflectivityData(
+            reflectivity=prev_reflectivity,
+            azimuths=azimuths,
+            ranges_m=ranges_m,
+            radar_lat=35.0,
+            radar_lon=-97.0,
+            elevation_angle=0.5,
+            elevation_angles=[0.5],
+            timestamp="2026-04-10T20:00:00Z",
+        ),
+        detected_objects=[],
+        labeled_grid=np.zeros((64, 64), dtype=int),
+        object_masks={},
+    )
+    curr_scan = BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 5),
+        site_id="KTLX",
+        reflectivity_data=ReflectivityData(
+            reflectivity=curr_reflectivity,
+            azimuths=azimuths,
+            ranges_m=ranges_m,
+            radar_lat=35.0,
+            radar_lon=-97.0,
+            elevation_angle=0.5,
+            elevation_angles=[0.5],
+            timestamp="2026-04-10T20:05:00Z",
+        ),
+        detected_objects=[],
+        labeled_grid=np.zeros((64, 64), dtype=int),
+        object_masks={},
+    )
+    estimate = estimate_scan_geographic_motion_field(prev_scan, curr_scan, downsample=1)
+    assert estimate.source == "phase_correlation"
+    assert estimate.quality > 0.0
+    assert abs(estimate.delta_lat) > 0.0 or abs(estimate.delta_lon) > 0.0

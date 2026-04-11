@@ -65,6 +65,7 @@ class Track:
     identity_confidence: float = 1.0
     motion_confidence: MotionConfidence | None = None
     last_motion: Any | None = None
+    diagnostic_motion: Any | None = None
     _missed_scans: int = 0
 
     def add_position(self, timestamp: datetime, obj: DetectedObject) -> None:

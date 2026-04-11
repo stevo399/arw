@@ -153,3 +153,44 @@ Representative output:
 - `2026-04-10T22:35:03Z objects=4 active=4 uncertain_tracks=0 max_speed_mph=0 merges=0 splits=0`
 - `2026-04-10T22:52:26Z objects=6 active=6 uncertain_tracks=0 max_speed_mph=36 merges=2 splits=3`
 - `2026-04-10T23:09:40Z objects=5 active=9 uncertain_tracks=1 max_speed_mph=5 merges=1 splits=2`
+
+## Follow-Up Validation After Motion Methodology Upgrade
+
+### What changed
+
+- reported motion now carries provenance
+- weak-identity tracks use field-guided motion or suppression instead of raw centroid-history motion
+- scene guidance now prefers scan-based phase correlation instead of weighted object centroids
+- field-derived motion is also subject to plausibility suppression
+
+### Dense historical replay after motion methodology upgrade
+
+Command:
+
+```powershell
+uv run python scripts/live_replay.py KTLX --date 2026-04-10 --scans 12
+```
+
+Observed behavior:
+
+- dense-scene focal summaries stayed in low double-digit speeds rather than surfacing triple-digit false motion
+- the previous field-driven extreme outlier was suppressed and counted as uncertain instead of being exposed as a 600+ mph report
+- scene coverage remained stable in the `3635` to `4927` square-mile range
+- merge/split counts remained high, which is expected for the scene
+
+Representative output:
+
+- `2026-04-10T23:03:32Z objects=74 active=86 uncertain_tracks=1 max_speed_mph=71 merges=16 splits=12`
+- `2026-04-10T23:24:50Z objects=95 active=108 uncertain_tracks=0 max_speed_mph=36 merges=18 splits=17`
+- `2026-04-10T23:51:18Z objects=77 active=81 uncertain_tracks=0 max_speed_mph=21 merges=12 splits=10`
+
+Representative summary lines:
+
+- `Oklahoma City: 74 rain objects detected. Strongest: severe core, 28 miles E of the radar, moving SW at 8 mph. Note: 16 storms merged in the last scan. Note: 12 storms split in the last scan. Covering approximately 4805 square miles.`
+- `Oklahoma City: 95 rain objects detected. Strongest: severe core, 89 miles NNE of the radar, moving ESE at 18 mph. Note: 18 storms merged in the last scan. Note: 17 storms split in the last scan. Covering approximately 3904 square miles.`
+
+### Verification
+
+- targeted regression set:
+  - `uv run pytest tests/unit/test_tracking_motion_field.py tests/unit/test_motion.py tests/unit/test_tracker.py tests/unit/test_summary.py tests/smoke/test_server_smoke.py -q`
+  - `52 passed in 2.94s`
