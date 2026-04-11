@@ -70,6 +70,34 @@ class StormTracker:
             track.diagnostic_motion = diagnostic_motion
             track.motion_confidence = reported_motion.confidence
 
+    def _focus_score(self, track: Track) -> float:
+        if track.current_object is None:
+            return float("-inf")
+        current = track.current_object
+        persistence = min(len(track.positions), 6) * 0.7
+        confidence = track.identity_confidence * 2.0
+        area_bonus = min(current.area_km2 / 150.0, 8.0)
+        peak_bonus = current.peak_dbz / 10.0
+        prior_focus_bonus = 2.5 if track.is_primary_focus else 0.0
+        distance_penalty = min(current.distance_km / 40.0, 6.0)
+        return peak_bonus + area_bonus + persistence + confidence + prior_focus_bonus - distance_penalty
+
+    def _update_primary_focus(self) -> None:
+        active_tracks = [track for track in self._tracks if track.status == "active" and track.current_object is not None]
+        for track in active_tracks:
+            track.is_primary_focus = False
+        if not active_tracks:
+            return
+        primary = max(
+            active_tracks,
+            key=lambda track: (
+                self._focus_score(track),
+                track.current_object.peak_dbz if track.current_object is not None else 0.0,
+                track.current_object.area_km2 if track.current_object is not None else 0.0,
+            ),
+        )
+        primary.is_primary_focus = True
+
     def _append_merge_event(self, timestamp: datetime, surviving_track_id: int, merged_track_ids: list[int]) -> None:
         """Record a merge event with deduplicated track ids."""
         event = normalize_merge_event(timestamp, surviving_track_id, merged_track_ids)
@@ -92,6 +120,7 @@ class StormTracker:
                 track.identity_confidence = 1.0
                 self._obj_to_track[obj.object_id] = track.track_id
             self._refresh_track_motions(field_estimate=None, field_dt_hours=0.0)
+            self._update_primary_focus()
             self._prev_scan = scan
             return
 
@@ -179,6 +208,7 @@ class StormTracker:
 
         self._obj_to_track = new_obj_to_track
         self._refresh_track_motions(field_estimate=association.geo_motion, field_dt_hours=association.dt_hours)
+        self._update_primary_focus()
         self._prev_scan = scan
 
     @property

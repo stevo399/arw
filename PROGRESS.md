@@ -11,6 +11,7 @@
   - Motion guidance: scan-based phase correlation is now preferred over weighted centroid drift for scene motion
   - Segmentation: low-threshold blobs can now be conservatively partitioned around multiple intense internal cores
   - Echo significance: very small weak echoes are filtered so they do not inflate object counts in simpler scenes
+  - Summary focus: strongest-object selection now follows a relevance-aware primary focus track across scans
   - Live replay harness: multi-scan replay script for summary, merge/split, and motion sanity diagnostics
   - Updated speech summaries with confidence-aware motion and total scene coverage
   - New endpoints: /tracks/{site_id}, /motion/{site_id}/{track_id}
@@ -18,16 +19,17 @@
   - merge/split regression replay remains free of duplicate or self-merge events
   - dense-scene replay suppresses absurd spoken motion, uses field-guided fallback motion, and reports scene-level coverage
   - lower-complexity replay count noise improved further after small-weak-object filtering
+  - dense-scene strongest-object summaries are materially more stable across short replay windows
 - Full test suite: 112 tests all passing
 
 ## In Progress
-- Residual strongest-object stability tuning and conservative segmentation refinement
+- Residual dense-scene tuning for longer replay windows and broader focus-lineage validation
 
 ## Next
-- Continue improving strongest-object stability in crowded scenes without introducing site-specific logic
+- Validate primary-focus stability over longer dense-scene windows and more replay periods
 - Continue refining conservative multithreshold segmentation so simpler scenes do not fragment unnecessarily
 - Phase 3: Velocity ingestion, velocity region detection
 - NVGT frontend integration with the REST API
 
 ## Blockers / Decisions
-- No blocker for current API behavior. Remaining work is quality-related: dense scenes still need stronger focal-object stability, but simple-scene fragmentation is materially improved after the latest filtering pass.
+- No blocker for current API behavior. Remaining work is quality-related: focus stability should be validated over longer windows, but short-window dense-scene behavior is materially improved.

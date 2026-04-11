@@ -46,12 +46,17 @@ def _summary_strength_score(obj: DetectedObject, track) -> float:
     if track is not None:
         history_bonus = min(len(track.positions), 6) * 0.5
         confidence_bonus = max(min(track.identity_confidence, 1.0), 0.0)
-        track_bonus = history_bonus + confidence_bonus
+        primary_focus_bonus = 3.0 if getattr(track, "is_primary_focus", False) else 0.0
+        track_bonus = history_bonus + confidence_bonus + primary_focus_bonus
     return obj.peak_dbz + area_bonus + track_bonus
 
 
 def _pick_summary_object(objects: list[DetectedObject], tracks) -> DetectedObject:
     """Choose a summary focal object with less scan-to-scan jitter than raw peak ordering."""
+    if tracks is not None:
+        for track in tracks:
+            if getattr(track, "is_primary_focus", False) and track.current_object is not None:
+                return track.current_object
     return max(
         objects,
         key=lambda obj: (

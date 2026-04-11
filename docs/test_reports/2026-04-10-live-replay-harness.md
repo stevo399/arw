@@ -316,3 +316,42 @@ Representative output:
 - `2026-04-10T23:46:05Z objects=53 active=53 uncertain_tracks=0 max_speed_mph=0 merges=0 splits=0`
 - `2026-04-10T23:51:18Z objects=64 active=71 uncertain_tracks=0 max_speed_mph=23 merges=9 splits=8`
 - `2026-04-10T23:56:21Z objects=65 active=73 uncertain_tracks=0 max_speed_mph=37 merges=11 splits=10`
+
+## Follow-Up Validation After Primary-Focus Summary Selection
+
+### What changed
+
+- the tracker now maintains a primary-focus track instead of forcing the summary to re-elect a focal storm from scratch every scan
+- focus selection is persistence-aware but also penalizes distant, less relevant storms
+- the summary now follows the current primary-focus track directly when one exists
+
+### Verification
+
+- `uv run pytest tests/unit/test_summary.py tests/unit/test_tracking_focus.py tests/smoke/test_server_smoke.py tests/e2e/test_full_pipeline.py -q`
+- `27 passed in 3.80s`
+
+### Dense cached replay after primary-focus selection
+
+Command:
+
+```powershell
+uv run python scripts/live_replay.py KTLX --date 2026-04-10 --quick --local-only
+```
+
+Observed behavior:
+
+- the strongest-object summary stayed on the same focal storm across all three replayed scans
+- the prior scan-to-scan jumping between unrelated distant cells was reduced materially
+- motion remained plausible at `0`, `7`, and `20` mph
+
+Representative output:
+
+- `2026-04-10T23:46:05Z objects=53 active=53 uncertain_tracks=0 max_speed_mph=0 merges=0 splits=0`
+- `2026-04-10T23:51:18Z objects=64 active=71 uncertain_tracks=0 max_speed_mph=23 merges=9 splits=8`
+- `2026-04-10T23:56:21Z objects=65 active=73 uncertain_tracks=0 max_speed_mph=37 merges=11 splits=10`
+
+Representative summary lines:
+
+- `Oklahoma City: 53 rain objects detected. Strongest: intense rain, 98 miles NNE of the radar, stationary. Covering approximately 3634 square miles.`
+- `Oklahoma City: 64 rain objects detected. Strongest: intense rain, 98 miles NNE of the radar, moving NE at 7 mph. Note: 9 storms merged in the last scan. Note: 8 storms split in the last scan. Covering approximately 3714 square miles.`
+- `Oklahoma City: 65 rain objects detected. Strongest: intense rain, 98 miles NNE of the radar, moving SE at 20 mph. Note: 11 storms merged in the last scan. Note: 10 storms split in the last scan. Covering approximately 3815 square miles.`

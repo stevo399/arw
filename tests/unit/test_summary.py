@@ -185,3 +185,74 @@ def test_generate_summary_prefers_stable_larger_tracked_object_over_tiny_peak_sp
     )
     assert "intense rain" in text
     assert "19 miles NE of the radar" in text
+
+
+def test_generate_summary_prefers_primary_focus_track():
+    focused = _make_object(
+        obj_id=1,
+        distance_km=40.0,
+        bearing_deg=90.0,
+        peak_dbz=55.0,
+        peak_label="intense rain",
+        area_km2=250.0,
+    )
+    challenger = _make_object(
+        obj_id=2,
+        distance_km=20.0,
+        bearing_deg=45.0,
+        peak_dbz=58.0,
+        peak_label="severe core",
+        area_km2=120.0,
+    )
+    focus_track = _make_track(track_id=1, obj=focused)
+    for minutes in range(5, 25, 5):
+        focus_track.add_position(datetime(2026, 4, 8, 18, 0) + timedelta(minutes=minutes), focused)
+    focus_track.identity_confidence = 0.95
+    focus_track.is_primary_focus = True
+
+    challenger_track = _make_track(track_id=2, obj=challenger)
+    challenger_track.identity_confidence = 0.8
+
+    text = generate_summary(
+        site_id="KTLX",
+        site_name="Oklahoma City",
+        timestamp="2026-04-08T18:30:00Z",
+        objects=[challenger, focused],
+        tracks=[focus_track, challenger_track],
+    )
+    assert "intense rain" in text
+    assert "25 miles E of the radar" in text
+
+
+def test_generate_summary_uses_primary_focus_object_directly_when_available():
+    focused = _make_object(
+        obj_id=1,
+        distance_km=60.0,
+        bearing_deg=0.0,
+        peak_dbz=50.0,
+        peak_label="intense rain",
+        area_km2=180.0,
+    )
+    challenger = _make_object(
+        obj_id=2,
+        distance_km=20.0,
+        bearing_deg=90.0,
+        peak_dbz=60.0,
+        peak_label="severe core",
+        area_km2=300.0,
+    )
+    focus_track = _make_track(track_id=1, obj=focused)
+    focus_track.is_primary_focus = True
+
+    challenger_track = _make_track(track_id=2, obj=challenger)
+
+    text = generate_summary(
+        site_id="KTLX",
+        site_name="Oklahoma City",
+        timestamp="2026-04-08T18:30:00Z",
+        objects=[challenger, focused],
+        tracks=[focus_track, challenger_track],
+    )
+    assert "intense rain" in text
+    assert "37 miles N of the radar" in text
+
