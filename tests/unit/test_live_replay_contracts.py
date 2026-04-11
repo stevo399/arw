@@ -7,6 +7,7 @@ from src.buffer import BufferedScan
 from src.detection import DetectedObject
 from src.motion import MotionVector
 from src.parser import ReflectivityData
+from src.preprocess import ScanQuality
 from src.tracker import StormTracker, Track
 from scripts.live_replay import _cached_scans, _local_only_scans, _select_scan_count, summarize_scan
 
@@ -44,6 +45,13 @@ def _make_buffered_scan() -> BufferedScan:
         detected_objects=[detected],
         labeled_grid=labeled,
         object_masks={1: mask},
+        scan_quality=ScanQuality(
+            score=0.9,
+            finite_fraction=1.0,
+            removed_speckle_pixels=0,
+            removed_speckle_fraction=0.0,
+            flags=[],
+        ),
     )
 
 
@@ -64,6 +72,8 @@ def test_summarize_scan_reports_motion_sanity_fields():
     assert diagnostics.active_count == 1
     assert diagnostics.uncertain_tracks == 1
     assert diagnostics.max_speed_mph == 137
+    assert diagnostics.scan_quality_score == 0.9
+    assert diagnostics.scan_quality_flags == []
     assert "tracking uncertain" in diagnostics.summary
 
 

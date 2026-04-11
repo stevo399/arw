@@ -12,6 +12,7 @@ from src.buffer import BufferedScan
 from src.detection import detect_objects_with_grid
 from src.ingest import get_cache_path, list_latest_scans, list_scans_for_date, fetch_scan, scan_is_cached
 from src.parser import extract_reflectivity
+from src.preprocess import preprocess_reflectivity_data
 from src.sites import NEXRAD_SITES
 from src.summary import generate_summary
 from src.tracker import StormTracker
@@ -24,6 +25,8 @@ class ReplayDiagnostics:
     active_count: int
     uncertain_tracks: int
     max_speed_mph: int
+    scan_quality_score: float
+    scan_quality_flags: list[str]
     merge_count: int
     split_count: int
     summary: str
@@ -61,6 +64,8 @@ def summarize_scan(site_name: str, buffered: BufferedScan, tracker: StormTracker
         active_count=len(tracker.active_tracks),
         uncertain_tracks=uncertain_tracks,
         max_speed_mph=max_speed_mph,
+        scan_quality_score=buffered.scan_quality.score if buffered.scan_quality is not None else 1.0,
+        scan_quality_flags=list(buffered.scan_quality.flags) if buffered.scan_quality is not None else [],
         merge_count=merge_count,
         split_count=split_count,
         summary=summary,
@@ -163,7 +168,8 @@ def main() -> None:
     for scan in scans:
         scan_dt = _scan_timestamp(scan)
         filepath = get_cache_path(site_id, _scan_filename(scan)) if args.local_only else fetch_scan(site_id, scan_dt)
-        reflectivity = extract_reflectivity(filepath)
+        raw_reflectivity = extract_reflectivity(filepath)
+        reflectivity, scan_quality = preprocess_reflectivity_data(raw_reflectivity)
         detection = detect_objects_with_grid(
             reflectivity=reflectivity.reflectivity,
             azimuths=reflectivity.azimuths,
@@ -178,15 +184,19 @@ def main() -> None:
             detected_objects=detection.objects,
             labeled_grid=detection.labeled_grid,
             object_masks=detection.object_masks,
+            scan_quality=scan_quality,
         )
         tracker.update(buffered)
         diagnostics = summarize_scan(site_name, buffered, tracker)
+        quality_flags = ",".join(diagnostics.scan_quality_flags) if diagnostics.scan_quality_flags else "none"
         print(
             f"{diagnostics.timestamp} "
             f"objects={diagnostics.object_count} "
             f"active={diagnostics.active_count} "
             f"uncertain_tracks={diagnostics.uncertain_tracks} "
             f"max_speed_mph={diagnostics.max_speed_mph} "
+            f"scan_quality={diagnostics.scan_quality_score:.2f} "
+            f"quality_flags={quality_flags} "
             f"merges={diagnostics.merge_count} "
             f"splits={diagnostics.split_count}"
         )

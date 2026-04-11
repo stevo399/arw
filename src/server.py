@@ -10,6 +10,7 @@ from src.sites import geocode_city_state, rank_sites, NEXRAD_SITES
 from src.ingest import fetch_scan
 from src.parser import extract_reflectivity
 from src.detection import detect_objects_with_grid
+from src.preprocess import preprocess_reflectivity_data
 from src.summary import generate_summary
 from src.buffer import ReplayBuffer, BufferedScan
 from src.tracker import StormTracker
@@ -39,7 +40,8 @@ def _parse_datetime(dt_str: str | None) -> datetime | None:
 def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
     """Fetch a scan, detect objects, and add to buffer + tracker."""
     filepath = fetch_scan(site_id.upper(), dt)
-    ref_data = extract_reflectivity(filepath)
+    raw_ref_data = extract_reflectivity(filepath)
+    ref_data, scan_quality = preprocess_reflectivity_data(raw_ref_data)
     result = detect_objects_with_grid(
         reflectivity=ref_data.reflectivity,
         azimuths=ref_data.azimuths,
@@ -55,6 +57,7 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
         detected_objects=result.objects,
         labeled_grid=result.labeled_grid,
         object_masks=result.object_masks,
+        scan_quality=scan_quality,
     )
     _buffer.add_scan(buffered)
     _tracker.update(buffered)

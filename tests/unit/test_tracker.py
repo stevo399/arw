@@ -5,6 +5,7 @@ from src.tracker import StormTracker, Track
 from src.detection import DetectedObject
 from src.buffer import BufferedScan
 from src.parser import ReflectivityData
+from src.preprocess import ScanQuality
 
 
 def _make_object(obj_id: int, lat: float, lon: float, peak_dbz: float = 45.0) -> DetectedObject:
@@ -188,3 +189,208 @@ def test_tracker_get_track_by_id():
     assert track is not None
     assert track.track_id == 1
     assert tracker.get_track(999) is None
+
+
+def test_tracker_resets_on_site_change():
+    """Switching radar sites must clear prior state so cross-site masks
+    don't collide and produce phantom matches."""
+    tracker = StormTracker()
+    t = datetime(2026, 4, 8, 18, 30)
+    ktlx_scan = _make_scan("KTLX", t, [_make_object(1, 35.5, -97.3)])
+    tracker.update(ktlx_scan)
+    assert len(tracker.active_tracks) == 1
+
+    # Now switch to a different site — previous tracks should be gone
+    kfws_scan = _make_scan("KFWS", t + timedelta(minutes=5), [_make_object(1, 32.5, -97.3)])
+    tracker.update(kfws_scan)
+    # Only the KFWS track should be active; KTLX track should not exist
+    active = tracker.active_tracks
+    assert len(active) == 1
+    # Track ids should restart at 1 for the new site
+    assert active[0].track_id == 1
+    # And there should be exactly one position (no lingering KTLX history)
+    assert len(active[0].positions) == 1
+
+
+def test_tracker_merge_event_excludes_surviving_and_dedupes():
+    """A merge event's involved_track_ids must not contain the surviving
+    track in the 'merged' list, and must not contain duplicates."""
+    tracker = StormTracker()
+    t1 = datetime(2026, 4, 8, 18, 30)
+    t2 = datetime(2026, 4, 8, 18, 35)
+    # Three separate objects in scan 1
+    obj_a = _make_object(1, 35.5, -97.30, peak_dbz=50.0)
+    obj_b = _make_object(2, 35.5, -97.28, peak_dbz=45.0)
+    obj_c = _make_object(3, 35.5, -97.26, peak_dbz=42.0)
+    mask_a = np.zeros((360, 500), dtype=bool)
+    mask_a[85:95, 190:200] = True
+    mask_b = np.zeros((360, 500), dtype=bool)
+    mask_b[85:95, 200:210] = True
+    mask_c = np.zeros((360, 500), dtype=bool)
+    mask_c[85:95, 210:220] = True
+    scan1 = _make_scan("KTLX", t1, [obj_a, obj_b, obj_c], masks={1: mask_a, 2: mask_b, 3: mask_c})
+    # One big merged object in scan 2 covering all three
+    obj_merged = _make_object(1, 35.5, -97.28, peak_dbz=52.0)
+    mask_merged = np.zeros((360, 500), dtype=bool)
+    mask_merged[85:95, 190:220] = True
+    scan2 = _make_scan("KTLX", t2, [obj_merged], masks={1: mask_merged})
+    tracker.update(scan1)
+    tracker.update(scan2)
+
+    merge_events = [e for e in tracker.recent_events if e["event_type"] == "merge"]
+    assert len(merge_events) == 1
+    event = merge_events[0]
+    involved = event["involved_track_ids"]
+    # Should be exactly [surviving, merged_1, merged_2] with no duplicates
+    assert len(involved) == len(set(involved)), f"duplicates in involved: {involved}"
+    # Surviving track should appear exactly once (at the start)
+    surviving = involved[0]
+    assert involved.count(surviving) == 1
+    # And the description should not name the surviving track in the merged list
+    assert f"merged into track {surviving}" in event["description"]
+    merged_part = event["description"].split("merged into")[0]
+    assert str(surviving) not in merged_part
+
+
+def test_tracker_leftover_after_merge_becomes_new_track():
+    """If a new object 1:1-matches a previous object whose track was already
+    consumed by a merge, the leftover must become a new track — not reuse
+    the merged survivor."""
+    tracker = StormTracker()
+    t1 = datetime(2026, 4, 8, 18, 30)
+    t2 = datetime(2026, 4, 8, 18, 35)
+
+    # Scan 1: two objects A and B
+    obj_a = _make_object(1, 35.5, -97.30, peak_dbz=50.0)
+    obj_b = _make_object(2, 35.5, -97.28, peak_dbz=40.0)
+    mask_a = np.zeros((360, 500), dtype=bool)
+    mask_a[85:95, 195:205] = True
+    mask_b = np.zeros((360, 500), dtype=bool)
+    mask_b[85:95, 205:215] = True
+    scan1 = _make_scan("KTLX", t1, [obj_a, obj_b], masks={1: mask_a, 2: mask_b})
+
+    # Scan 2: X merges A and B, Y only overlaps A
+    obj_x = _make_object(1, 35.5, -97.29, peak_dbz=52.0)
+    obj_y = _make_object(2, 35.5, -97.31, peak_dbz=45.0)
+    mask_x = np.zeros((360, 500), dtype=bool)
+    mask_x[85:95, 200:210] = True  # overlaps both A (cols 200-205) and B (cols 205-210)
+    mask_y = np.zeros((360, 500), dtype=bool)
+    mask_y[85:95, 197:203] = True  # overlaps only A
+    scan2 = _make_scan("KTLX", t2, [obj_x, obj_y], masks={1: mask_x, 2: mask_y})
+
+    tracker.update(scan1)
+    tracker.update(scan2)
+
+    # After scan 2: X should be in the surviving merged track (1),
+    # Y should be in its own new track (not track 1).
+    # Total tracks: 1 surviving (from A), 1 merged-out (B), 1 new (Y) = 3.
+    all_tracks = tracker.all_tracks
+    assert len(all_tracks) == 3, f"expected 3 tracks, got {len(all_tracks)}"
+    # No active track should have duplicate positions at the same timestamp
+    for track in all_tracks:
+        timestamps = [p.timestamp for p in track.positions]
+        assert len(timestamps) == len(set(timestamps)), (
+            f"track {track.track_id} has duplicate position timestamps: {timestamps}"
+        )
+    # Exactly two active tracks: the merged survivor and the new track for Y
+    active = tracker.active_tracks
+    assert len(active) == 2
+    # Merge events should reference real merges (track IDs must be distinct)
+    merge_events = [e for e in tracker.recent_events if e["event_type"] == "merge"]
+    assert len(merge_events) == 1
+    involved = merge_events[0]["involved_track_ids"]
+    assert len(involved) == len(set(involved))
+
+
+def test_tracker_two_merges_sharing_prev_do_not_duplicate_track_mapping():
+    """If two new objects both try to merge using the same previous track as
+    their strongest overlap, the tracker must not end up with both new objects
+    mapped to the same surviving track. That duplicate mapping would cause
+    phantom 'track N merged into track N' events on the next scan — the
+    symptom observed in live KEYX data."""
+    tracker = StormTracker()
+    t1 = datetime(2026, 4, 8, 18, 30)
+    t2 = datetime(2026, 4, 8, 18, 35)
+    t3 = datetime(2026, 4, 8, 18, 40)
+
+    # Scan 1: three previous objects. A is big (wide mask); B and C are
+    # small satellites on either side of A.
+    obj_a = _make_object(1, 35.5, -97.30, peak_dbz=50.0)
+    obj_b = _make_object(2, 35.5, -97.28, peak_dbz=42.0)
+    obj_c = _make_object(3, 35.5, -97.32, peak_dbz=42.0)
+    mask_a = np.zeros((360, 500), dtype=bool)
+    mask_a[85:95, 190:210] = True  # area 200
+    mask_b = np.zeros((360, 500), dtype=bool)
+    mask_b[85:95, 210:214] = True  # area 40
+    mask_c = np.zeros((360, 500), dtype=bool)
+    mask_c[85:95, 176:180] = True  # area 40
+    scan1 = _make_scan("KTLX", t1, [obj_a, obj_b, obj_c],
+                       masks={1: mask_a, 2: mask_b, 3: mask_c})
+
+    # Scan 2: X and Y both have their STRONGEST overlap with A's mask,
+    # so A's track would be picked as each merge's surviving candidate.
+    # Only one merge can legitimately claim track A.
+    obj_x = _make_object(1, 35.5, -97.29, peak_dbz=52.0)
+    obj_y = _make_object(2, 35.5, -97.31, peak_dbz=51.0)
+    mask_x = np.zeros((360, 500), dtype=bool)
+    mask_x[85:95, 195:212] = True
+    # A∩X: cols 195-209 = 15 wide  => overlap(A,X)=150/200=0.75
+    # B∩X: cols 210-211 = 2 wide   => overlap(B,X)=20/40=0.5
+    mask_y = np.zeros((360, 500), dtype=bool)
+    mask_y[85:95, 178:199] = True
+    # A∩Y: cols 190-198 = 9 wide   => overlap(A,Y)=90/200=0.45
+    # C∩Y: cols 178-179 = 2 wide   => overlap(C,Y)=20/40=0.5
+    # ^ A still outranks C in Y's match list because 0.45>0 beats no-match,
+    #   and importantly Y has A in its match_candidates list.
+    scan2 = _make_scan("KTLX", t2, [obj_x, obj_y],
+                       masks={1: mask_x, 2: mask_y})
+
+    tracker.update(scan1)
+    tracker.update(scan2)
+
+    # Invariant: no two new objects may map to the same track this scan.
+    # If they do, the NEXT scan's overlap matching will produce phantom
+    # "Track N merged into track N" events.
+    obj_to_track = tracker._obj_to_track
+    assigned_tracks = list(obj_to_track.values())
+    assert len(assigned_tracks) == len(set(assigned_tracks)), (
+        f"two new objects mapped to the same track: {obj_to_track}"
+    )
+
+    # Now push a third scan where Z overlaps both X's and Y's masks.
+    # If the mapping is clean, this produces a real merge. If the previous
+    # scan produced duplicate mappings, this produces a self-merge event.
+    obj_z = _make_object(1, 35.5, -97.30, peak_dbz=53.0)
+    mask_z = np.zeros((360, 500), dtype=bool)
+    mask_z[85:95, 178:212] = True  # covers both mask_x and mask_y
+    scan3 = _make_scan("KTLX", t3, [obj_z], masks={1: mask_z})
+    tracker.update(scan3)
+
+    # No merge event should list the same track id twice.
+    merge_events = [e for e in tracker.recent_events if e["event_type"] == "merge"]
+    for event in merge_events:
+        involved = event["involved_track_ids"]
+        assert len(involved) == len(set(involved)), (
+            f"merge event has duplicate track ids: {event}"
+        )
+        # Surviving track should not also appear in the merged list
+        surviving = involved[0]
+        assert involved.count(surviving) == 1, (
+            f"surviving track {surviving} appears more than once: {event}"
+        )
+
+
+def test_tracker_initial_confidence_is_penalized_by_scan_quality():
+    tracker = StormTracker()
+    t = datetime(2026, 4, 8, 18, 30)
+    scan = _make_scan("KTLX", t, [_make_object(1, 35.5, -97.3)])
+    scan.scan_quality = ScanQuality(
+        score=0.5,
+        finite_fraction=0.7,
+        removed_speckle_pixels=0,
+        removed_speckle_fraction=0.0,
+        flags=["high_missing_fraction"],
+    )
+    tracker.update(scan)
+    assert len(tracker.active_tracks) == 1
+    assert tracker.active_tracks[0].identity_confidence == 0.5

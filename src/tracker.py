@@ -10,6 +10,12 @@ MAX_MISSED_SCANS = 2
 FOCUS_SWITCH_MARGIN = 2.0
 
 
+def _scan_quality_factor(scan: BufferedScan | None) -> float:
+    if scan is None or scan.scan_quality is None:
+        return 1.0
+    return max(0.25, min(scan.scan_quality.score, 1.0))
+
+
 def _get_track_motion(track: Track) -> MotionVector:
     if track.last_motion is not None:
         return track.last_motion
@@ -50,11 +56,12 @@ class StormTracker:
         self._tracks.append(track)
         return track
 
-    def _score_confidence(self, association, new_object_id: int, track_id: int) -> float:
+    def _score_confidence(self, association, new_object_id: int, track_id: int, scan: BufferedScan) -> float:
         for score in association.candidate_scores:
             if score.object_id == new_object_id and score.track_id == track_id:
-                return round(max(0.0, min(1.0, 1.0 - (score.total_cost / 10.0))), 2)
-        return 0.3
+                base_confidence = max(0.0, min(1.0, 1.0 - (score.total_cost / 10.0)))
+                return round(base_confidence * _scan_quality_factor(scan), 2)
+        return round(0.3 * _scan_quality_factor(scan), 2)
 
     def _refresh_track_motions(self, field_estimate, field_dt_hours: float) -> None:
         for track in self._tracks:
@@ -127,7 +134,7 @@ class StormTracker:
             self._obj_to_track.clear()
             for obj in scan.detected_objects:
                 track = self._create_track(timestamp, obj)
-                track.identity_confidence = 1.0
+                track.identity_confidence = round(_scan_quality_factor(scan), 2)
                 self._obj_to_track[obj.object_id] = track.track_id
             self._refresh_track_motions(field_estimate=None, field_dt_hours=0.0)
             self._update_primary_focus()
@@ -154,13 +161,13 @@ class StormTracker:
                 continue
             primary_new_id = related_new_ids[0]
             parent_track.add_position(timestamp, new_objects[primary_new_id])
-            parent_track.identity_confidence = self._score_confidence(association, primary_new_id, parent_tid)
+            parent_track.identity_confidence = self._score_confidence(association, primary_new_id, parent_tid, scan)
             new_obj_to_track[primary_new_id] = parent_tid
             child_ids = []
             for new_id in related_new_ids[1:]:
                 child = self._create_track(timestamp, new_objects[new_id])
                 child.split_from = parent_tid
-                child.identity_confidence = 0.35
+                child.identity_confidence = round(0.35 * _scan_quality_factor(scan), 2)
                 new_obj_to_track[new_id] = child.track_id
                 child_ids.append(child.track_id)
             event = normalize_split_event(timestamp, parent_tid, child_ids)
@@ -178,7 +185,7 @@ class StormTracker:
                 continue
             if surviving_track_id not in handled_split_parents:
                 surviving.add_position(timestamp, new_objects[new_id])
-                surviving.identity_confidence = self._score_confidence(association, new_id, surviving_track_id)
+                surviving.identity_confidence = self._score_confidence(association, new_id, surviving_track_id, scan)
                 new_obj_to_track[new_id] = surviving_track_id
             merged_track_ids = []
             for merged_track_id in related_track_ids[1:]:
@@ -197,14 +204,14 @@ class StormTracker:
             if track is None or track.status != "active":
                 continue
             track.add_position(timestamp, new_objects[new_id])
-            track.identity_confidence = self._score_confidence(association, new_id, track_id)
+            track.identity_confidence = self._score_confidence(association, new_id, track_id, scan)
             new_obj_to_track[new_id] = track_id
 
         # Create new tracks for unmatched new objects
         for new_id, obj in new_objects.items():
             if new_id not in new_obj_to_track:
                 track = self._create_track(timestamp, obj)
-                track.identity_confidence = 0.3
+                track.identity_confidence = round(0.3 * _scan_quality_factor(scan), 2)
                 new_obj_to_track[new_id] = track.track_id
 
         # Increment missed scans for unmatched active tracks

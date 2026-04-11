@@ -1,9 +1,24 @@
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import numpy as np
+from src.parser import ReflectivityData
 from src.server import app
 
 client = TestClient(app)
+
+
+def _make_reflectivity_data(fill_value: float, elevation_angles: list[float] | None = None) -> ReflectivityData:
+    grid = np.full((360, 500), fill_value)
+    return ReflectivityData(
+        reflectivity=grid,
+        azimuths=np.linspace(0, 359, 360),
+        ranges_m=np.linspace(2000, 250000, 500),
+        radar_lat=35.3331,
+        radar_lon=-97.2778,
+        elevation_angle=0.5,
+        elevation_angles=elevation_angles or [0.5],
+        timestamp="2026-04-08T18:30:00Z",
+    )
 
 
 def test_root_returns_200():
@@ -28,15 +43,7 @@ def test_sites_endpoint_missing_params_returns_422():
 
 
 def test_scan_endpoint_returns_200():
-    mock_ref = MagicMock()
-    mock_ref.reflectivity = np.zeros((360, 500))
-    mock_ref.azimuths = np.linspace(0, 359, 360)
-    mock_ref.ranges_m = np.linspace(2000, 250000, 500)
-    mock_ref.elevation_angle = 0.5
-    mock_ref.elevation_angles = [0.5, 1.5]
-    mock_ref.timestamp = "2026-04-08T18:30:00Z"
-    mock_ref.radar_lat = 35.3331
-    mock_ref.radar_lon = -97.2778
+    mock_ref = _make_reflectivity_data(0.0, [0.5, 1.5])
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.extract_reflectivity", return_value=mock_ref):
         resp = client.get("/scan/KTLX")
@@ -47,15 +54,7 @@ def test_scan_endpoint_returns_200():
 
 
 def test_objects_endpoint_returns_200():
-    mock_ref = MagicMock()
-    mock_ref.reflectivity = np.full((360, 500), np.nan)
-    mock_ref.azimuths = np.linspace(0, 359, 360)
-    mock_ref.ranges_m = np.linspace(2000, 250000, 500)
-    mock_ref.radar_lat = 35.3331
-    mock_ref.radar_lon = -97.2778
-    mock_ref.timestamp = "2026-04-08T18:30:00Z"
-    mock_ref.elevation_angle = 0.5
-    mock_ref.elevation_angles = [0.5]
+    mock_ref = _make_reflectivity_data(np.nan)
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.extract_reflectivity", return_value=mock_ref):
         resp = client.get("/objects/KTLX")
@@ -66,15 +65,7 @@ def test_objects_endpoint_returns_200():
 
 
 def test_summary_endpoint_returns_200():
-    mock_ref = MagicMock()
-    mock_ref.reflectivity = np.full((360, 500), np.nan)
-    mock_ref.azimuths = np.linspace(0, 359, 360)
-    mock_ref.ranges_m = np.linspace(2000, 250000, 500)
-    mock_ref.radar_lat = 35.3331
-    mock_ref.radar_lon = -97.2778
-    mock_ref.timestamp = "2026-04-08T18:30:00Z"
-    mock_ref.elevation_angle = 0.5
-    mock_ref.elevation_angles = [0.5]
+    mock_ref = _make_reflectivity_data(np.nan)
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.extract_reflectivity", return_value=mock_ref):
         resp = client.get("/summary/KTLX")
@@ -84,15 +75,7 @@ def test_summary_endpoint_returns_200():
 
 
 def test_tracks_endpoint_returns_200():
-    mock_ref = MagicMock()
-    mock_ref.reflectivity = np.full((360, 500), np.nan)
-    mock_ref.azimuths = np.linspace(0, 359, 360)
-    mock_ref.ranges_m = np.linspace(2000, 250000, 500)
-    mock_ref.radar_lat = 35.3331
-    mock_ref.radar_lon = -97.2778
-    mock_ref.timestamp = "2026-04-08T18:30:00Z"
-    mock_ref.elevation_angle = 0.5
-    mock_ref.elevation_angles = [0.5]
+    mock_ref = _make_reflectivity_data(np.nan)
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.extract_reflectivity", return_value=mock_ref):
         resp = client.get("/tracks/KTLX")
@@ -104,15 +87,7 @@ def test_tracks_endpoint_returns_200():
 
 
 def test_tracks_endpoint_includes_motion_confidence_fields():
-    mock_ref = MagicMock()
-    mock_ref.reflectivity = np.full((360, 500), np.nan)
-    mock_ref.azimuths = np.linspace(0, 359, 360)
-    mock_ref.ranges_m = np.linspace(2000, 250000, 500)
-    mock_ref.radar_lat = 35.3331
-    mock_ref.radar_lon = -97.2778
-    mock_ref.timestamp = "2026-04-08T18:30:00Z"
-    mock_ref.elevation_angle = 0.5
-    mock_ref.elevation_angles = [0.5]
+    mock_ref = _make_reflectivity_data(np.nan)
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.extract_reflectivity", return_value=mock_ref):
         client.get("/tracks/KTLX")

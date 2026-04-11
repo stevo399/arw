@@ -5,6 +5,7 @@ from collections import deque
 import numpy as np
 from src.parser import ReflectivityData
 from src.detection import DetectedObject
+from src.preprocess import ScanQuality
 
 
 @dataclass
@@ -16,6 +17,7 @@ class BufferedScan:
     detected_objects: list[DetectedObject]
     labeled_grid: np.ndarray
     object_masks: dict[int, np.ndarray]
+    scan_quality: ScanQuality | None = None
 
 
 class ReplayBuffer:
