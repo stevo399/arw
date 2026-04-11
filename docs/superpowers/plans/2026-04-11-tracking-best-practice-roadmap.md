@@ -128,7 +128,7 @@ Completion notes:
 
 ## Task 3: Strengthen association with advected geometry features
 
-Status: pending
+Status: completed
 
 Goal:
 
@@ -156,6 +156,23 @@ Validation:
 - smoke tests
 - live replay checks in crowded scenes where centroid-only continuity is weak
 - API rendering and output analysis verifying fewer false continuity jumps and fewer misleading structural events
+
+Completion notes:
+
+- added motion-advected mask IoU support to the association layer so continuity scoring can use predicted geometry, not just raw overlap and centroid distance
+- extended `AssociationScore` to carry `advected_overlap_score` for downstream diagnostics
+- kept the global assignment interface and public API contracts stable
+- targeted verification:
+  - `uv run pytest tests/unit/test_tracking_association.py tests/unit/test_tracker.py tests/unit/test_tracking_types.py tests/unit/test_motion.py tests/unit/test_summary.py tests/e2e/test_full_pipeline.py tests/smoke/test_server_smoke.py -q`
+  - `62 passed in 3.37s`
+- live replay validation:
+  - `uv run python scripts/live_replay.py KTLX --date 2026-04-10 --quick --local-only`
+  - `uv run python scripts/live_replay.py KSOX --date 2026-04-10 --quick`
+- observed behavior:
+  - no summary, merge/split, or motion regressions in the checked windows
+  - lower-complexity replay remained stable at `3 / 2 / 7` objects
+  - dense replay remained stable at `48 / 50 / 50` objects with the same focal storm and plausible spoken motion
+  - the main gain from this task is stronger geometry-aware scoring in ambiguous cases, reflected in new unit coverage and diagnostics rather than a dramatic replay-output shift in these short windows
 
 ## Task 4: Move from event bookkeeping toward lineage state
 

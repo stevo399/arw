@@ -34,6 +34,7 @@ def test_association_score_type():
         track_id=1,
         object_id=2,
         overlap_score=0.7,
+        advected_overlap_score=0.8,
         distance_score=0.2,
         predicted_position_score=0.1,
         area_change_score=0.05,

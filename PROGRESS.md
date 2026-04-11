@@ -6,6 +6,7 @@
   - ReplayBuffer: 2-hour in-memory scan storage with auto-eviction and site-switch reset
   - Tracking package split into segmentation, association, motion-field, motion, events, and tracker modules
   - Global association: single-use per-scan track assignment, deduplicated merge events, no self-merges
+  - Geometry-aware association: primary matching now also considers motion-advected mask overlap instead of relying only on raw overlap and distance
   - Motion: confidence-aware output with uncertain/stationary/nearly-stationary states
   - Motion provenance: reported motion now distinguishes track-history, motion-field, and suppressed outputs
   - Motion guidance: scan-based phase correlation is now preferred over weighted centroid drift for scene motion
@@ -23,6 +24,7 @@
   - dense-scene replay suppresses absurd spoken motion, uses field-guided fallback motion, and reports scene-level coverage
   - lower-complexity replay count noise improved further after small-weak-object filtering
   - hierarchy-based segmentation further reduced dense-scene fragmentation without destabilizing summary focus
+  - geometry-aware association passed regression replay without reintroducing continuity or event noise
   - dense-scene strongest-object summaries are materially more stable across short replay windows
   - longer dense-scene replay windows now keep the late-window focus anchored on the nearer active storm field
   - local-only regression replay now works reliably even when only part of the requested day is cached

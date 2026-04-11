@@ -6,7 +6,7 @@ from src.buffer import BufferedScan
 from src.detection import DetectedObject
 from src.parser import ReflectivityData
 from src.tracker import StormTracker
-from src.tracking.association import AssociationResult, associate_tracks
+from src.tracking.association import AssociationResult, associate_tracks, compute_advected_iou
 
 
 def _make_object(obj_id: int, lat: float, lon: float, peak_dbz: float = 45.0, area_km2: float = 100.0) -> DetectedObject:
@@ -120,3 +120,54 @@ def test_associate_tracks_split_candidate_is_deduped():
     related_new_ids = result.split_candidates[1]
     assert len(related_new_ids) == len(set(related_new_ids))
     assert len(related_new_ids) == 2
+
+
+def test_compute_advected_iou_rewards_motion_aligned_overlap():
+    prev_mask = np.zeros((20, 20), dtype=bool)
+    prev_mask[5:8, 5:8] = True
+    new_mask = np.zeros((20, 20), dtype=bool)
+    new_mask[7:10, 8:11] = True
+    assert compute_advected_iou(prev_mask, new_mask, shift_rows=2, shift_cols=3) > 0.9
+    assert compute_advected_iou(prev_mask, new_mask, shift_rows=0, shift_cols=0) == 0.0
+
+
+def test_associate_tracks_uses_advected_geometry_to_keep_match():
+    tracker = StormTracker()
+    t1 = datetime(2026, 4, 8, 18, 30)
+    t2 = t1 + timedelta(minutes=5)
+
+    reflectivity1 = np.full((360, 500), np.nan)
+    reflectivity2 = np.full((360, 500), np.nan)
+    reflectivity1[85:95, 195:205] = 45.0
+    reflectivity2[89:99, 201:211] = 45.0
+
+    prev_obj = _make_object(1, 35.5, -97.3)
+    new_obj = _make_object(1, 35.52, -97.26)
+    prev_mask = np.zeros((360, 500), dtype=bool)
+    prev_mask[85:95, 195:205] = True
+    new_mask = np.zeros((360, 500), dtype=bool)
+    new_mask[89:99, 201:211] = True
+
+    scan1 = _make_scan("KTLX", t1, [prev_obj], {1: prev_mask})
+    scan2 = _make_scan("KTLX", t2, [new_obj], {1: new_mask})
+    scan1.reflectivity_data.reflectivity = reflectivity1
+    scan2.reflectivity_data.reflectivity = reflectivity2
+    tracker.update(scan1)
+
+    from src.tracking.motion_field import MotionFieldEstimate
+    from unittest.mock import patch
+
+    with patch(
+        "src.tracking.association.estimate_motion_field",
+        return_value=MotionFieldEstimate(
+            shift_rows=4.0,
+            shift_cols=6.0,
+            quality=0.9,
+            source="phase_correlation",
+            downsample=4,
+        ),
+    ):
+        result = associate_tracks(scan1, scan2, tracker.all_tracks, tracker._obj_to_track)
+    assert result.primary_matches == {1: 1}
+    score = result.candidate_scores[0]
+    assert score.advected_overlap_score > score.overlap_score

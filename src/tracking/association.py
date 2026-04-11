@@ -7,11 +7,17 @@ from scipy.optimize import linear_sum_assignment
 
 from src.buffer import BufferedScan
 from src.sites import haversine_distance_km
-from src.tracking.motion_field import estimate_geographic_motion_field, estimate_scan_geographic_motion_field, predict_latlon_position
+from src.tracking.motion_field import (
+    estimate_geographic_motion_field,
+    estimate_motion_field,
+    estimate_scan_geographic_motion_field,
+    predict_latlon_position,
+)
 from src.tracking.segmentation import segment_buffered_scan
 from src.tracking.types import AssociationScore, Track
 
 MIN_OVERLAP_PCT = 0.30
+MIN_ADVECTED_OVERLAP_PCT = 0.15
 MAX_STORM_SPEED_KMH = 120.0
 UNMATCHED_COST = 10.0
 
@@ -36,6 +42,42 @@ def compute_overlap(mask_a: np.ndarray, mask_b: np.ndarray) -> float:
     return float(intersection) / float(np.sum(mask_a))
 
 
+def _shift_mask(mask: np.ndarray, shift_rows: float, shift_cols: float) -> np.ndarray:
+    """Translate a boolean mask by rounded pixel shifts."""
+    row_shift = int(round(shift_rows))
+    col_shift = int(round(shift_cols))
+    shifted = np.zeros_like(mask, dtype=bool)
+
+    src_row_start = max(0, -row_shift)
+    src_row_end = mask.shape[0] - max(0, row_shift)
+    src_col_start = max(0, -col_shift)
+    src_col_end = mask.shape[1] - max(0, col_shift)
+    dst_row_start = max(0, row_shift)
+    dst_row_end = dst_row_start + max(0, src_row_end - src_row_start)
+    dst_col_start = max(0, col_shift)
+    dst_col_end = dst_col_start + max(0, src_col_end - src_col_start)
+
+    if src_row_start >= src_row_end or src_col_start >= src_col_end:
+        return shifted
+
+    shifted[dst_row_start:dst_row_end, dst_col_start:dst_col_end] = mask[src_row_start:src_row_end, src_col_start:src_col_end]
+    return shifted
+
+
+def compute_iou(mask_a: np.ndarray, mask_b: np.ndarray) -> float:
+    """Compute intersection-over-union between two masks."""
+    intersection = int(np.count_nonzero(mask_a & mask_b))
+    union = int(np.count_nonzero(mask_a | mask_b))
+    if union <= 0:
+        return 0.0
+    return float(intersection) / float(union)
+
+
+def compute_advected_iou(prev_mask: np.ndarray, new_mask: np.ndarray, shift_rows: float, shift_cols: float) -> float:
+    """Compute IoU after advecting the previous mask with the scene motion."""
+    return compute_iou(_shift_mask(prev_mask, shift_rows, shift_cols), new_mask)
+
+
 def _candidate_score(
     track: Track,
     new_object,
@@ -44,12 +86,15 @@ def _candidate_score(
     max_distance_km: float,
     predicted_lat: float,
     predicted_lon: float,
+    motion_shift_rows: float,
+    motion_shift_cols: float,
 ) -> AssociationScore | None:
     current_object = track.current_object
     if current_object is None:
         return None
 
     overlap = compute_overlap(prev_mask, new_mask)
+    advected_overlap = compute_advected_iou(prev_mask, new_mask, motion_shift_rows, motion_shift_cols)
     centroid_distance = haversine_distance_km(
         current_object.centroid_lat,
         current_object.centroid_lon,
@@ -63,20 +108,21 @@ def _candidate_score(
         new_object.centroid_lon,
     )
     plausible_distance = max(max_distance_km, 5.0)
-    if overlap < MIN_OVERLAP_PCT and centroid_distance > plausible_distance:
+    if overlap < MIN_OVERLAP_PCT and advected_overlap < MIN_ADVECTED_OVERLAP_PCT and centroid_distance > plausible_distance:
         return None
 
-    overlap_cost = 1.0 - overlap
+    overlap_cost = 1.0 - max(overlap, advected_overlap)
     distance_score = min(centroid_distance / plausible_distance, 5.0)
     predicted_score = min(predicted_distance / plausible_distance, 5.0)
     area_change = abs(new_object.area_km2 - current_object.area_km2) / max(current_object.area_km2, 1.0)
     intensity_change = abs(new_object.peak_dbz - current_object.peak_dbz) / 60.0
-    total_cost = overlap_cost + (predicted_score * 0.6) + (distance_score * 0.2) + (area_change * 0.15) + (intensity_change * 0.05)
+    total_cost = (overlap_cost * 0.65) + (predicted_score * 0.18) + (distance_score * 0.07) + (area_change * 0.07) + (intensity_change * 0.03)
 
     return AssociationScore(
         track_id=track.track_id,
         object_id=new_object.object_id,
         overlap_score=round(overlap, 4),
+        advected_overlap_score=round(advected_overlap, 4),
         distance_score=round(distance_score, 4),
         predicted_position_score=round(predicted_score, 4),
         area_change_score=round(area_change, 4),
@@ -101,6 +147,10 @@ def associate_tracks(
     previous_segmentation = segment_buffered_scan(previous_scan)
     current_segmentation = segment_buffered_scan(current_scan)
     geo_motion = estimate_scan_geographic_motion_field(previous_scan, current_scan)
+    pixel_motion = estimate_motion_field(
+        previous_scan.reflectivity_data.reflectivity,
+        current_scan.reflectivity_data.reflectivity,
+    )
     if geo_motion.quality <= 0.0:
         geo_motion = estimate_geographic_motion_field(previous_segmentation.objects, current_segmentation.objects)
     result.geo_motion = geo_motion
@@ -148,6 +198,8 @@ def associate_tracks(
                 max_distance_km=max_distance_km,
                 predicted_lat=predicted_lat,
                 predicted_lon=predicted_lon,
+                motion_shift_rows=pixel_motion.shift_rows,
+                motion_shift_cols=pixel_motion.shift_cols,
             )
             if score is None:
                 continue

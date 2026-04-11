@@ -26,6 +26,7 @@ class AssociationScore:
     track_id: int
     object_id: int
     overlap_score: float
+    advected_overlap_score: float
     distance_score: float
     predicted_position_score: float
     area_change_score: float
