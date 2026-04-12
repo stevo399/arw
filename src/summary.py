@@ -54,7 +54,6 @@ def _should_downgrade_focus_motion(track, motion: MotionVector | None, events: l
     if not getattr(track, "is_primary_focus", False):
         return False
 
-    identity_score = _identity_score(track)
     focus_continuity = getattr(track, "focus_continuity", None)
     diagnostics = getattr(track, "identity_diagnostics", None)
     event_context = diagnostics.event_context if diagnostics is not None else None
@@ -64,13 +63,13 @@ def _should_downgrade_focus_motion(track, motion: MotionVector | None, events: l
         else sum(1 for event in events or [] if event["event_type"] in {"merge", "split"})
     )
 
-    if focus_continuity is not None and focus_continuity.score < 0.45:
+    if focus_continuity is not None and focus_continuity.score <= 0.6:
         return True
-    if identity_score < 0.45:
+    if focus_continuity is None and _identity_score(track) < 0.45:
         return True
-    if structural_event_count >= 6 and identity_score < 0.75:
+    if focus_continuity is None and structural_event_count >= 6 and _identity_score(track) < 0.75:
         return True
-    if event_context in {"new_track", "split_child", "merge_survivor"} and identity_score < 0.75:
+    if focus_continuity is None and event_context in {"new_track", "split_child", "merge_survivor"} and _identity_score(track) < 0.75:
         return True
     return False
 

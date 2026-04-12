@@ -19,7 +19,7 @@ def test_render_markdown_includes_heading_flip_metric():
         mean_focus_continuity=0.38,
         mean_focus_motion_confidence=0.41,
         focus_low_identity_scans=1,
-        focus_low_continuity_scans=2,
+        focus_low_continuity_scans=3,
         focus_low_motion_scans=2,
         focus_switches=1,
         focus_heading_flips_ge_90=2,
@@ -62,4 +62,4 @@ def test_render_markdown_includes_heading_flip_metric():
     assert "focus low-continuity scans" in markdown
     assert "focus_continuity=low:0.38" in markdown
     assert "focus_identity=medium:0.52" in markdown
-    assert "`2`" in markdown
+    assert "`3`" in markdown

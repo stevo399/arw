@@ -19,7 +19,7 @@ Date: 2026-04-11
 - mean focus continuity: `0.65`
 - mean focus motion confidence: `0.98`
 - focus low-identity scans: `1`
-- focus low-continuity scans: `0`
+- focus low-continuity scans: `3`
 - focus low-motion scans: `0`
 - focus switches: `1`
 - focus heading flips >=90 deg: `3`

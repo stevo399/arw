@@ -269,7 +269,7 @@ def run_benchmark(entry: dict) -> BenchmarkResult:
             1 for snapshot in snapshots if snapshot.focus_identity_score is not None and snapshot.focus_identity_score < 0.45
         ),
         focus_low_continuity_scans=sum(
-            1 for snapshot in snapshots if snapshot.focus_continuity_score is not None and snapshot.focus_continuity_score < 0.45
+            1 for snapshot in snapshots if snapshot.focus_continuity_score is not None and snapshot.focus_continuity_score <= 0.6
         ),
         focus_low_motion_scans=sum(
             1

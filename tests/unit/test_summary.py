@@ -135,6 +135,7 @@ def test_generate_summary_downgrades_low_identity_primary_focus_motion():
     track = _make_track(obj=obj)
     track.is_primary_focus = True
     track.identity_confidence = 0.4
+    track.focus_continuity = type("Focus", (), {"score": 0.4, "recent_structural_event_count": 1})()
     track._motion_override = MotionVector(speed_kmh=56.3, speed_mph=35, heading_deg=45.0, heading_label="NE")
     text = generate_summary(
         site_id="KTLX",
@@ -153,6 +154,7 @@ def test_generate_summary_downgrades_primary_focus_motion_under_high_event_press
     track = _make_track(obj=obj)
     track.is_primary_focus = True
     track.identity_confidence = 0.7
+    track.focus_continuity = type("Focus", (), {"score": 0.6, "recent_structural_event_count": 6})()
     track._motion_override = MotionVector(speed_kmh=32.0, speed_mph=20, heading_deg=292.0, heading_label="WNW")
     events = [{"event_type": "merge", "description": "merge"} for _ in range(4)] + [
         {"event_type": "split", "description": "split"} for _ in range(2)

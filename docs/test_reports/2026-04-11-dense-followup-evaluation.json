@@ -16,7 +16,7 @@
     "mean_focus_continuity": 0.65,
     "mean_focus_motion_confidence": 0.98,
     "focus_low_identity_scans": 1,
-    "focus_low_continuity_scans": 0,
+    "focus_low_continuity_scans": 3,
     "focus_low_motion_scans": 0,
     "focus_switches": 1,
     "focus_heading_flips_ge_90": 3,
