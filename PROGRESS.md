@@ -38,6 +38,7 @@
   - focus continuity is now a first-class diagnostic with reviewable evaluation metrics instead of being inferred indirectly from motion confidence
   - focus continuity is now the primary publishability metric for unstable focus-motion summaries in dense scenes, and the dense 5-scan follow-up aligns `3` degraded-continuity scans with `tracking uncertain` output
   - live replay diagnostics now print focus track identity and focus continuity directly so dense-scene summary suppression can be reviewed against the same operational output used for fetch/render checks
+  - benchmark evaluation now includes broader cached replay windows plus lineage-pressure and summary-publishability counts, and the local-only replay harness backfills partially cached windows to keep extended validation honest
   - dense-scene strongest-object summaries are materially more stable across short replay windows
   - longer dense-scene replay windows now keep the late-window focus anchored on the nearer active storm field
   - local-only regression replay now works reliably even when only part of the requested day is cached

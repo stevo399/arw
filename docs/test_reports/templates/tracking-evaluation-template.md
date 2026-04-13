@@ -35,7 +35,14 @@ uv run python scripts/evaluate_tracking.py --manifest docs/benchmarks/tracking_b
 - focus switches:
 - focus heading flips >=90 deg:
 - focus flips with low motion confidence:
+- summary tracking-uncertain count:
+- summary moving-motion count:
+- summary stationary/nearly-stationary count:
 - total new tracks after first scan:
+- merged tracks total:
+- lost tracks total:
+- split children total:
+- absorbed links total:
 - fragmentation proxy:
 
 Representative snapshots:

@@ -163,8 +163,8 @@ def _cached_scan_records_for_date(site_id: str, date_str: str) -> list[tuple[dat
 
 def _local_only_scans(site_id: str, date_str: str | None, scans: list, count: int) -> list:
     cached = _cached_scans(site_id, scans)
-    if cached:
-        return cached
+    if len(cached) >= count:
+        return cached[-count:]
     if date_str:
         cached_records = _cached_scan_records_for_date(site_id, date_str)
         if cached_records:
@@ -173,7 +173,7 @@ def _local_only_scans(site_id: str, date_str: str | None, scans: list, count: in
                     self.filename = filename
 
             return [CachedScan(filename) for _, filename in cached_records[-count:]]
-    return []
+    return cached
 
 
 def main() -> None:

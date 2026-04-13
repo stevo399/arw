@@ -124,3 +124,37 @@ def test_local_only_scans_falls_back_to_most_recent_cached_for_date(monkeypatch,
         "KTLX20260410_171000_V06",
         "KTLX20260410_172000_V06",
     ]
+
+
+def test_local_only_scans_backfills_when_selected_window_is_partially_cached(monkeypatch, tmp_path):
+    site_cache_dir = tmp_path / "KEYX"
+    site_cache_dir.mkdir()
+    for filename in [
+        "KEYX20260410_230040_V06",
+        "KEYX20260410_230522_V06",
+        "KEYX20260410_231003_V06",
+        "KEYX20260410_231446_V06",
+        "KEYX20260410_231928_V06",
+        "KEYX20260410_233755_V06",
+        "KEYX20260410_234237_V06",
+    ]:
+        (site_cache_dir / filename).write_text("")
+
+    class Scan:
+        def __init__(self, filename: str):
+            self.filename = filename
+
+    selected_window = [Scan("KEYX20260410_231003_V06"), Scan("KEYX20260410_231446_V06")]
+    monkeypatch.setattr(
+        "scripts.live_replay.get_cache_path",
+        lambda site_id, filename: str(Path(tmp_path) / site_id / filename),
+    )
+
+    selected = _local_only_scans("KEYX", "2026-04-10", selected_window, 5)
+    assert [scan.filename for scan in selected] == [
+        "KEYX20260410_231003_V06",
+        "KEYX20260410_231446_V06",
+        "KEYX20260410_231928_V06",
+        "KEYX20260410_233755_V06",
+        "KEYX20260410_234237_V06",
+    ]

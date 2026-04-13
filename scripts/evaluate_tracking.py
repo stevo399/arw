@@ -74,6 +74,9 @@ class BenchmarkResult:
     focus_heading_flips_ge_90: int
     focus_flips_with_low_motion_confidence: int
     focus_track_distance_changes: int
+    summary_tracking_uncertain_count: int
+    summary_motion_published_count: int
+    summary_stationaryish_count: int
     total_new_tracks_after_first_scan: int
     merged_tracks_total: int
     lost_tracks_total: int
@@ -228,6 +231,16 @@ def run_benchmark(entry: dict) -> BenchmarkResult:
         previous_focus_track_id = snapshot.focus_track_id
         previous_focus_heading_deg = snapshot.focus_heading_deg
 
+    summary_tracking_uncertain_count = sum(1 for snapshot in snapshots if "tracking uncertain" in snapshot.summary)
+    summary_motion_published_count = sum(
+        1 for snapshot in snapshots if "moving " in snapshot.summary and "tracking uncertain" not in snapshot.summary
+    )
+    summary_stationaryish_count = sum(
+        1
+        for snapshot in snapshots
+        if "stationary" in snapshot.summary or "nearly stationary" in snapshot.summary
+    )
+
     all_tracks = tracker.all_tracks
     merged_tracks_total = sum(1 for track in all_tracks if track.status == "merged")
     lost_tracks_total = sum(1 for track in all_tracks if track.status == "lost")
@@ -280,6 +293,9 @@ def run_benchmark(entry: dict) -> BenchmarkResult:
         focus_heading_flips_ge_90=focus_heading_flips_ge_90,
         focus_flips_with_low_motion_confidence=focus_flips_with_low_motion_confidence,
         focus_track_distance_changes=focus_track_distance_changes,
+        summary_tracking_uncertain_count=summary_tracking_uncertain_count,
+        summary_motion_published_count=summary_motion_published_count,
+        summary_stationaryish_count=summary_stationaryish_count,
         total_new_tracks_after_first_scan=total_new_tracks_after_first_scan,
         merged_tracks_total=merged_tracks_total,
         lost_tracks_total=lost_tracks_total,
@@ -321,7 +337,14 @@ def render_markdown(results: list[BenchmarkResult]) -> str:
             f"- focus switches: `{result.focus_switches}`",
             f"- focus heading flips >=90 deg: `{result.focus_heading_flips_ge_90}`",
             f"- focus flips with low motion confidence: `{result.focus_flips_with_low_motion_confidence}`",
+            f"- summary tracking-uncertain count: `{result.summary_tracking_uncertain_count}`",
+            f"- summary moving-motion count: `{result.summary_motion_published_count}`",
+            f"- summary stationary/nearly-stationary count: `{result.summary_stationaryish_count}`",
             f"- total new tracks after first scan: `{result.total_new_tracks_after_first_scan}`",
+            f"- merged tracks total: `{result.merged_tracks_total}`",
+            f"- lost tracks total: `{result.lost_tracks_total}`",
+            f"- split children total: `{result.split_children_total}`",
+            f"- absorbed links total: `{result.absorbed_links_total}`",
             f"- fragmentation proxy: `{result.fragmentation_proxy}`",
             "",
             "Representative snapshots:",

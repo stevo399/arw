@@ -25,6 +25,9 @@ def test_render_markdown_includes_heading_flip_metric():
         focus_heading_flips_ge_90=2,
         focus_flips_with_low_motion_confidence=1,
         focus_track_distance_changes=2,
+        summary_tracking_uncertain_count=3,
+        summary_motion_published_count=0,
+        summary_stationaryish_count=1,
         total_new_tracks_after_first_scan=6,
         merged_tracks_total=3,
         lost_tracks_total=0,
@@ -60,6 +63,8 @@ def test_render_markdown_includes_heading_flip_metric():
     assert "focus heading flips >=90 deg" in markdown
     assert "focus flips with low motion confidence" in markdown
     assert "focus low-continuity scans" in markdown
+    assert "summary tracking-uncertain count" in markdown
+    assert "merged tracks total" in markdown
     assert "focus_continuity=low:0.38" in markdown
     assert "focus_identity=medium:0.52" in markdown
     assert "`3`" in markdown
