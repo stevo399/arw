@@ -25,6 +25,11 @@ class ReplayDiagnostics:
     active_count: int
     uncertain_tracks: int
     max_speed_mph: int
+    focus_track_id: int | None
+    focus_identity_label: str | None
+    focus_identity_score: float | None
+    focus_continuity_label: str | None
+    focus_continuity_score: float | None
     scan_quality_score: float
     scan_quality_flags: list[str]
     merge_count: int
@@ -44,6 +49,7 @@ def summarize_scan(site_name: str, buffered: BufferedScan, tracker: StormTracker
     split_count = sum(1 for event in tracker.recent_events if event["event_type"] == "split")
     uncertain_tracks = 0
     max_speed_mph = 0
+    focus_track = next((track for track in tracker.active_tracks if getattr(track, "is_primary_focus", False)), None)
     for track in tracker.active_tracks:
         motion = track.get_motion()
         if motion.heading_label == "uncertain":
@@ -64,6 +70,27 @@ def summarize_scan(site_name: str, buffered: BufferedScan, tracker: StormTracker
         active_count=len(tracker.active_tracks),
         uncertain_tracks=uncertain_tracks,
         max_speed_mph=max_speed_mph,
+        focus_track_id=focus_track.track_id if focus_track is not None else None,
+        focus_identity_label=(
+            focus_track.identity_diagnostics.label
+            if focus_track is not None and getattr(focus_track, "identity_diagnostics", None) is not None
+            else None
+        ),
+        focus_identity_score=(
+            round(float(focus_track.identity_diagnostics.score), 2)
+            if focus_track is not None and getattr(focus_track, "identity_diagnostics", None) is not None
+            else (round(float(focus_track.identity_confidence), 2) if focus_track is not None else None)
+        ),
+        focus_continuity_label=(
+            focus_track.focus_continuity.label
+            if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
+            else None
+        ),
+        focus_continuity_score=(
+            round(float(focus_track.focus_continuity.score), 2)
+            if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
+            else None
+        ),
         scan_quality_score=buffered.scan_quality.score if buffered.scan_quality is not None else 1.0,
         scan_quality_flags=list(buffered.scan_quality.flags) if buffered.scan_quality is not None else [],
         merge_count=merge_count,
@@ -195,6 +222,9 @@ def main() -> None:
             f"active={diagnostics.active_count} "
             f"uncertain_tracks={diagnostics.uncertain_tracks} "
             f"max_speed_mph={diagnostics.max_speed_mph} "
+            f"focus_track={diagnostics.focus_track_id} "
+            f"focus_identity={diagnostics.focus_identity_label}:{diagnostics.focus_identity_score} "
+            f"focus_continuity={diagnostics.focus_continuity_label}:{diagnostics.focus_continuity_score} "
             f"scan_quality={diagnostics.scan_quality_score:.2f} "
             f"quality_flags={quality_flags} "
             f"merges={diagnostics.merge_count} "

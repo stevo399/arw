@@ -368,6 +368,7 @@ Completion notes:
   - lower-complexity benchmark focus identity moved to `0.58 / 0.83 / 0.77`, eliminating the prior all-low-confidence pattern in the simpler scene
   - merge/split-sensitive benchmark focus identity stayed medium/high across the window while still recording one focus switch and one heading flip for later continuity review
   - dense benchmark kept one low-identity focus scan (`0.40`) at the abrupt heading reversal while the surrounding scans stayed medium/high, which is the intended calibration direction for ambiguous continuity
+  - live replay diagnostics now expose `focus_track`, `focus_identity`, and `focus_continuity`, making the confidence/publishability path directly reviewable during fetch/render validation instead of only in offline evaluation reports
 
 ## Task Order
 

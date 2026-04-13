@@ -72,6 +72,9 @@ def test_summarize_scan_reports_motion_sanity_fields():
     assert diagnostics.active_count == 1
     assert diagnostics.uncertain_tracks == 1
     assert diagnostics.max_speed_mph == 137
+    assert diagnostics.focus_track_id == 1
+    assert diagnostics.focus_identity_label is not None
+    assert diagnostics.focus_continuity_label is not None
     assert diagnostics.scan_quality_score == 0.9
     assert diagnostics.scan_quality_flags == []
     assert "tracking uncertain" in diagnostics.summary
