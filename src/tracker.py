@@ -239,10 +239,18 @@ class StormTracker:
         structural_event_count: int,
     ) -> FocusContinuity:
         identity_score = track.identity_diagnostics.score if track.identity_diagnostics is not None else track.identity_confidence
+        motion = track.last_motion
+        motion_confidence_score = (
+            motion.confidence.score
+            if motion is not None and motion.confidence is not None and motion.confidence.score is not None
+            else 1.0
+        )
+        motion_is_stationaryish = motion is None or motion.heading_label in {"stationary", "nearly stationary"}
         recent_heading_flip_total = recent_heading_flip_count(
             [(p.timestamp, p.latitude, p.longitude) for p in track.positions],
             max_steps=4,
         )
+        effective_heading_flip_total = 0 if motion_is_stationaryish else recent_heading_flip_total
 
         recent_focus_switch_count = 1 if previous_focus_track_id is not None and previous_focus_track_id != track.track_id else 0
         score = 1.0
@@ -250,10 +258,10 @@ class StormTracker:
         if recent_focus_switch_count:
             score -= 0.35
             reason = "recent focus handoff"
-        if recent_heading_flip_total >= 2:
+        if effective_heading_flip_total >= 2:
             score -= 0.55
             reason = "repeated focus heading reversals"
-        elif recent_heading_flip_total == 1:
+        elif effective_heading_flip_total == 1:
             score -= 0.35
             reason = "recent focus heading reversal"
         if structural_event_count >= 6:
@@ -262,6 +270,12 @@ class StormTracker:
         elif structural_event_count >= 4:
             score -= 0.15
             reason = "elevated structural event pressure around focus"
+        if structural_event_count >= 6 and motion_confidence_score < 0.45:
+            score -= 0.4
+            reason = "high structural pressure with low motion confidence"
+        elif structural_event_count >= 4 and motion_confidence_score < 0.45:
+            score -= 0.2
+            reason = "elevated structural pressure with low motion confidence"
         if identity_score < 0.45:
             score -= 0.25
             reason = "weak focus identity continuity"
@@ -273,7 +287,7 @@ class StormTracker:
             label=_confidence_label(score),
             score=score,
             reason=reason,
-            recent_heading_flip_count=recent_heading_flip_total,
+            recent_heading_flip_count=effective_heading_flip_total,
             recent_focus_switch_count=recent_focus_switch_count,
             recent_structural_event_count=structural_event_count,
         )

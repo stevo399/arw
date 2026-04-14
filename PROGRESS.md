@@ -40,6 +40,7 @@
   - live replay diagnostics now print focus track identity and focus continuity directly so dense-scene summary suppression can be reviewed against the same operational output used for fetch/render checks
   - benchmark evaluation now includes broader cached replay windows plus lineage-pressure and summary-publishability counts, and the local-only replay harness backfills partially cached windows to keep extended validation honest
   - publishable motion is now also gated by agreement with recent short-horizon track trajectory, which suppressed the late dense-scene reversal pair in live replay without regressing the simpler low-motion window
+  - focus continuity now penalizes low-confidence motion under high structural pressure while ignoring heading-instability penalties for stationaryish motion, which aligned dense late-window continuity with the uncertain summaries and removed the false low-continuity hits from the simpler window
   - dense-scene strongest-object summaries are materially more stable across short replay windows
   - longer dense-scene replay windows now keep the late-window focus anchored on the nearer active storm field
   - local-only regression replay now works reliably even when only part of the requested day is cached
