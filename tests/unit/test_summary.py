@@ -171,6 +171,32 @@ def test_generate_summary_downgrades_primary_focus_motion_under_high_event_press
     assert "moving WNW" not in text
 
 
+def test_generate_summary_downgrades_primary_focus_motion_under_repeated_heading_reversals():
+    obj = _make_object()
+    track = _make_track(obj=obj)
+    track.is_primary_focus = True
+    track.identity_confidence = 0.85
+    track.focus_continuity = type(
+        "Focus",
+        (),
+        {"score": 0.7, "recent_structural_event_count": 6, "recent_heading_flip_count": 2},
+    )()
+    track._motion_override = MotionVector(speed_kmh=32.0, speed_mph=20, heading_deg=135.0, heading_label="SE")
+    events = [{"event_type": "merge", "description": "merge"} for _ in range(4)] + [
+        {"event_type": "split", "description": "split"} for _ in range(2)
+    ]
+    text = generate_summary(
+        site_id="KTLX",
+        site_name="Oklahoma City",
+        timestamp="2026-04-08T18:30:00Z",
+        objects=[obj],
+        tracks=[track],
+        events=events,
+    )
+    assert "tracking uncertain" in text
+    assert "moving SE" not in text
+
+
 def test_generate_summary_multiple_objects():
     obj1 = _make_object(obj_id=1, peak_dbz=55.0, peak_label="intense rain", area_km2=200.0)
     obj2 = _make_object(obj_id=2, peak_dbz=30.0, peak_label="moderate rain", area_km2=50.0)

@@ -22,6 +22,8 @@ STRONG_FIELD_QUALITY = 0.5
 MAX_HISTORY_FIELD_SPEED_DELTA_KMH = 30.0
 MAX_HISTORY_FIELD_RATIO = 1.8
 MAX_HISTORY_FIELD_HEADING_DELTA_DEG = 75.0
+MAX_RECENT_HEADING_SPREAD_DEG = 60.0
+MAX_HISTORY_RECENT_HEADING_DELTA_DEG = 75.0
 
 
 @dataclass
@@ -82,6 +84,42 @@ def _step_headings_deg(positions: list[tuple[datetime, float, float]]) -> list[f
         heading_rad = math.atan2(delta_lon_km, delta_lat_km)
         headings.append(math.degrees(heading_rad) % 360)
     return headings
+
+
+def recent_heading_flip_count(positions: list[tuple[datetime, float, float]], *, max_steps: int = 4) -> int:
+    """Count large recent per-step heading reversals over a short history window."""
+    if max_steps < 2:
+        return 0
+    step_headings = _step_headings_deg(positions)
+    if len(step_headings) < 2:
+        return 0
+    recent_headings = step_headings[-max_steps:]
+    return sum(
+        1
+        for previous_heading, current_heading in zip(recent_headings, recent_headings[1:])
+        if _heading_delta_deg(previous_heading, current_heading) >= MAX_STEP_HEADING_DELTA_DEG
+    )
+
+
+def _circular_mean_deg(headings: list[float]) -> float | None:
+    if not headings:
+        return None
+    sin_sum = sum(math.sin(math.radians(heading)) for heading in headings)
+    cos_sum = sum(math.cos(math.radians(heading)) for heading in headings)
+    if abs(sin_sum) < 1e-6 and abs(cos_sum) < 1e-6:
+        return None
+    return math.degrees(math.atan2(sin_sum, cos_sum)) % 360.0
+
+
+def _recent_consensus_heading_deg(positions: list[tuple[datetime, float, float]], *, max_steps: int = 3) -> float | None:
+    headings = _step_headings_deg(positions)
+    if len(headings) < 2:
+        return None
+    recent_headings = headings[-max_steps:]
+    anchor = recent_headings[-1]
+    if any(_heading_delta_deg(anchor, heading) > MAX_RECENT_HEADING_SPREAD_DEG for heading in recent_headings):
+        return None
+    return _circular_mean_deg(recent_headings)
 
 
 def _motion_confidence(
@@ -282,6 +320,15 @@ def _history_disagrees_with_field(history_motion: MotionVector, field_motion: Mo
     )
 
 
+def _motion_disagrees_with_recent_steps(motion: MotionVector, positions: list[tuple[datetime, float, float]]) -> bool:
+    if motion.heading_label in {"uncertain", "stationary", "nearly stationary"}:
+        return False
+    recent_heading = _recent_consensus_heading_deg(positions)
+    if recent_heading is None:
+        return False
+    return _heading_delta_deg(motion.heading_deg, recent_heading) >= MAX_HISTORY_RECENT_HEADING_DELTA_DEG
+
+
 def suppress_motion(reason: str) -> MotionVector:
     """Return a deliberately non-publishable motion estimate."""
     return MotionVector(
@@ -347,7 +394,20 @@ def resolve_reported_motion(
     if _continuity_requires_suppression(history_motion, continuity):
         return suppress_motion("track continuity too ambiguous for publishable motion"), history_motion
 
+    if _motion_disagrees_with_recent_steps(history_motion, positions):
+        if (
+            field_motion is not None
+            and field_motion.confidence is not None
+            and field_motion.heading_deg is not None
+        ):
+            recent_heading = _recent_consensus_heading_deg(positions)
+            if recent_heading is not None and _heading_delta_deg(field_motion.heading_deg, recent_heading) < MAX_RECENT_HEADING_SPREAD_DEG:
+                return field_motion, history_motion
+        return suppress_motion("recent track steps disagree with fitted heading"), history_motion
+
     if _history_disagrees_with_field(history_motion, field_motion):
+        if field_motion is not None and _motion_disagrees_with_recent_steps(field_motion, positions):
+            return suppress_motion("recent track steps disagree with field heading"), history_motion
         return field_motion, history_motion
 
     if identity_confidence >= HIGH_IDENTITY_CONFIDENCE and _history_motion_publishable(history_motion, continuity):
@@ -360,6 +420,8 @@ def resolve_reported_motion(
 
     if field_motion is not None and field_motion.confidence is not None:
         if field_motion.confidence.score >= MIN_FIELD_QUALITY:
+            if _motion_disagrees_with_recent_steps(field_motion, positions):
+                return suppress_motion("recent track steps disagree with field heading"), history_motion
             return field_motion, history_motion
 
     if history_motion.heading_label in {"stationary", "nearly stationary"}:

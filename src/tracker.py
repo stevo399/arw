@@ -1,7 +1,7 @@
 from datetime import datetime
 from src.buffer import BufferedScan
 from src.detection import DetectedObject
-from src.motion import resolve_reported_motion, MotionVector
+from src.motion import resolve_reported_motion, MotionVector, recent_heading_flip_count
 from src.tracking.motion import MotionContinuityContext
 from src.tracking.association import associate_tracks
 from src.tracking.events import normalize_merge_event, normalize_split_event
@@ -239,16 +239,10 @@ class StormTracker:
         structural_event_count: int,
     ) -> FocusContinuity:
         identity_score = track.identity_diagnostics.score if track.identity_diagnostics is not None else track.identity_confidence
-        motion = track.last_motion
-        recent_heading_flip_count = 0
-        if motion is not None and motion.heading_deg is not None and len(track.positions) >= 3:
-            recent_positions = [(p.timestamp, p.latitude, p.longitude) for p in track.positions[-3:]]
-            previous_motion, _ = resolve_reported_motion(
-                recent_positions[:-1],
-                identity_confidence=track.identity_confidence,
-            )
-            if previous_motion.heading_deg is not None and _heading_delta_deg(previous_motion.heading_deg, motion.heading_deg) >= 90.0:
-                recent_heading_flip_count = 1
+        recent_heading_flip_total = recent_heading_flip_count(
+            [(p.timestamp, p.latitude, p.longitude) for p in track.positions],
+            max_steps=4,
+        )
 
         recent_focus_switch_count = 1 if previous_focus_track_id is not None and previous_focus_track_id != track.track_id else 0
         score = 1.0
@@ -256,8 +250,11 @@ class StormTracker:
         if recent_focus_switch_count:
             score -= 0.35
             reason = "recent focus handoff"
-        if recent_heading_flip_count:
-            score -= 0.4
+        if recent_heading_flip_total >= 2:
+            score -= 0.55
+            reason = "repeated focus heading reversals"
+        elif recent_heading_flip_total == 1:
+            score -= 0.35
             reason = "recent focus heading reversal"
         if structural_event_count >= 6:
             score -= 0.3
@@ -276,7 +273,7 @@ class StormTracker:
             label=_confidence_label(score),
             score=score,
             reason=reason,
-            recent_heading_flip_count=recent_heading_flip_count,
+            recent_heading_flip_count=recent_heading_flip_total,
             recent_focus_switch_count=recent_focus_switch_count,
             recent_structural_event_count=structural_event_count,
         )

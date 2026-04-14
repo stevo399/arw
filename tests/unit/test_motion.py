@@ -2,6 +2,7 @@
 import math
 from datetime import datetime, timedelta
 from src.motion import compute_motion, MotionVector, motion_from_field, resolve_reported_motion
+from src.tracking.motion import _recent_consensus_heading_deg
 from src.tracking.motion_field import GeographicMotionFieldEstimate
 
 NEARLY_STATIONARY_KMH = 2.0
@@ -213,3 +214,41 @@ def test_resolve_reported_motion_uses_field_on_strong_history_field_disagreement
     assert diagnostic.source == "track_history"
     assert diagnostic.speed_kmh > 50
     assert reported.source == "motion_field"
+
+
+def test_recent_consensus_heading_ignores_wide_heading_spread():
+    positions = [
+        (datetime(2026, 4, 8, 18, 0), 35.00, -97.00),
+        (datetime(2026, 4, 8, 18, 5), 35.03, -96.97),
+        (datetime(2026, 4, 8, 18, 10), 35.01, -96.91),
+        (datetime(2026, 4, 8, 18, 15), 34.97, -96.95),
+    ]
+    assert _recent_consensus_heading_deg(positions) is None
+
+
+def test_resolve_reported_motion_suppresses_field_when_recent_steps_disagree():
+    positions = [
+        (datetime(2026, 4, 8, 18, 0), 35.00, -97.00),
+        (datetime(2026, 4, 8, 18, 5), 34.99, -96.97),
+        (datetime(2026, 4, 8, 18, 10), 34.98, -96.94),
+        (datetime(2026, 4, 8, 18, 15), 34.95, -96.97),
+        (datetime(2026, 4, 8, 18, 20), 34.91, -97.02),
+        (datetime(2026, 4, 8, 18, 25), 34.87, -97.08),
+    ]
+    field = GeographicMotionFieldEstimate(
+        delta_lat=0.03,
+        delta_lon=0.03,
+        quality=0.8,
+        source="phase_correlation",
+    )
+    reported, diagnostic = resolve_reported_motion(
+        positions,
+        identity_confidence=0.95,
+        field_estimate=field,
+        field_dt_hours=1.0,
+    )
+    assert _recent_consensus_heading_deg(positions) is not None
+    assert reported.source == "suppressed"
+    assert reported.heading_label == "uncertain"
+    assert reported.confidence is not None
+    assert reported.confidence.reason == "recent track steps disagree with field heading"

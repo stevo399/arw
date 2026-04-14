@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from src.detection import DetectedObject
 from src.tracker import StormTracker
+from src.tracking.types import IdentityConfidence
 
 
 def _make_object(
@@ -69,3 +70,41 @@ def test_update_primary_focus_keeps_existing_focus_without_clear_winner():
 
     assert current_focus.is_primary_focus is True
     assert challenger.is_primary_focus is False
+
+
+def test_build_focus_continuity_penalizes_repeated_recent_heading_reversals():
+    tracker = StormTracker()
+    track = tracker._create_track(
+        datetime(2026, 4, 8, 18, 0),
+        _make_object(1, 40.0, 90.0, 55.0, "intense rain", 180.0),
+    )
+    positions = [
+        (35.00, -97.00),
+        (35.05, -96.95),
+        (35.10, -96.90),
+        (35.05, -96.98),
+        (35.12, -96.92),
+    ]
+    base = datetime(2026, 4, 8, 18, 0)
+    track.positions.clear()
+    for index, (lat, lon) in enumerate(positions):
+        obj = DetectedObject(
+            object_id=index + 1,
+            centroid_lat=lat,
+            centroid_lon=lon,
+            distance_km=40.0,
+            bearing_deg=90.0,
+            peak_dbz=55.0,
+            peak_label="intense rain",
+            area_km2=180.0,
+            layers=[],
+        )
+        track.add_position(base + timedelta(minutes=index * 5), obj)
+    track.identity_confidence = 0.85
+    track.identity_diagnostics = IdentityConfidence(label="high", score=0.85)
+
+    continuity = tracker._build_focus_continuity(track, previous_focus_track_id=track.track_id, structural_event_count=6)
+
+    assert continuity.recent_heading_flip_count >= 2
+    assert continuity.score <= 0.2
+    assert continuity.label == "low"

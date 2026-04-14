@@ -62,8 +62,15 @@ def _should_downgrade_focus_motion(track, motion: MotionVector | None, events: l
         if focus_continuity is not None
         else sum(1 for event in events or [] if event["event_type"] in {"merge", "split"})
     )
+    recent_heading_flip_count = (
+        focus_continuity.recent_heading_flip_count
+        if focus_continuity is not None and getattr(focus_continuity, "recent_heading_flip_count", None) is not None
+        else 0
+    )
 
     if focus_continuity is not None and focus_continuity.score <= 0.6:
+        return True
+    if focus_continuity is not None and recent_heading_flip_count >= 2 and structural_event_count >= 4:
         return True
     if focus_continuity is None and _identity_score(track) < 0.45:
         return True
