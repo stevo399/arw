@@ -184,3 +184,34 @@ def test_build_focus_continuity_penalizes_low_motion_confidence_under_high_struc
     assert continuity.score == 0.3
     assert continuity.label == "low"
     assert continuity.reason == "high structural pressure with low motion confidence"
+
+
+def test_build_focus_continuity_records_crowded_challenger_pressure_diagnostics():
+    tracker = StormTracker()
+    track = tracker._create_track(
+        datetime(2026, 4, 8, 18, 0),
+        _make_object(1, 40.0, 90.0, 55.0, "intense rain", 180.0),
+    )
+    track.identity_confidence = 0.85
+    track.identity_diagnostics = IdentityConfidence(label="high", score=0.85)
+    track.last_motion = MotionVector(
+        speed_kmh=20.0,
+        speed_mph=12,
+        heading_deg=90.0,
+        heading_label="E",
+        confidence=MotionConfidence(label="high", score=0.9),
+    )
+
+    continuity = tracker._build_focus_continuity(
+        track,
+        previous_focus_track_id=track.track_id,
+        structural_event_count=6,
+        selection_margin=2.4,
+        runner_up_track_id=9,
+    )
+
+    assert continuity.selection_margin == 2.4
+    assert continuity.runner_up_track_id == 9
+    assert continuity.score == 0.7
+    assert continuity.label == "medium"
+    assert continuity.reason == "high structural event pressure around focus"

@@ -75,6 +75,8 @@ def test_summarize_scan_reports_motion_sanity_fields():
     assert diagnostics.focus_track_id == 1
     assert diagnostics.focus_identity_label is not None
     assert diagnostics.focus_continuity_label is not None
+    assert diagnostics.focus_selection_margin is None
+    assert diagnostics.focus_runner_up_track_id is None
     assert diagnostics.scan_quality_score == 0.9
     assert diagnostics.scan_quality_flags == []
     assert "tracking uncertain" in diagnostics.summary

@@ -237,6 +237,8 @@ class StormTracker:
         track: Track,
         previous_focus_track_id: int | None,
         structural_event_count: int,
+        selection_margin: float | None = None,
+        runner_up_track_id: int | None = None,
     ) -> FocusContinuity:
         identity_score = track.identity_diagnostics.score if track.identity_diagnostics is not None else track.identity_confidence
         motion = track.last_motion
@@ -287,6 +289,8 @@ class StormTracker:
             label=_confidence_label(score),
             score=score,
             reason=reason,
+            selection_margin=selection_margin,
+            runner_up_track_id=runner_up_track_id,
             recent_heading_flip_count=effective_heading_flip_total,
             recent_focus_switch_count=recent_focus_switch_count,
             recent_structural_event_count=structural_event_count,
@@ -310,11 +314,30 @@ class StormTracker:
             reverse=True,
         )
         primary = ranked_tracks[0]
+        primary_score = self._focus_score(primary, previous_focus_track_id)
+        runner_up_track_id = ranked_tracks[1].track_id if len(ranked_tracks) > 1 else None
+        selection_margin = (
+            round(primary_score - self._focus_score(ranked_tracks[1], previous_focus_track_id), 2)
+            if len(ranked_tracks) > 1
+            else None
+        )
         if previous_focus_track is not None:
             previous_score = self._focus_score(previous_focus_track, previous_focus_track_id)
-            challenger_score = self._focus_score(primary, previous_focus_track_id)
+            challenger_score = primary_score
             if primary.track_id != previous_focus_track.track_id and challenger_score < previous_score + FOCUS_SWITCH_MARGIN:
                 primary = previous_focus_track
+                primary_score = previous_score
+                other_scores = [
+                    (self._focus_score(track, previous_focus_track_id), track.track_id)
+                    for track in ranked_tracks
+                    if track.track_id != primary.track_id
+                ]
+                if other_scores:
+                    best_other_score, runner_up_track_id = max(other_scores)
+                    selection_margin = round(primary_score - best_other_score, 2)
+                else:
+                    runner_up_track_id = None
+                    selection_margin = None
         primary.is_primary_focus = True
         self._focus_history.append(primary.track_id)
         if len(self._focus_history) > 6:
@@ -322,7 +345,13 @@ class StormTracker:
         structural_event_count = sum(1 for event in self._recent_events if event["event_type"] in {"merge", "split"})
         for track in active_tracks:
             track.focus_continuity = None
-        primary.focus_continuity = self._build_focus_continuity(primary, previous_focus_track_id, structural_event_count)
+        primary.focus_continuity = self._build_focus_continuity(
+            primary,
+            previous_focus_track_id,
+            structural_event_count,
+            selection_margin=selection_margin,
+            runner_up_track_id=runner_up_track_id,
+        )
 
     def _append_merge_event(self, timestamp: datetime, surviving_track_id: int, merged_track_ids: list[int]) -> None:
         """Record a merge event with deduplicated track ids."""

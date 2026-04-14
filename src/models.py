@@ -84,6 +84,8 @@ class TrackFocus(BaseModel):
     label: str | None = None
     score: float | None = None
     reason: str | None = None
+    selection_margin: float | None = None
+    runner_up_track_id: int | None = None
     recent_heading_flip_count: int | None = None
     recent_focus_switch_count: int | None = None
     recent_structural_event_count: int | None = None

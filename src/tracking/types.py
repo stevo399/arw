@@ -71,6 +71,8 @@ class FocusContinuity:
     label: str
     score: float
     reason: str | None = None
+    selection_margin: float | None = None
+    runner_up_track_id: int | None = None
     recent_heading_flip_count: int = 0
     recent_focus_switch_count: int = 0
     recent_structural_event_count: int = 0

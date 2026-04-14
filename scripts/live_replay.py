@@ -30,6 +30,8 @@ class ReplayDiagnostics:
     focus_identity_score: float | None
     focus_continuity_label: str | None
     focus_continuity_score: float | None
+    focus_selection_margin: float | None
+    focus_runner_up_track_id: int | None
     scan_quality_score: float
     scan_quality_flags: list[str]
     merge_count: int
@@ -88,6 +90,18 @@ def summarize_scan(site_name: str, buffered: BufferedScan, tracker: StormTracker
         ),
         focus_continuity_score=(
             round(float(focus_track.focus_continuity.score), 2)
+            if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
+            else None
+        ),
+        focus_selection_margin=(
+            round(float(focus_track.focus_continuity.selection_margin), 2)
+            if focus_track is not None
+            and getattr(focus_track, "focus_continuity", None) is not None
+            and getattr(focus_track.focus_continuity, "selection_margin", None) is not None
+            else None
+        ),
+        focus_runner_up_track_id=(
+            focus_track.focus_continuity.runner_up_track_id
             if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
             else None
         ),
@@ -225,6 +239,8 @@ def main() -> None:
             f"focus_track={diagnostics.focus_track_id} "
             f"focus_identity={diagnostics.focus_identity_label}:{diagnostics.focus_identity_score} "
             f"focus_continuity={diagnostics.focus_continuity_label}:{diagnostics.focus_continuity_score} "
+            f"focus_selection_margin={diagnostics.focus_selection_margin} "
+            f"focus_runner_up={diagnostics.focus_runner_up_track_id} "
             f"scan_quality={diagnostics.scan_quality_score:.2f} "
             f"quality_flags={quality_flags} "
             f"merges={diagnostics.merge_count} "
