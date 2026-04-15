@@ -98,6 +98,15 @@ def _compute_pixel_area_km2(
     return area_m2 / 1e6
 
 
+def _range_bin_areas_km2(azimuths: np.ndarray, ranges_m: np.ndarray) -> np.ndarray:
+    if len(ranges_m) < 2 or len(azimuths) < 2:
+        return np.zeros_like(ranges_m, dtype=float)
+    range_spacing_m = abs(float(ranges_m[1] - ranges_m[0]))
+    az_spacing_deg = abs(float(azimuths[1] - azimuths[0])) if len(azimuths) > 1 else 1.0
+    az_spacing_rad = math.radians(az_spacing_deg)
+    return (ranges_m.astype(float) * az_spacing_rad * range_spacing_m) / 1e6
+
+
 def compute_object_properties(
     obj_mask: np.ndarray,
     reflectivity: np.ndarray,
@@ -112,10 +121,8 @@ def compute_object_properties(
     if len(az_indices) == 0:
         return None
 
-    total_area_km2 = sum(
-        _compute_pixel_area_km2(azimuths, ranges_m, int(az), int(rng))
-        for az, rng in zip(az_indices, rng_indices)
-    )
+    range_bin_areas_km2 = _range_bin_areas_km2(azimuths, ranges_m)
+    total_area_km2 = float(np.sum(range_bin_areas_km2[rng_indices]))
 
     if total_area_km2 < MIN_OBJECT_AREA_KM2:
         return None
@@ -150,17 +157,14 @@ def compute_object_properties(
         return None
 
     layers = []
+    obj_range_areas = range_bin_areas_km2[rng_indices]
     for min_dbz, max_dbz, layer_label in INTENSITY_THRESHOLDS:
-        layer_mask = obj_mask & (reflectivity >= min_dbz)
+        layer_valid = obj_dbz >= min_dbz
         if max_dbz != float("inf"):
-            layer_mask = layer_mask & (reflectivity < max_dbz)
-        layer_pixels = np.where(layer_mask)
-        if len(layer_pixels[0]) == 0:
+            layer_valid = layer_valid & (obj_dbz < max_dbz)
+        if not np.any(layer_valid):
             continue
-        layer_area = sum(
-            _compute_pixel_area_km2(azimuths, ranges_m, int(az), int(rng))
-            for az, rng in zip(layer_pixels[0], layer_pixels[1])
-        )
+        layer_area = float(np.sum(obj_range_areas[layer_valid]))
         if layer_area > 0:
             layers.append(IntensityLayerData(
                 label=layer_label,
@@ -201,48 +205,45 @@ class ThresholdHierarchyNode:
     mask: np.ndarray = field(repr=False)
 
 
-def _assign_parent_node_id(
-    candidate_mask: np.ndarray,
-    previous_level_nodes: list[ThresholdHierarchyNode],
-) -> int | None:
-    best_parent_id = None
-    best_overlap = 0
-    for node in previous_level_nodes:
-        overlap = int(np.count_nonzero(candidate_mask & node.mask))
-        if overlap > best_overlap:
-            best_overlap = overlap
-            best_parent_id = node.node_id
-    return best_parent_id
-
-
 def _build_threshold_hierarchy(
     parent_mask: np.ndarray,
     reflectivity: np.ndarray,
 ) -> list[ThresholdHierarchyNode]:
     """Build nested threshold components inside a low-threshold parent blob."""
     nodes: list[ThresholdHierarchyNode] = []
-    previous_level_nodes: list[ThresholdHierarchyNode] = []
+    previous_labeled_grid = np.zeros_like(parent_mask, dtype=int)
+    previous_component_to_node_id: dict[int, int] = {}
     next_node_id = 1
     for threshold in SEGMENTATION_HIERARCHY_THRESHOLDS:
         threshold_grid = parent_mask & ~np.isnan(reflectivity) & (reflectivity >= threshold)
         labeled_grid, component_count = label(threshold_grid)
-        current_level_nodes: list[ThresholdHierarchyNode] = []
+        current_component_to_node_id: dict[int, int] = {}
         for component_id in range(1, component_count + 1):
             component_mask = labeled_grid == component_id
             pixel_count = int(np.count_nonzero(component_mask))
             if pixel_count <= 0:
                 continue
-            current_level_nodes.append(ThresholdHierarchyNode(
+            parent_node_id = None
+            if previous_component_to_node_id:
+                overlapping_components = previous_labeled_grid[component_mask]
+                overlapping_components = overlapping_components[overlapping_components > 0]
+                if overlapping_components.size > 0:
+                    overlapping_values, overlapping_counts = np.unique(overlapping_components, return_counts=True)
+                    parent_component_id = int(overlapping_values[np.argmax(overlapping_counts)])
+                    parent_node_id = previous_component_to_node_id.get(parent_component_id)
+
+            nodes.append(ThresholdHierarchyNode(
                 node_id=next_node_id,
                 threshold=threshold,
-                parent_node_id=_assign_parent_node_id(component_mask, previous_level_nodes),
+                parent_node_id=parent_node_id,
                 pixel_count=pixel_count,
                 peak_dbz=float(np.nanmax(reflectivity[component_mask])),
                 mask=component_mask,
             ))
+            current_component_to_node_id[component_id] = next_node_id
             next_node_id += 1
-        nodes.extend(current_level_nodes)
-        previous_level_nodes = current_level_nodes
+        previous_labeled_grid = labeled_grid
+        previous_component_to_node_id = current_component_to_node_id
     return nodes
 
 
@@ -320,12 +321,15 @@ def _select_hierarchy_split_masks(
 
     remaining_mask = parent_mask & ~claimed_seed_pixels
     rows, cols = np.where(remaining_mask)
-    for row, col in zip(rows, cols):
-        distances = [
-            (row - seed_row) ** 2 + (col - seed_col) ** 2
-            for seed_row, seed_col in centroids
-        ]
-        child_masks[int(np.argmin(distances))][row, col] = True
+    if len(rows) > 0:
+        centroid_rows = np.array([row for row, _ in centroids], dtype=float)
+        centroid_cols = np.array([col for _, col in centroids], dtype=float)
+        distances = (rows[:, None] - centroid_rows[None, :]) ** 2 + (cols[:, None] - centroid_cols[None, :]) ** 2
+        assignments = np.argmin(distances, axis=1)
+        for index in range(len(child_masks)):
+            assigned = assignments == index
+            if np.any(assigned):
+                child_masks[index][rows[assigned], cols[assigned]] = True
 
     non_empty_children = [mask for mask in child_masks if np.any(mask)]
     return non_empty_children if len(non_empty_children) >= 2 else [parent_mask]
