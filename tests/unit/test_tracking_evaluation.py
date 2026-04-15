@@ -17,10 +17,14 @@ def test_render_markdown_includes_heading_flip_metric():
         mean_uncertain_tracks=0.0,
         mean_focus_identity_confidence=0.52,
         mean_focus_continuity=0.38,
+        mean_focus_selection_margin=1.84,
         mean_focus_motion_confidence=0.41,
         focus_low_identity_scans=1,
         focus_low_continuity_scans=3,
         focus_low_motion_scans=2,
+        focus_reported_heading_reversal_scans=1,
+        focus_motion_field_source_scans=2,
+        focus_motion_suppressed_source_scans=1,
         focus_switches=1,
         focus_heading_flips_ge_90=2,
         focus_flips_with_low_motion_confidence=1,
@@ -48,9 +52,13 @@ def test_render_markdown_includes_heading_flip_metric():
                 focus_identity_score=0.52,
                 focus_continuity_label="low",
                 focus_continuity_score=0.38,
+                focus_selection_margin=1.84,
+                focus_runner_up_track_id=7,
+                focus_reported_heading_flip_count=1,
                 focus_heading_deg=None,
                 focus_heading_label="stationary",
                 focus_speed_mph=0,
+                focus_motion_source="suppressed",
                 focus_motion_confidence_label="low",
                 focus_motion_confidence_score=0.41,
                 new_tracks=48,
@@ -63,8 +71,13 @@ def test_render_markdown_includes_heading_flip_metric():
     assert "focus heading flips >=90 deg" in markdown
     assert "focus flips with low motion confidence" in markdown
     assert "focus low-continuity scans" in markdown
+    assert "mean focus selection margin" in markdown
+    assert "focus reported-heading-reversal scans" in markdown
+    assert "focus motion-field source scans" in markdown
     assert "summary tracking-uncertain count" in markdown
     assert "merged tracks total" in markdown
     assert "focus_continuity=low:0.38" in markdown
+    assert "focus_margin=1.84" in markdown
+    assert "focus_motion_source=suppressed" in markdown
     assert "focus_identity=medium:0.52" in markdown
     assert "`3`" in markdown

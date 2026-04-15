@@ -43,6 +43,7 @@
   - focus continuity now penalizes low-confidence motion under high structural pressure while ignoring heading-instability penalties for stationaryish motion, which aligned dense late-window continuity with the uncertain summaries and removed the false low-continuity hits from the simpler window
   - live replay and API focus diagnostics now expose focus selection margin and runner-up identity, making it clear when dense-scene ambiguity is genuine challenger pressure versus a bad focus handoff
   - focus continuity now also penalizes abrupt reported-motion reversals under structural pressure, which removed the earlier dense-window `WNW` spoken outlier without adding uncertainty to the simpler validation window
+  - benchmark evaluation now surfaces focus selection margin, runner-up identity, reported-motion reversal counts, and focus motion source directly in reviewable snapshots
   - dense-scene strongest-object summaries are materially more stable across short replay windows
   - longer dense-scene replay windows now keep the late-window focus anchored on the nearer active storm field
   - local-only regression replay now works reliably even when only part of the requested day is cached

@@ -28,10 +28,14 @@ uv run python scripts/evaluate_tracking.py --manifest docs/benchmarks/tracking_b
 - mean uncertain tracks:
 - mean focus identity confidence:
 - mean focus continuity:
+- mean focus selection margin:
 - mean focus motion confidence:
 - focus low-identity scans:
 - focus low-continuity scans:
 - focus low-motion scans:
+- focus reported-heading-reversal scans:
+- focus motion-field source scans:
+- focus suppressed-motion source scans:
 - focus switches:
 - focus heading flips >=90 deg:
 - focus flips with low motion confidence:

@@ -40,9 +40,13 @@ class ReplaySnapshot:
     focus_identity_score: float | None
     focus_continuity_label: str | None
     focus_continuity_score: float | None
+    focus_selection_margin: float | None
+    focus_runner_up_track_id: int | None
+    focus_reported_heading_flip_count: int | None
     focus_heading_deg: float | None
     focus_heading_label: str | None
     focus_speed_mph: int | None
+    focus_motion_source: str | None
     focus_motion_confidence_label: str | None
     focus_motion_confidence_score: float | None
     new_tracks: int
@@ -66,10 +70,14 @@ class BenchmarkResult:
     mean_uncertain_tracks: float
     mean_focus_identity_confidence: float
     mean_focus_continuity: float
+    mean_focus_selection_margin: float
     mean_focus_motion_confidence: float
     focus_low_identity_scans: int
     focus_low_continuity_scans: int
     focus_low_motion_scans: int
+    focus_reported_heading_reversal_scans: int
+    focus_motion_field_source_scans: int
+    focus_motion_suppressed_source_scans: int
     focus_switches: int
     focus_heading_flips_ge_90: int
     focus_flips_with_low_motion_confidence: int
@@ -157,9 +165,27 @@ def _snapshot(site_name: str, buffered: BufferedScan, tracker: StormTracker, see
             if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
             else None
         ),
+        focus_selection_margin=(
+            round(float(focus_track.focus_continuity.selection_margin), 2)
+            if focus_track is not None
+            and getattr(focus_track, "focus_continuity", None) is not None
+            and getattr(focus_track.focus_continuity, "selection_margin", None) is not None
+            else None
+        ),
+        focus_runner_up_track_id=(
+            focus_track.focus_continuity.runner_up_track_id
+            if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
+            else None
+        ),
+        focus_reported_heading_flip_count=(
+            focus_track.focus_continuity.recent_reported_heading_flip_count
+            if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
+            else None
+        ),
         focus_heading_deg=focus_motion.heading_deg if focus_motion is not None else None,
         focus_heading_label=focus_motion.heading_label if focus_motion is not None else None,
         focus_speed_mph=focus_motion.speed_mph if focus_motion is not None else None,
+        focus_motion_source=focus_motion.source if focus_motion is not None else None,
         focus_motion_confidence_label=(
             focus_motion.confidence.label if focus_motion is not None and focus_motion.confidence is not None else None
         ),
@@ -270,6 +296,10 @@ def run_benchmark(entry: dict) -> BenchmarkResult:
             _mean(snapshot.focus_continuity_score for snapshot in snapshots if snapshot.focus_continuity_score is not None),
             2,
         ),
+        mean_focus_selection_margin=round(
+            _mean(snapshot.focus_selection_margin for snapshot in snapshots if snapshot.focus_selection_margin is not None),
+            2,
+        ),
         mean_focus_motion_confidence=round(
             _mean(
                 snapshot.focus_motion_confidence_score
@@ -289,6 +319,13 @@ def run_benchmark(entry: dict) -> BenchmarkResult:
             for snapshot in snapshots
             if snapshot.focus_motion_confidence_score is not None and snapshot.focus_motion_confidence_score < 0.45
         ),
+        focus_reported_heading_reversal_scans=sum(
+            1
+            for snapshot in snapshots
+            if snapshot.focus_reported_heading_flip_count is not None and snapshot.focus_reported_heading_flip_count >= 1
+        ),
+        focus_motion_field_source_scans=sum(1 for snapshot in snapshots if snapshot.focus_motion_source == "motion_field"),
+        focus_motion_suppressed_source_scans=sum(1 for snapshot in snapshots if snapshot.focus_motion_source == "suppressed"),
         focus_switches=focus_switches,
         focus_heading_flips_ge_90=focus_heading_flips_ge_90,
         focus_flips_with_low_motion_confidence=focus_flips_with_low_motion_confidence,
@@ -330,10 +367,14 @@ def render_markdown(results: list[BenchmarkResult]) -> str:
             f"- mean uncertain tracks: `{result.mean_uncertain_tracks}`",
             f"- mean focus identity confidence: `{result.mean_focus_identity_confidence}`",
             f"- mean focus continuity: `{result.mean_focus_continuity}`",
+            f"- mean focus selection margin: `{result.mean_focus_selection_margin}`",
             f"- mean focus motion confidence: `{result.mean_focus_motion_confidence}`",
             f"- focus low-identity scans: `{result.focus_low_identity_scans}`",
             f"- focus low-continuity scans: `{result.focus_low_continuity_scans}`",
             f"- focus low-motion scans: `{result.focus_low_motion_scans}`",
+            f"- focus reported-heading-reversal scans: `{result.focus_reported_heading_reversal_scans}`",
+            f"- focus motion-field source scans: `{result.focus_motion_field_source_scans}`",
+            f"- focus suppressed-motion source scans: `{result.focus_motion_suppressed_source_scans}`",
             f"- focus switches: `{result.focus_switches}`",
             f"- focus heading flips >=90 deg: `{result.focus_heading_flips_ge_90}`",
             f"- focus flips with low motion confidence: `{result.focus_flips_with_low_motion_confidence}`",
@@ -357,7 +398,10 @@ def render_markdown(results: list[BenchmarkResult]) -> str:
                 f"merges={snapshot.merge_count} splits={snapshot.split_count} focus_track={snapshot.focus_track_id} "
                 f"focus_identity={snapshot.focus_identity_label}:{snapshot.focus_identity_score} "
                 f"focus_continuity={snapshot.focus_continuity_label}:{snapshot.focus_continuity_score} "
+                f"focus_margin={snapshot.focus_selection_margin} runner_up={snapshot.focus_runner_up_track_id} "
+                f"focus_reported_flips={snapshot.focus_reported_heading_flip_count} "
                 f"focus_heading={snapshot.focus_heading_label} "
+                f"focus_motion_source={snapshot.focus_motion_source} "
                 f"focus_motion_conf={snapshot.focus_motion_confidence_label}:{snapshot.focus_motion_confidence_score}`"
             )
         lines.append("")
