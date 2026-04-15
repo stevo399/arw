@@ -43,6 +43,7 @@ class ReplaySnapshot:
     focus_selection_margin: float | None
     focus_runner_up_track_id: int | None
     focus_reported_heading_flip_count: int | None
+    focus_reported_heading_sequence: list[str]
     focus_heading_deg: float | None
     focus_heading_label: str | None
     focus_speed_mph: int | None
@@ -181,6 +182,11 @@ def _snapshot(site_name: str, buffered: BufferedScan, tracker: StormTracker, see
             focus_track.focus_continuity.recent_reported_heading_flip_count
             if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
             else None
+        ),
+        focus_reported_heading_sequence=(
+            list(focus_track.focus_continuity.recent_reported_heading_sequence)
+            if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
+            else []
         ),
         focus_heading_deg=focus_motion.heading_deg if focus_motion is not None else None,
         focus_heading_label=focus_motion.heading_label if focus_motion is not None else None,
@@ -401,6 +407,7 @@ def render_markdown(results: list[BenchmarkResult]) -> str:
                 f"focus_continuity={snapshot.focus_continuity_label}:{snapshot.focus_continuity_score} "
                 f"focus_margin={snapshot.focus_selection_margin} runner_up={snapshot.focus_runner_up_track_id} "
                 f"focus_reported_flips={snapshot.focus_reported_heading_flip_count} "
+                f"focus_reported_sequence={'|'.join(snapshot.focus_reported_heading_sequence) if snapshot.focus_reported_heading_sequence else 'none'} "
                 f"focus_heading={snapshot.focus_heading_label} "
                 f"focus_motion_source={snapshot.focus_motion_source} "
                 f"focus_motion_conf={snapshot.focus_motion_confidence_label}:{snapshot.focus_motion_confidence_score}`"

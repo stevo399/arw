@@ -35,11 +35,7 @@ def _heading_delta_deg(a: float | None, b: float | None) -> float:
 
 
 def _recent_reported_heading_flip_count(track: Track, *, max_samples: int = 4) -> int:
-    heading_samples = [
-        sample.heading_deg
-        for sample in track.motion_history[-max_samples:]
-        if sample.heading_deg is not None and sample.heading_label not in {"uncertain", "stationary", "nearly stationary"}
-    ]
+    heading_samples = _recent_reported_heading_samples(track, max_samples=max_samples)
     if len(heading_samples) < 2:
         return 0
     return sum(
@@ -47,6 +43,24 @@ def _recent_reported_heading_flip_count(track: Track, *, max_samples: int = 4) -
         for previous_heading, current_heading in zip(heading_samples, heading_samples[1:])
         if _heading_delta_deg(previous_heading, current_heading) >= 90.0
     )
+
+
+def _recent_reported_heading_samples(track: Track, *, max_samples: int = 4) -> list[float]:
+    return [
+        sample.heading_deg
+        for sample in track.motion_history[-max_samples:]
+        if sample.heading_deg is not None and sample.heading_label not in {"uncertain", "stationary", "nearly stationary"}
+    ]
+
+
+def _recent_reported_heading_sequence(track: Track, *, max_samples: int = 4) -> list[str]:
+    sequence: list[str] = []
+    for sample in track.motion_history[-max_samples:]:
+        if sample.heading_deg is not None:
+            sequence.append(f"{sample.heading_label}@{round(sample.heading_deg)}:{sample.source}")
+        else:
+            sequence.append(f"{sample.heading_label}:{sample.source}")
+    return sequence
 
 
 def _focus_margin_bonus(selection_margin: float | None, structural_event_count: int) -> float:
@@ -289,6 +303,7 @@ class StormTracker:
             max_steps=4,
         )
         recent_reported_heading_flip_total = _recent_reported_heading_flip_count(track, max_samples=4)
+        recent_reported_heading_sequence = _recent_reported_heading_sequence(track, max_samples=4)
         strong_focus_margin = selection_margin is not None and selection_margin >= 3.0
         reliable_reported_motion = motion_confidence_score >= 0.9 and recent_reported_heading_flip_total == 0
         suppress_raw_heading_flip_penalty = (
@@ -344,6 +359,7 @@ class StormTracker:
             runner_up_track_id=runner_up_track_id,
             recent_heading_flip_count=effective_heading_flip_total,
             recent_reported_heading_flip_count=recent_reported_heading_flip_total,
+            recent_reported_heading_sequence=recent_reported_heading_sequence,
             recent_focus_switch_count=recent_focus_switch_count,
             recent_structural_event_count=structural_event_count,
         )

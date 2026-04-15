@@ -117,6 +117,7 @@ def test_track_focus_model():
         runner_up_track_id=7,
         recent_heading_flip_count=1,
         recent_reported_heading_flip_count=1,
+        recent_reported_heading_sequence=["SE@140:motion_field", "WNW@290:motion_field"],
         recent_focus_switch_count=1,
         recent_structural_event_count=6,
     )
@@ -124,6 +125,7 @@ def test_track_focus_model():
     assert focus.selection_margin == 1.8
     assert focus.recent_reported_heading_flip_count == 1
     assert focus.recent_heading_flip_count == 1
+    assert focus.recent_reported_heading_sequence == ["SE@140:motion_field", "WNW@290:motion_field"]
 
 
 def test_storm_track_model():

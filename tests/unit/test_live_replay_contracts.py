@@ -9,6 +9,7 @@ from src.motion import MotionVector
 from src.parser import ReflectivityData
 from src.preprocess import ScanQuality
 from src.tracker import StormTracker, Track
+from src.tracking.types import MotionSample
 from scripts.live_replay import (
     _cached_scans,
     _local_only_scans,
@@ -66,6 +67,26 @@ def test_summarize_scan_reports_motion_sanity_fields():
     tracker = StormTracker()
     tracker.update(buffered)
     track = tracker.active_tracks[0]
+    track.focus_continuity.recent_reported_heading_sequence = [
+        "SE@140:motion_field",
+        "WNW@290:motion_field",
+    ]
+    track.motion_history.extend([
+        MotionSample(
+            timestamp=datetime(2026, 4, 10, 19, 55),
+            heading_deg=140.0,
+            heading_label="SE",
+            source="motion_field",
+            confidence_score=0.98,
+        ),
+        MotionSample(
+            timestamp=datetime(2026, 4, 10, 20, 0),
+            heading_deg=290.0,
+            heading_label="WNW",
+            source="motion_field",
+            confidence_score=0.98,
+        ),
+    ])
     track._motion_override = MotionVector(
         speed_kmh=220.0,
         speed_mph=137,
@@ -83,6 +104,10 @@ def test_summarize_scan_reports_motion_sanity_fields():
     assert diagnostics.focus_continuity_label is not None
     assert diagnostics.focus_selection_margin is None
     assert diagnostics.focus_runner_up_track_id is None
+    assert diagnostics.focus_recent_reported_heading_sequence == [
+        "SE@140:motion_field",
+        "WNW@290:motion_field",
+    ]
     assert diagnostics.scan_quality_score == 0.9
     assert diagnostics.scan_quality_flags == []
     assert "tracking uncertain" in diagnostics.summary

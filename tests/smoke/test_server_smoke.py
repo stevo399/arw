@@ -110,6 +110,7 @@ def test_tracks_endpoint_includes_motion_confidence_fields():
         assert "label" in focus
         assert "score" in focus
         assert "reason" in focus
+        assert "recent_reported_heading_sequence" in focus
 
 
 def test_motion_endpoint_missing_track_returns_404():

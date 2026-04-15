@@ -84,6 +84,7 @@ class FocusContinuity:
     runner_up_track_id: int | None = None
     recent_heading_flip_count: int = 0
     recent_reported_heading_flip_count: int = 0
+    recent_reported_heading_sequence: list[str] = field(default_factory=list)
     recent_focus_switch_count: int = 0
     recent_structural_event_count: int = 0
 

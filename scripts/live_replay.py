@@ -32,6 +32,7 @@ class ReplayDiagnostics:
     focus_continuity_score: float | None
     focus_selection_margin: float | None
     focus_runner_up_track_id: int | None
+    focus_recent_reported_heading_sequence: list[str]
     scan_quality_score: float
     scan_quality_flags: list[str]
     merge_count: int
@@ -104,6 +105,11 @@ def summarize_scan(site_name: str, buffered: BufferedScan, tracker: StormTracker
             focus_track.focus_continuity.runner_up_track_id
             if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
             else None
+        ),
+        focus_recent_reported_heading_sequence=(
+            list(focus_track.focus_continuity.recent_reported_heading_sequence)
+            if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
+            else []
         ),
         scan_quality_score=buffered.scan_quality.score if buffered.scan_quality is not None else 1.0,
         scan_quality_flags=list(buffered.scan_quality.flags) if buffered.scan_quality is not None else [],
@@ -270,6 +276,11 @@ def main() -> None:
         tracker.update(buffered)
         diagnostics = summarize_scan(site_name, buffered, tracker)
         quality_flags = ",".join(diagnostics.scan_quality_flags) if diagnostics.scan_quality_flags else "none"
+        heading_sequence = (
+            "|".join(diagnostics.focus_recent_reported_heading_sequence)
+            if diagnostics.focus_recent_reported_heading_sequence
+            else "none"
+        )
         print(
             f"{diagnostics.timestamp} "
             f"objects={diagnostics.object_count} "
@@ -281,6 +292,7 @@ def main() -> None:
             f"focus_continuity={diagnostics.focus_continuity_label}:{diagnostics.focus_continuity_score} "
             f"focus_selection_margin={diagnostics.focus_selection_margin} "
             f"focus_runner_up={diagnostics.focus_runner_up_track_id} "
+            f"focus_reported_sequence={heading_sequence} "
             f"scan_quality={diagnostics.scan_quality_score:.2f} "
             f"quality_flags={quality_flags} "
             f"merges={diagnostics.merge_count} "

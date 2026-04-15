@@ -50,6 +50,7 @@
   - replay and benchmark manifests can now target earlier same-day cached windows via an explicit end-of-window scan selector, and short live-style replays validated that behavior across distinct storm morphologies without site-specific logic
   - dense-scene detection runtime is now substantially lower after vectorizing hierarchy-parent assignment, split-pixel allocation, and per-object area accumulation, which restored full broader-manifest evaluation as a practical validation step
   - focus continuity now distinguishes strong focus dominance from true focus ambiguity in dense scenes, allowing stable mid-window motion to publish when challenger pressure is low while still suppressing reversal-heavy scans
+  - replay, benchmark, and API diagnostics now expose the recent reported heading sequence directly, making dense-scene suppression decisions reviewable from the actual motion-history pattern instead of only aggregate flip counts
 - Full test suite: 112 tests all passing
 
 ## In Progress
