@@ -9,7 +9,13 @@ from src.motion import MotionVector
 from src.parser import ReflectivityData
 from src.preprocess import ScanQuality
 from src.tracker import StormTracker, Track
-from scripts.live_replay import _cached_scans, _local_only_scans, _select_scan_count, summarize_scan
+from scripts.live_replay import (
+    _cached_scans,
+    _local_only_scans,
+    _select_scan_count,
+    _select_scans,
+    summarize_scan,
+)
 
 
 def _make_buffered_scan() -> BufferedScan:
@@ -101,6 +107,26 @@ def test_cached_scans_filters_missing_entries(monkeypatch):
     assert [scan.filename for scan in cached] == ["A", "C"]
 
 
+def test_select_scans_can_target_earlier_window(monkeypatch):
+    class Scan:
+        def __init__(self, filename: str):
+            self.filename = filename
+
+    scans = [
+        Scan("KTLX20260410_170556_V06"),
+        Scan("KTLX20260410_170946_V06"),
+        Scan("KTLX20260410_171336_V06"),
+        Scan("KTLX20260410_171731_V06"),
+    ]
+    monkeypatch.setattr("scripts.live_replay.list_scans_for_date", lambda site_id, date_str: scans)
+
+    selected = _select_scans("KTLX", "2026-04-10", 2, end_filename="KTLX20260410_171336_V06")
+    assert [scan.filename for scan in selected] == [
+        "KTLX20260410_170946_V06",
+        "KTLX20260410_171336_V06",
+    ]
+
+
 def test_local_only_scans_falls_back_to_most_recent_cached_for_date(monkeypatch, tmp_path):
     site_cache_dir = tmp_path / "KTLX"
     site_cache_dir.mkdir()
@@ -125,6 +151,42 @@ def test_local_only_scans_falls_back_to_most_recent_cached_for_date(monkeypatch,
     assert [scan.filename for scan in selected] == [
         "KTLX20260410_171000_V06",
         "KTLX20260410_172000_V06",
+    ]
+
+
+def test_local_only_scans_can_target_earlier_cached_window(monkeypatch, tmp_path):
+    site_cache_dir = tmp_path / "KEYX"
+    site_cache_dir.mkdir()
+    for filename in [
+        "KEYX20260410_200109_V06",
+        "KEYX20260410_200809_V06",
+        "KEYX20260410_201505_V06",
+        "KEYX20260410_202212_V06",
+        "KEYX20260410_202920_V06",
+    ]:
+        (site_cache_dir / filename).write_text("")
+
+    class Scan:
+        def __init__(self, filename: str):
+            self.filename = filename
+
+    monkeypatch.setattr("scripts.live_replay._cached_scans", lambda site_id, scans: [])
+    monkeypatch.setattr(
+        "scripts.live_replay.get_cache_path",
+        lambda site_id, filename: str(Path(tmp_path) / site_id / filename),
+    )
+
+    selected = _local_only_scans(
+        "KEYX",
+        "2026-04-10",
+        [Scan("missing")],
+        3,
+        end_filename="KEYX20260410_202212_V06",
+    )
+    assert [scan.filename for scan in selected] == [
+        "KEYX20260410_200809_V06",
+        "KEYX20260410_201505_V06",
+        "KEYX20260410_202212_V06",
     ]
 
 

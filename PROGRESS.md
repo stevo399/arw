@@ -47,17 +47,20 @@
   - dense-scene strongest-object summaries are materially more stable across short replay windows
   - longer dense-scene replay windows now keep the late-window focus anchored on the nearer active storm field
   - local-only regression replay now works reliably even when only part of the requested day is cached
+  - replay and benchmark manifests can now target earlier same-day cached windows via an explicit end-of-window scan selector, and short live-style replays validated that behavior across distinct storm morphologies without site-specific logic
 - Full test suite: 112 tests all passing
 
 ## In Progress
 - Residual dense-scene validation for broader replay periods and focus-lineage edge cases, including heading-flip behavior in evolving rain objects
+- Runtime cost remains high for full broader-manifest quantitative replays, so broader validation coverage is now functionally unblocked but still operationally expensive
 
 ## Next
 - Validate focus stability over more replay periods and more storm morphologies
 - Stress-test the new confidence diagnostics across broader replay windows and future benchmark additions
+- Reduce replay evaluation runtime enough to make broader manifest runs routine instead of occasional
 - Continue refining conservative multithreshold segmentation so simpler scenes do not fragment unnecessarily
 - Phase 3: Velocity ingestion, velocity region detection
 - NVGT frontend integration with the REST API
 
 ## Blockers / Decisions
-- No blocker for current API behavior. Remaining work is quality-related: focus stability and dense-scene continuity are improved in the tested windows, but broader replay coverage is still needed for evolving scenes with abrupt heading changes.
+- No blocker for current API behavior. Remaining work is quality-related: focus stability and dense-scene continuity are improved in the tested windows, but broader replay coverage is still needed for evolving scenes with abrupt heading changes and currently carries substantial replay runtime cost.

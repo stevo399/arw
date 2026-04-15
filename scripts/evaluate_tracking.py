@@ -205,9 +205,10 @@ def run_benchmark(entry: dict) -> BenchmarkResult:
     date_str = entry.get("date")
     local_only = bool(entry.get("local_only", False))
     scan_count = int(entry.get("scans", 5))
-    scans = _select_scans(site_id, date_str, scan_count)
+    end_filename = entry.get("end_filename")
+    scans = _select_scans(site_id, date_str, scan_count, end_filename=end_filename)
     if local_only:
-        scans = _local_only_scans(site_id, date_str, scans, scan_count)
+        scans = _local_only_scans(site_id, date_str, scans, scan_count, end_filename=end_filename)
         if not scans:
             raise RuntimeError(f"No cached scans available for benchmark {entry['id']}")
 

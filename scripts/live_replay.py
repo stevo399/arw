@@ -120,6 +120,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--scans", type=int, default=None, help="Number of scans to replay. Defaults to 5, or 3 with --quick.")
     parser.add_argument("--quick", action="store_true", help="Use a short development replay window. Defaults to 3 scans.")
     parser.add_argument("--local-only", action="store_true", help="Replay only scans already present in the local cache.")
+    parser.add_argument(
+        "--end-filename",
+        help="Optional cached/live scan filename to end the replay window on. The selected window includes this scan.",
+    )
     return parser.parse_args()
 
 
@@ -131,14 +135,27 @@ def _select_scan_count(args: argparse.Namespace) -> int:
     return 5
 
 
-def _select_scans(site_id: str, date_str: str | None, count: int):
+def _slice_scan_window(scans: list, count: int, end_filename: str | None = None) -> list:
+    if not scans:
+        return []
+    if end_filename is None:
+        return scans[-count:]
+
+    matching_index = next((index for index, scan in enumerate(scans) if _scan_filename(scan) == end_filename), None)
+    if matching_index is None:
+        raise RuntimeError(f"Requested end-of-window scan {end_filename} was not found in the selected scan list")
+
+    return scans[max(0, matching_index - count + 1) : matching_index + 1]
+
+
+def _select_scans(site_id: str, date_str: str | None, count: int, end_filename: str | None = None):
     if date_str:
         scans = list_scans_for_date(site_id, date_str)
     else:
         scans = list_latest_scans(site_id)
     if not scans:
         raise RuntimeError(f"No scans available for {site_id}")
-    return scans[-count:]
+    return _slice_scan_window(scans, count, end_filename=end_filename)
 
 
 def _scan_filename(scan) -> str:
@@ -175,10 +192,33 @@ def _cached_scan_records_for_date(site_id: str, date_str: str) -> list[tuple[dat
     return records
 
 
-def _local_only_scans(site_id: str, date_str: str | None, scans: list, count: int) -> list:
+def _slice_cached_records(
+    cached_records: list[tuple[datetime, str]],
+    count: int,
+    end_filename: str | None = None,
+) -> list[tuple[datetime, str]]:
+    if not cached_records:
+        return []
+    if end_filename is None:
+        return cached_records[-count:]
+
+    matching_index = next((index for index, (_, filename) in enumerate(cached_records) if filename == end_filename), None)
+    if matching_index is None:
+        raise RuntimeError(f"Requested cached end-of-window scan {end_filename} was not found in the local cache")
+
+    return cached_records[max(0, matching_index - count + 1) : matching_index + 1]
+
+
+def _local_only_scans(
+    site_id: str,
+    date_str: str | None,
+    scans: list,
+    count: int,
+    end_filename: str | None = None,
+) -> list:
     cached = _cached_scans(site_id, scans)
     if len(cached) >= count:
-        return cached[-count:]
+        return _slice_scan_window(cached, count, end_filename=end_filename)
     if date_str:
         cached_records = _cached_scan_records_for_date(site_id, date_str)
         if cached_records:
@@ -186,7 +226,7 @@ def _local_only_scans(site_id: str, date_str: str | None, scans: list, count: in
                 def __init__(self, filename: str):
                     self.filename = filename
 
-            return [CachedScan(filename) for _, filename in cached_records[-count:]]
+            return [CachedScan(filename) for _, filename in _slice_cached_records(cached_records, count, end_filename=end_filename)]
     return cached
 
 
@@ -195,9 +235,9 @@ def main() -> None:
     site_id = args.site_id.upper()
     site_name = _site_name(site_id)
     scan_count = _select_scan_count(args)
-    scans = _select_scans(site_id, args.date, scan_count)
+    scans = _select_scans(site_id, args.date, scan_count, end_filename=args.end_filename)
     if args.local_only:
-        scans = _local_only_scans(site_id, args.date, scans, scan_count)
+        scans = _local_only_scans(site_id, args.date, scans, scan_count, end_filename=args.end_filename)
         if not scans:
             raise RuntimeError(f"No cached scans available for {site_id} in the selected window")
     tracker = StormTracker()

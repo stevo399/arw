@@ -1,5 +1,14 @@
 [
   {
+    "id": "dense_cached_evening_window",
+    "category": "dense_evening_window",
+    "site_id": "KTLX",
+    "date": "2026-04-10",
+    "scans": 8,
+    "end_filename": "KTLX20260410_214445_V06",
+    "local_only": true
+  },
+  {
     "id": "dense_cached_extended",
     "category": "dense_extended",
     "site_id": "KTLX",
@@ -13,6 +22,15 @@
     "site_id": "KSOX",
     "date": "2026-04-10",
     "scans": 6,
+    "local_only": true
+  },
+  {
+    "id": "merge_split_evening_window",
+    "category": "merge_split_evening_window",
+    "site_id": "KEYX",
+    "date": "2026-04-10",
+    "scans": 7,
+    "end_filename": "KEYX20260410_212646_V06",
     "local_only": true
   },
   {
