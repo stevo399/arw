@@ -49,6 +49,16 @@ def _recent_reported_heading_flip_count(track: Track, *, max_samples: int = 4) -
     )
 
 
+def _focus_margin_bonus(selection_margin: float | None, structural_event_count: int) -> float:
+    if selection_margin is None or structural_event_count < 4:
+        return 0.0
+    if selection_margin >= 4.0:
+        return 0.15
+    if selection_margin >= 2.5:
+        return 0.05
+    return 0.0
+
+
 def _get_track_motion(track: Track) -> MotionVector:
     if track.last_motion is not None:
         return track.last_motion
@@ -278,8 +288,16 @@ class StormTracker:
             [(p.timestamp, p.latitude, p.longitude) for p in track.positions],
             max_steps=4,
         )
-        effective_heading_flip_total = 0 if motion_is_stationaryish else recent_heading_flip_total
         recent_reported_heading_flip_total = _recent_reported_heading_flip_count(track, max_samples=4)
+        strong_focus_margin = selection_margin is not None and selection_margin >= 3.0
+        reliable_reported_motion = motion_confidence_score >= 0.9 and recent_reported_heading_flip_total == 0
+        suppress_raw_heading_flip_penalty = (
+            not motion_is_stationaryish
+            and structural_event_count >= 4
+            and strong_focus_margin
+            and reliable_reported_motion
+        )
+        effective_heading_flip_total = 0 if motion_is_stationaryish or suppress_raw_heading_flip_penalty else recent_heading_flip_total
 
         recent_focus_switch_count = 1 if previous_focus_track_id is not None and previous_focus_track_id != track.track_id else 0
         score = 1.0
@@ -314,7 +332,10 @@ class StormTracker:
         elif identity_score < 0.75:
             score -= 0.1
             reason = "moderate focus identity continuity"
+        score += _focus_margin_bonus(selection_margin, structural_event_count)
         score = round(max(0.0, min(1.0, score)), 2)
+        if score > 0.6 and suppress_raw_heading_flip_penalty and structural_event_count >= 4:
+            reason = "stable focus winner despite structural pressure"
         return FocusContinuity(
             label=_confidence_label(score),
             score=score,
