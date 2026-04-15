@@ -54,6 +54,15 @@ class MotionConfidence:
 
 
 @dataclass
+class MotionSample:
+    timestamp: datetime
+    heading_deg: float | None
+    heading_label: str
+    source: str
+    confidence_score: float | None = None
+
+
+@dataclass
 class IdentityConfidence:
     label: str
     score: float
@@ -74,6 +83,7 @@ class FocusContinuity:
     selection_margin: float | None = None
     runner_up_track_id: int | None = None
     recent_heading_flip_count: int = 0
+    recent_reported_heading_flip_count: int = 0
     recent_focus_switch_count: int = 0
     recent_structural_event_count: int = 0
 
@@ -98,6 +108,7 @@ class Track:
     motion_confidence: MotionConfidence | None = None
     last_motion: Any | None = None
     diagnostic_motion: Any | None = None
+    motion_history: list[MotionSample] = field(default_factory=list)
     is_primary_focus: bool = False
     _missed_scans: int = 0
 

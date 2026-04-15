@@ -87,6 +87,7 @@ class TrackFocus(BaseModel):
     selection_margin: float | None = None
     runner_up_track_id: int | None = None
     recent_heading_flip_count: int | None = None
+    recent_reported_heading_flip_count: int | None = None
     recent_focus_switch_count: int | None = None
     recent_structural_event_count: int | None = None
 

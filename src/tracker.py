@@ -5,7 +5,7 @@ from src.motion import resolve_reported_motion, MotionVector, recent_heading_fli
 from src.tracking.motion import MotionContinuityContext
 from src.tracking.association import associate_tracks
 from src.tracking.events import normalize_merge_event, normalize_split_event
-from src.tracking.types import FocusContinuity, IdentityConfidence, Track
+from src.tracking.types import FocusContinuity, IdentityConfidence, MotionSample, Track
 
 MAX_MISSED_SCANS = 2
 FOCUS_SWITCH_MARGIN = 2.0
@@ -32,6 +32,21 @@ def _heading_delta_deg(a: float | None, b: float | None) -> float:
         return 0.0
     delta = abs(a - b) % 360.0
     return min(delta, 360.0 - delta)
+
+
+def _recent_reported_heading_flip_count(track: Track, *, max_samples: int = 4) -> int:
+    heading_samples = [
+        sample.heading_deg
+        for sample in track.motion_history[-max_samples:]
+        if sample.heading_deg is not None and sample.heading_label not in {"uncertain", "stationary", "nearly stationary"}
+    ]
+    if len(heading_samples) < 2:
+        return 0
+    return sum(
+        1
+        for previous_heading, current_heading in zip(heading_samples, heading_samples[1:])
+        if _heading_delta_deg(previous_heading, current_heading) >= 90.0
+    )
 
 
 def _get_track_motion(track: Track) -> MotionVector:
@@ -219,6 +234,17 @@ class StormTracker:
             track.last_motion = reported_motion
             track.diagnostic_motion = diagnostic_motion
             track.motion_confidence = reported_motion.confidence
+            track.motion_history.append(
+                MotionSample(
+                    timestamp=track.last_seen or (self._prev_scan.timestamp if self._prev_scan is not None else datetime.min),
+                    heading_deg=reported_motion.heading_deg,
+                    heading_label=reported_motion.heading_label,
+                    source=reported_motion.source,
+                    confidence_score=reported_motion.confidence.score if reported_motion.confidence is not None else None,
+                )
+            )
+            if len(track.motion_history) > 6:
+                track.motion_history = track.motion_history[-6:]
 
     def _focus_score(self, track: Track, previous_focus_track_id: int | None = None) -> float:
         if track.current_object is None:
@@ -253,6 +279,7 @@ class StormTracker:
             max_steps=4,
         )
         effective_heading_flip_total = 0 if motion_is_stationaryish else recent_heading_flip_total
+        recent_reported_heading_flip_total = _recent_reported_heading_flip_count(track, max_samples=4)
 
         recent_focus_switch_count = 1 if previous_focus_track_id is not None and previous_focus_track_id != track.track_id else 0
         score = 1.0
@@ -260,6 +287,9 @@ class StormTracker:
         if recent_focus_switch_count:
             score -= 0.35
             reason = "recent focus handoff"
+        if recent_reported_heading_flip_total >= 1 and structural_event_count >= 6:
+            score -= 0.35
+            reason = "reported focus motion reversal under structural pressure"
         if effective_heading_flip_total >= 2:
             score -= 0.55
             reason = "repeated focus heading reversals"
@@ -292,6 +322,7 @@ class StormTracker:
             selection_margin=selection_margin,
             runner_up_track_id=runner_up_track_id,
             recent_heading_flip_count=effective_heading_flip_total,
+            recent_reported_heading_flip_count=recent_reported_heading_flip_total,
             recent_focus_switch_count=recent_focus_switch_count,
             recent_structural_event_count=structural_event_count,
         )

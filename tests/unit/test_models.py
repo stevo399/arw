@@ -116,11 +116,13 @@ def test_track_focus_model():
         selection_margin=1.8,
         runner_up_track_id=7,
         recent_heading_flip_count=1,
+        recent_reported_heading_flip_count=1,
         recent_focus_switch_count=1,
         recent_structural_event_count=6,
     )
     assert focus.label == "medium"
     assert focus.selection_margin == 1.8
+    assert focus.recent_reported_heading_flip_count == 1
     assert focus.recent_heading_flip_count == 1
 
 
