@@ -118,6 +118,9 @@ def test_track_focus_model():
         recent_heading_flip_count=1,
         recent_reported_heading_flip_count=1,
         recent_reported_heading_sequence=["SE@140:motion_field", "WNW@290:motion_field"],
+        reported_heading_stability_label="unstable",
+        reported_heading_stability_score=0.2,
+        reported_heading_stability_reason="reversal-prone reported heading sequence",
         recent_focus_switch_count=1,
         recent_structural_event_count=6,
     )
@@ -126,6 +129,9 @@ def test_track_focus_model():
     assert focus.recent_reported_heading_flip_count == 1
     assert focus.recent_heading_flip_count == 1
     assert focus.recent_reported_heading_sequence == ["SE@140:motion_field", "WNW@290:motion_field"]
+    assert focus.reported_heading_stability_label == "unstable"
+    assert focus.reported_heading_stability_score == 0.2
+    assert focus.reported_heading_stability_reason == "reversal-prone reported heading sequence"
 
 
 def test_storm_track_model():

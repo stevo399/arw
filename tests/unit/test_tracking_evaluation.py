@@ -56,6 +56,9 @@ def test_render_markdown_includes_heading_flip_metric():
                 focus_runner_up_track_id=7,
                 focus_reported_heading_flip_count=1,
                 focus_reported_heading_sequence=["SE@140:motion_field", "WNW@290:motion_field"],
+                focus_reported_heading_stability_label="unstable",
+                focus_reported_heading_stability_score=0.2,
+                focus_reported_heading_stability_reason="reversal-prone reported heading sequence",
                 focus_heading_deg=None,
                 focus_heading_label="stationary",
                 focus_speed_mph=0,
@@ -80,6 +83,7 @@ def test_render_markdown_includes_heading_flip_metric():
     assert "focus_continuity=low:0.38" in markdown
     assert "focus_margin=1.84" in markdown
     assert "focus_reported_sequence=SE@140:motion_field|WNW@290:motion_field" in markdown
+    assert "focus_reported_stability=unstable:0.2" in markdown
     assert "focus_motion_source=suppressed" in markdown
     assert "focus_identity=medium:0.52" in markdown
     assert "`3`" in markdown

@@ -34,6 +34,12 @@ def _heading_delta_deg(a: float | None, b: float | None) -> float:
     return min(delta, 360.0 - delta)
 
 
+def _signed_heading_delta_deg(a: float | None, b: float | None) -> float:
+    if a is None or b is None:
+        return 0.0
+    return ((b - a + 540.0) % 360.0) - 180.0
+
+
 def _recent_reported_heading_flip_count(track: Track, *, max_samples: int = 4) -> int:
     heading_samples = _recent_reported_heading_samples(track, max_samples=max_samples)
     if len(heading_samples) < 2:
@@ -61,6 +67,46 @@ def _recent_reported_heading_sequence(track: Track, *, max_samples: int = 4) -> 
         else:
             sequence.append(f"{sample.heading_label}:{sample.source}")
     return sequence
+
+
+def _classify_reported_heading_stability(
+    track: Track, *, max_samples: int = 4
+) -> tuple[str, float, str]:
+    directional_samples = [
+        sample
+        for sample in track.motion_history[-max_samples:]
+        if sample.heading_deg is not None and sample.heading_label not in {"uncertain", "stationary", "nearly stationary"}
+    ]
+    if len(directional_samples) < 2:
+        return ("insufficient", 1.0, "insufficient directional heading history")
+
+    signed_deltas = [
+        _signed_heading_delta_deg(previous.heading_deg, current.heading_deg)
+        for previous, current in zip(directional_samples, directional_samples[1:])
+    ]
+    abs_deltas = [abs(delta) for delta in signed_deltas]
+    reversal_count = sum(1 for delta in abs_deltas if delta >= 90.0)
+    turn_signs = [1 if delta >= 20.0 else -1 if delta <= -20.0 else 0 for delta in signed_deltas]
+    nonzero_turn_signs = [sign for sign in turn_signs if sign != 0]
+    sign_change_count = sum(
+        1 for previous_sign, current_sign in zip(nonzero_turn_signs, nonzero_turn_signs[1:]) if previous_sign != current_sign
+    )
+    max_abs_delta = max(abs_deltas, default=0.0)
+    mean_abs_delta = sum(abs_deltas) / len(abs_deltas)
+
+    if reversal_count >= 2 or sign_change_count >= 2:
+        return ("unstable", 0.1, "oscillating reported heading sequence")
+    if reversal_count >= 1 and sign_change_count >= 1:
+        return ("unstable", 0.2, "reversal-prone reported heading sequence")
+    if max_abs_delta <= 35.0:
+        return ("stable", 0.95, "consistent reported heading sequence")
+    if sign_change_count == 0 and max_abs_delta <= 75.0:
+        return ("coherent_turn", 0.85, "coherent turning reported heading sequence")
+    if sign_change_count == 0 and mean_abs_delta <= 60.0:
+        return ("mixed", 0.65, "broad but one-directional reported heading changes")
+    if reversal_count >= 1:
+        return ("mixed", 0.45, "single abrupt reported heading reversal")
+    return ("mixed", 0.6, "mixed reported heading sequence")
 
 
 def _focus_margin_bonus(selection_margin: float | None, structural_event_count: int) -> float:
@@ -304,8 +350,13 @@ class StormTracker:
         )
         recent_reported_heading_flip_total = _recent_reported_heading_flip_count(track, max_samples=4)
         recent_reported_heading_sequence = _recent_reported_heading_sequence(track, max_samples=4)
+        (
+            reported_heading_stability_label,
+            reported_heading_stability_score,
+            reported_heading_stability_reason,
+        ) = _classify_reported_heading_stability(track, max_samples=4)
         strong_focus_margin = selection_margin is not None and selection_margin >= 3.0
-        reliable_reported_motion = motion_confidence_score >= 0.9 and recent_reported_heading_flip_total == 0
+        reliable_reported_motion = motion_confidence_score >= 0.9 and reported_heading_stability_score >= 0.85
         suppress_raw_heading_flip_penalty = (
             not motion_is_stationaryish
             and structural_event_count >= 4
@@ -320,9 +371,15 @@ class StormTracker:
         if recent_focus_switch_count:
             score -= 0.35
             reason = "recent focus handoff"
-        if recent_reported_heading_flip_total >= 1 and structural_event_count >= 6:
-            score -= 0.35
-            reason = "reported focus motion reversal under structural pressure"
+        if structural_event_count >= 6 and reported_heading_stability_score <= 0.2:
+            score -= 0.4
+            reason = "unstable reported focus heading sequence under structural pressure"
+        elif structural_event_count >= 4 and reported_heading_stability_score <= 0.2:
+            score -= 0.25
+            reason = "unstable reported focus heading sequence"
+        elif structural_event_count >= 6 and reported_heading_stability_score <= 0.45:
+            score -= 0.2
+            reason = "mixed reported focus heading sequence under structural pressure"
         if effective_heading_flip_total >= 2:
             score -= 0.55
             reason = "repeated focus heading reversals"
@@ -360,6 +417,9 @@ class StormTracker:
             recent_heading_flip_count=effective_heading_flip_total,
             recent_reported_heading_flip_count=recent_reported_heading_flip_total,
             recent_reported_heading_sequence=recent_reported_heading_sequence,
+            reported_heading_stability_label=reported_heading_stability_label,
+            reported_heading_stability_score=round(reported_heading_stability_score, 2),
+            reported_heading_stability_reason=reported_heading_stability_reason,
             recent_focus_switch_count=recent_focus_switch_count,
             recent_structural_event_count=structural_event_count,
         )

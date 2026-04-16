@@ -71,6 +71,9 @@ def test_summarize_scan_reports_motion_sanity_fields():
         "SE@140:motion_field",
         "WNW@290:motion_field",
     ]
+    track.focus_continuity.reported_heading_stability_label = "unstable"
+    track.focus_continuity.reported_heading_stability_score = 0.2
+    track.focus_continuity.reported_heading_stability_reason = "reversal-prone reported heading sequence"
     track.motion_history.extend([
         MotionSample(
             timestamp=datetime(2026, 4, 10, 19, 55),
@@ -108,6 +111,9 @@ def test_summarize_scan_reports_motion_sanity_fields():
         "SE@140:motion_field",
         "WNW@290:motion_field",
     ]
+    assert diagnostics.focus_reported_heading_stability_label == "unstable"
+    assert diagnostics.focus_reported_heading_stability_score == 0.2
+    assert diagnostics.focus_reported_heading_stability_reason == "reversal-prone reported heading sequence"
     assert diagnostics.scan_quality_score == 0.9
     assert diagnostics.scan_quality_flags == []
     assert "tracking uncertain" in diagnostics.summary

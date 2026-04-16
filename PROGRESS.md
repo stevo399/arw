@@ -51,10 +51,12 @@
   - dense-scene detection runtime is now substantially lower after vectorizing hierarchy-parent assignment, split-pixel allocation, and per-object area accumulation, which restored full broader-manifest evaluation as a practical validation step
   - focus continuity now distinguishes strong focus dominance from true focus ambiguity in dense scenes, allowing stable mid-window motion to publish when challenger pressure is low while still suppressing reversal-heavy scans
   - replay, benchmark, and API diagnostics now expose the recent reported heading sequence directly, making dense-scene suppression decisions reviewable from the actual motion-history pattern instead of only aggregate flip counts
-- Full test suite: 112 tests all passing
+  - focus continuity now classifies recent reported-heading history as insufficient, stable, coherent-turn, mixed, or unstable, which lets dense live replays preserve one-direction turning motion while suppressing reversal-prone heading sequences under structural pressure
+- Full test suite: 164 tests all passing
 
 ## In Progress
 - Residual dense-scene validation for broader replay periods and focus-lineage edge cases, including heading-flip behavior in evolving rain objects
+- Review the remaining `mixed` heading-sequence cases to decide whether any should stay publishable or should be suppressed earlier under dense structural pressure
 
 ## Next
 - Validate focus stability over more replay periods and more storm morphologies

@@ -260,10 +260,12 @@ def test_build_focus_continuity_penalizes_reported_motion_reversal_under_structu
     continuity = tracker._build_focus_continuity(track, previous_focus_track_id=track.track_id, structural_event_count=6)
 
     assert continuity.recent_reported_heading_flip_count == 1
-    assert continuity.score == 0.35
-    assert continuity.label == "low"
+    assert continuity.reported_heading_stability_label == "mixed"
+    assert continuity.reported_heading_stability_score == 0.45
+    assert continuity.score == 0.5
+    assert continuity.label == "medium"
     assert continuity.reason in {
-        "reported focus motion reversal under structural pressure",
+        "mixed reported focus heading sequence under structural pressure",
         "high structural event pressure around focus",
     }
 
@@ -340,6 +342,8 @@ def test_build_focus_continuity_relaxes_raw_heading_flip_penalty_for_clear_focus
 
     assert continuity.recent_heading_flip_count == 0
     assert continuity.recent_reported_heading_flip_count == 0
+    assert continuity.reported_heading_stability_label == "stable"
+    assert continuity.reported_heading_stability_score == 0.95
     assert continuity.score == 0.85
     assert continuity.label == "high"
     assert continuity.reason == "stable focus winner despite structural pressure"
@@ -394,6 +398,70 @@ def test_build_focus_continuity_keeps_reported_reversal_penalty_even_with_clear_
     )
 
     assert continuity.recent_reported_heading_flip_count == 1
-    assert continuity.score == 0.5
+    assert continuity.reported_heading_stability_label == "mixed"
+    assert continuity.reported_heading_stability_score == 0.45
+    assert continuity.score == 0.65
     assert continuity.label == "medium"
     assert continuity.reason == "high structural event pressure around focus"
+
+
+def test_build_focus_continuity_treats_one_direction_turn_sequence_as_coherent():
+    tracker = StormTracker()
+    track = tracker._create_track(
+        datetime(2026, 4, 8, 18, 0),
+        _make_object(1, 40.0, 90.0, 55.0, "intense rain", 180.0),
+    )
+    track.identity_confidence = 0.85
+    track.identity_diagnostics = IdentityConfidence(label="high", score=0.85)
+    track.last_motion = MotionVector(
+        speed_kmh=35.0,
+        speed_mph=22,
+        heading_deg=182.0,
+        heading_label="S",
+        confidence=MotionConfidence(label="high", score=0.98),
+        source="motion_field",
+    )
+    track.motion_history.extend([
+        MotionSample(
+            timestamp=datetime(2026, 4, 8, 18, 0),
+            heading_deg=48.0,
+            heading_label="NE",
+            source="motion_field",
+            confidence_score=0.98,
+        ),
+        MotionSample(
+            timestamp=datetime(2026, 4, 8, 18, 5),
+            heading_deg=51.0,
+            heading_label="NE",
+            source="motion_field",
+            confidence_score=0.98,
+        ),
+        MotionSample(
+            timestamp=datetime(2026, 4, 8, 18, 10),
+            heading_deg=126.0,
+            heading_label="SE",
+            source="motion_field",
+            confidence_score=0.98,
+        ),
+        MotionSample(
+            timestamp=datetime(2026, 4, 8, 18, 15),
+            heading_deg=182.0,
+            heading_label="S",
+            source="motion_field",
+            confidence_score=0.98,
+        ),
+    ])
+
+    continuity = tracker._build_focus_continuity(
+        track,
+        previous_focus_track_id=track.track_id,
+        structural_event_count=6,
+        selection_margin=4.8,
+        runner_up_track_id=11,
+    )
+
+    assert continuity.reported_heading_stability_label == "coherent_turn"
+    assert continuity.reported_heading_stability_score == 0.85
+    assert continuity.score == 0.85
+    assert continuity.label == "high"
+    assert continuity.reason == "stable focus winner despite structural pressure"

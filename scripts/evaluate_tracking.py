@@ -44,6 +44,9 @@ class ReplaySnapshot:
     focus_runner_up_track_id: int | None
     focus_reported_heading_flip_count: int | None
     focus_reported_heading_sequence: list[str]
+    focus_reported_heading_stability_label: str | None
+    focus_reported_heading_stability_score: float | None
+    focus_reported_heading_stability_reason: str | None
     focus_heading_deg: float | None
     focus_heading_label: str | None
     focus_speed_mph: int | None
@@ -187,6 +190,23 @@ def _snapshot(site_name: str, buffered: BufferedScan, tracker: StormTracker, see
             list(focus_track.focus_continuity.recent_reported_heading_sequence)
             if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
             else []
+        ),
+        focus_reported_heading_stability_label=(
+            focus_track.focus_continuity.reported_heading_stability_label
+            if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
+            else None
+        ),
+        focus_reported_heading_stability_score=(
+            round(float(focus_track.focus_continuity.reported_heading_stability_score), 2)
+            if focus_track is not None
+            and getattr(focus_track, "focus_continuity", None) is not None
+            and getattr(focus_track.focus_continuity, "reported_heading_stability_score", None) is not None
+            else None
+        ),
+        focus_reported_heading_stability_reason=(
+            focus_track.focus_continuity.reported_heading_stability_reason
+            if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
+            else None
         ),
         focus_heading_deg=focus_motion.heading_deg if focus_motion is not None else None,
         focus_heading_label=focus_motion.heading_label if focus_motion is not None else None,
@@ -408,6 +428,7 @@ def render_markdown(results: list[BenchmarkResult]) -> str:
                 f"focus_margin={snapshot.focus_selection_margin} runner_up={snapshot.focus_runner_up_track_id} "
                 f"focus_reported_flips={snapshot.focus_reported_heading_flip_count} "
                 f"focus_reported_sequence={'|'.join(snapshot.focus_reported_heading_sequence) if snapshot.focus_reported_heading_sequence else 'none'} "
+                f"focus_reported_stability={snapshot.focus_reported_heading_stability_label}:{snapshot.focus_reported_heading_stability_score} "
                 f"focus_heading={snapshot.focus_heading_label} "
                 f"focus_motion_source={snapshot.focus_motion_source} "
                 f"focus_motion_conf={snapshot.focus_motion_confidence_label}:{snapshot.focus_motion_confidence_score}`"

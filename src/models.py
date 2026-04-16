@@ -89,6 +89,9 @@ class TrackFocus(BaseModel):
     recent_heading_flip_count: int | None = None
     recent_reported_heading_flip_count: int | None = None
     recent_reported_heading_sequence: list[str] | None = None
+    reported_heading_stability_label: str | None = None
+    reported_heading_stability_score: float | None = None
+    reported_heading_stability_reason: str | None = None
     recent_focus_switch_count: int | None = None
     recent_structural_event_count: int | None = None
 

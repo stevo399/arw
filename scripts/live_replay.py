@@ -33,6 +33,9 @@ class ReplayDiagnostics:
     focus_selection_margin: float | None
     focus_runner_up_track_id: int | None
     focus_recent_reported_heading_sequence: list[str]
+    focus_reported_heading_stability_label: str | None
+    focus_reported_heading_stability_score: float | None
+    focus_reported_heading_stability_reason: str | None
     scan_quality_score: float
     scan_quality_flags: list[str]
     merge_count: int
@@ -110,6 +113,23 @@ def summarize_scan(site_name: str, buffered: BufferedScan, tracker: StormTracker
             list(focus_track.focus_continuity.recent_reported_heading_sequence)
             if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
             else []
+        ),
+        focus_reported_heading_stability_label=(
+            focus_track.focus_continuity.reported_heading_stability_label
+            if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
+            else None
+        ),
+        focus_reported_heading_stability_score=(
+            round(float(focus_track.focus_continuity.reported_heading_stability_score), 2)
+            if focus_track is not None
+            and getattr(focus_track, "focus_continuity", None) is not None
+            and getattr(focus_track.focus_continuity, "reported_heading_stability_score", None) is not None
+            else None
+        ),
+        focus_reported_heading_stability_reason=(
+            focus_track.focus_continuity.reported_heading_stability_reason
+            if focus_track is not None and getattr(focus_track, "focus_continuity", None) is not None
+            else None
         ),
         scan_quality_score=buffered.scan_quality.score if buffered.scan_quality is not None else 1.0,
         scan_quality_flags=list(buffered.scan_quality.flags) if buffered.scan_quality is not None else [],
@@ -293,6 +313,7 @@ def main() -> None:
             f"focus_selection_margin={diagnostics.focus_selection_margin} "
             f"focus_runner_up={diagnostics.focus_runner_up_track_id} "
             f"focus_reported_sequence={heading_sequence} "
+            f"focus_reported_stability={diagnostics.focus_reported_heading_stability_label}:{diagnostics.focus_reported_heading_stability_score} "
             f"scan_quality={diagnostics.scan_quality_score:.2f} "
             f"quality_flags={quality_flags} "
             f"merges={diagnostics.merge_count} "

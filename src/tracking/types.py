@@ -85,6 +85,9 @@ class FocusContinuity:
     recent_heading_flip_count: int = 0
     recent_reported_heading_flip_count: int = 0
     recent_reported_heading_sequence: list[str] = field(default_factory=list)
+    reported_heading_stability_label: str | None = None
+    reported_heading_stability_score: float | None = None
+    reported_heading_stability_reason: str | None = None
     recent_focus_switch_count: int = 0
     recent_structural_event_count: int = 0
 
