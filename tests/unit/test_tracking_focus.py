@@ -262,8 +262,8 @@ def test_build_focus_continuity_penalizes_reported_motion_reversal_under_structu
     assert continuity.recent_reported_heading_flip_count == 1
     assert continuity.reported_heading_stability_label == "mixed"
     assert continuity.reported_heading_stability_score == 0.45
-    assert continuity.score == 0.5
-    assert continuity.label == "medium"
+    assert continuity.score == 0.4
+    assert continuity.label == "low"
     assert continuity.reason in {
         "mixed reported focus heading sequence under structural pressure",
         "high structural event pressure around focus",
@@ -400,7 +400,7 @@ def test_build_focus_continuity_keeps_reported_reversal_penalty_even_with_clear_
     assert continuity.recent_reported_heading_flip_count == 1
     assert continuity.reported_heading_stability_label == "mixed"
     assert continuity.reported_heading_stability_score == 0.45
-    assert continuity.score == 0.65
+    assert continuity.score == 0.55
     assert continuity.label == "medium"
     assert continuity.reason == "high structural event pressure around focus"
 

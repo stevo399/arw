@@ -377,9 +377,12 @@ class StormTracker:
         elif structural_event_count >= 4 and reported_heading_stability_score <= 0.2:
             score -= 0.25
             reason = "unstable reported focus heading sequence"
-        elif structural_event_count >= 6 and reported_heading_stability_score <= 0.45:
-            score -= 0.2
+        elif structural_event_count >= 6 and reported_heading_stability_label == "mixed":
+            score -= 0.3
             reason = "mixed reported focus heading sequence under structural pressure"
+        elif structural_event_count >= 4 and reported_heading_stability_label == "mixed":
+            score -= 0.15
+            reason = "mixed reported focus heading sequence under elevated pressure"
         if effective_heading_flip_total >= 2:
             score -= 0.55
             reason = "repeated focus heading reversals"
