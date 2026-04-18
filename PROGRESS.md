@@ -61,7 +61,7 @@
 
 ## Next
 - Phase 3: Velocity ingestion, velocity region detection
-- NVGT frontend integration with the REST API
+- Native web app frontend (replaces earlier NVGT plan)
 - Continue refining conservative multithreshold segmentation so simpler scenes do not fragment unnecessarily
 
 ## Blockers / Decisions

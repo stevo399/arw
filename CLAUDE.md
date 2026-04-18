@@ -61,3 +61,4 @@ When building the NVGT frontend, reference these local resources:
 3. Velocity ingestion, velocity region detection
 4. Hail detection, debris scoring
 5. Spatial audio scene
+6. Native web app frontend
