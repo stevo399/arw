@@ -5,13 +5,13 @@ A standalone Windows application enabling blind users to analyze NEXRAD weather 
 ## Tech Stack
 
 - **Language:** Python
-- **UI Framework:** NVGT (keyboard-driven, accessible)
+- **UI Framework:** Native Web App (keyboard-driven, accessible)
 - **Data Source:** NEXRAD Level II via AWS Open Data (`s3://noaa-nexrad-level2/`)
 - **Audio:** Spatialized audio for spatial scene representation
 
 ## Architecture
 
-Pipeline: Ingest Manager → Cache Store → Product Parsers → Object Extraction → Tracking Engine → Hazard Analysis → Scene Model → Speech Manager + Audio Renderer → NVGT UI
+Pipeline: Ingest Manager → Cache Store → Product Parsers → Object Extraction → Tracking Engine → Hazard Analysis → Scene Model → Speech Manager + Audio Renderer → Native Web App UI
 
 Key rule: **only the Ingest Manager makes network calls.**
 
@@ -30,7 +30,7 @@ arw/
 │   ├── scene/        # Scene model for audio/speech
 │   ├── audio/        # Spatialized audio renderer
 │   ├── speech/       # Speech output manager
-│   └── ui/           # NVGT keyboard UI
+│   └── ui/           # Native Web App keyboard UI
 ├── tests/            # All tests
 │   ├── smoke/        # Smoke tests
 │   ├── unit/         # Unit tests
