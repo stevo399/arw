@@ -46,14 +46,6 @@ arw/
 - **Accessibility first.** Every feature must be fully operable via keyboard and speech feedback.
 - **Track progress at end of session.** When development work is done for a session, update `PROGRESS.md` at the project root with: what was completed, what is in progress, what comes next, and any blockers or decisions pending. This ensures any developer or agent picking up the project knows exactly where the last session stopped.
 
-## NVGT Reference Sources
-
-When building the NVGT frontend, reference these local resources:
-
-- **NVGT includes** — `C:\nvgt\include` — standard includes like `form.nvgt` for form-based UI
-- **NVGT repository** — `C:\Users\steve\Documents\nvgt` — C++ source, documentation, engine dumps of all wrapped functions and classes
-- **tiles2 (working game example)** — `C:\Users\steve\Documents\tiles2` — form examples, non-form UI, sound management, and HTTP client patterns (in `utils/`) for calling JSON APIs
-
 ## Development Phases
 
 1. Site database, reflectivity ingest, rain object detection, speech summaries
