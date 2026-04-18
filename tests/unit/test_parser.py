@@ -1,6 +1,6 @@
 import numpy as np
 from unittest.mock import patch, MagicMock
-from src.parser import extract_reflectivity, ReflectivityData
+from src.parser import extract_reflectivity, ReflectivityData, parse_radar_file, extract_reflectivity_from_radar
 
 
 def _make_mock_radar():
@@ -54,3 +54,19 @@ def test_extract_reflectivity_elevation_angles():
     with patch("src.parser.pyart.io.read_nexrad_archive", return_value=mock_radar):
         result = extract_reflectivity("/fake/path.V06")
     assert result.elevation_angles == [0.5, 1.5, 2.4]
+
+
+def test_parse_radar_file_returns_radar_object():
+    mock_radar = _make_mock_radar()
+    with patch("src.parser.pyart.io.read_nexrad_archive", return_value=mock_radar):
+        radar = parse_radar_file("/fake/path.V06")
+    assert radar is mock_radar
+
+
+def test_extract_reflectivity_from_radar():
+    mock_radar = _make_mock_radar()
+    result = extract_reflectivity_from_radar(mock_radar)
+    assert isinstance(result, ReflectivityData)
+    assert result.reflectivity.shape[0] == 360
+    assert result.radar_lat == 35.3331
+    assert result.elevation_angle == 0.5

@@ -16,9 +16,13 @@ class ReflectivityData:
     timestamp: str
 
 
-def extract_reflectivity(filepath: str) -> ReflectivityData:
-    """Read a NEXRAD Level II file and extract reflectivity from the lowest sweep."""
-    radar = pyart.io.read_nexrad_archive(filepath)
+def parse_radar_file(filepath: str):
+    """Read a NEXRAD Level II file and return the pyart Radar object."""
+    return pyart.io.read_nexrad_archive(filepath)
+
+
+def extract_reflectivity_from_radar(radar) -> ReflectivityData:
+    """Extract reflectivity from the lowest sweep of a pyart Radar object."""
     elevation_angles = sorted(set(np.round(radar.fixed_angle["data"], 1)))
     sweep_start, sweep_end = radar.get_start_end(0)
     reflectivity = radar.fields["reflectivity"]["data"][sweep_start:sweep_end + 1]
@@ -36,3 +40,9 @@ def extract_reflectivity(filepath: str) -> ReflectivityData:
         elevation_angles=[float(a) for a in elevation_angles],
         timestamp=str(radar.time["units"]).replace("seconds since ", ""),
     )
+
+
+def extract_reflectivity(filepath: str) -> ReflectivityData:
+    """Read a NEXRAD Level II file and extract reflectivity from the lowest sweep."""
+    radar = parse_radar_file(filepath)
+    return extract_reflectivity_from_radar(radar)
