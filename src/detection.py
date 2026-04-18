@@ -43,6 +43,9 @@ class DetectedObject:
     peak_label: str
     area_km2: float
     layers: list[IntensityLayerData] = field(default_factory=list)
+    max_inbound_ms: float | None = None
+    max_outbound_ms: float | None = None
+    rotation: "RotationSignature | None" = None
 
 
 def classify_intensity(dbz: float) -> str:

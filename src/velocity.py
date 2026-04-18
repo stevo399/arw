@@ -1,10 +1,10 @@
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from scipy.ndimage import label
 
-from src.detection import polar_to_latlon, _range_bin_areas_km2
+from src.detection import DetectedObject, polar_to_latlon, _range_bin_areas_km2
 from src.parser import VelocityData
 
 MIN_VELOCITY_MS = 10.0
@@ -352,3 +352,70 @@ def detect_rotation_signatures(vel_data: VelocityData) -> list[RotationSignature
 
     ranges_m = vel_data.sweeps[0].ranges_m if vel_data.sweeps else np.array([])
     return _merge_cross_sweep_rotations(all_sweep_results, ranges_m)
+
+
+MAX_ASSOCIATION_DISTANCE_KM = 30.0
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dlon / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def analyze_velocity(
+    vel_data: "VelocityData | None",
+    objects: list[DetectedObject],
+) -> tuple[list[VelocityRegion], list[RotationSignature], list[DetectedObject]]:
+    """Run full velocity analysis and associate results with detected objects.
+
+    Returns (regions, rotation_signatures, annotated_objects).
+    """
+    if vel_data is None:
+        return [], [], objects
+
+    regions = detect_velocity_regions(vel_data)
+    rotations = detect_rotation_signatures(vel_data)
+
+    annotated = list(objects)
+    for i, obj in enumerate(annotated):
+        best_inbound: float | None = None
+        best_outbound: float | None = None
+        best_rotation: RotationSignature | None = None
+        best_rotation_dist = float("inf")
+
+        for region in regions:
+            dist = _haversine_km(
+                obj.centroid_lat, obj.centroid_lon,
+                region.centroid_lat, region.centroid_lon,
+            )
+            if dist > MAX_ASSOCIATION_DISTANCE_KM:
+                continue
+            if region.region_type == "inbound":
+                if best_inbound is None or region.peak_velocity_ms < best_inbound:
+                    best_inbound = region.peak_velocity_ms
+            else:
+                if best_outbound is None or region.peak_velocity_ms > best_outbound:
+                    best_outbound = region.peak_velocity_ms
+
+        for rotation in rotations:
+            dist = _haversine_km(
+                obj.centroid_lat, obj.centroid_lon,
+                rotation.centroid_lat, rotation.centroid_lon,
+            )
+            if dist < best_rotation_dist and dist <= MAX_ASSOCIATION_DISTANCE_KM:
+                best_rotation_dist = dist
+                best_rotation = rotation
+
+        annotated[i] = replace(
+            obj,
+            max_inbound_ms=best_inbound,
+            max_outbound_ms=best_outbound,
+            rotation=best_rotation,
+        )
+
+    return regions, rotations, annotated

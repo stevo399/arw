@@ -150,3 +150,69 @@ def test_detect_rotation_multi_sweep_increases_sweep_count():
     signatures = detect_rotation_signatures(vel_data)
     assert len(signatures) >= 1
     assert signatures[0].sweep_count == 2
+
+
+from src.velocity import analyze_velocity
+from src.detection import DetectedObject
+
+
+def _make_object(object_id, lat, lon, distance_km, bearing_deg) -> DetectedObject:
+    return DetectedObject(
+        object_id=object_id,
+        centroid_lat=lat,
+        centroid_lon=lon,
+        distance_km=distance_km,
+        bearing_deg=bearing_deg,
+        peak_dbz=55.0,
+        peak_label="intense rain",
+        area_km2=50.0,
+    )
+
+
+def test_analyze_velocity_associates_rotation_with_object():
+    grid = np.full((360, 500), np.nan)
+    grid[50:60, 150:160] = -20.0
+    grid[60:70, 150:160] = 20.0
+    vel_data = _make_velocity_data([_make_sweep(grid)])
+    # Place an object at roughly the same location as the shear couplet
+    azimuths = np.linspace(0, 359, 360)
+    ranges_m = np.linspace(2000, 230000, 500)
+    centroid_az = float(azimuths[60])
+    centroid_range = float(ranges_m[155])
+    from src.detection import polar_to_latlon
+    lat, lon = polar_to_latlon(RADAR_LAT, RADAR_LON, centroid_az, centroid_range)
+    obj = _make_object(1, round(lat, 4), round(lon, 4), round(centroid_range / 1000, 1), round(centroid_az, 1))
+    objects = [obj]
+    regions, rotations, annotated = analyze_velocity(vel_data, objects)
+    assert annotated[0].rotation is not None
+    assert annotated[0].rotation.strength in {"weak", "moderate", "strong"}
+
+
+def test_analyze_velocity_associates_inbound_with_object():
+    grid = np.full((360, 500), np.nan)
+    grid[50:70, 100:130] = -20.0
+    vel_data = _make_velocity_data([_make_sweep(grid)])
+    azimuths = np.linspace(0, 359, 360)
+    ranges_m = np.linspace(2000, 230000, 500)
+    centroid_az = float(azimuths[60])
+    centroid_range = float(ranges_m[115])
+    from src.detection import polar_to_latlon
+    lat, lon = polar_to_latlon(RADAR_LAT, RADAR_LON, centroid_az, centroid_range)
+    obj = _make_object(1, round(lat, 4), round(lon, 4), round(centroid_range / 1000, 1), round(centroid_az, 1))
+    objects = [obj]
+    regions, rotations, annotated = analyze_velocity(vel_data, objects)
+    assert annotated[0].max_inbound_ms is not None
+    assert annotated[0].max_inbound_ms <= -10.0
+
+
+def test_analyze_velocity_leaves_distant_objects_unannotated():
+    grid = np.full((360, 500), np.nan)
+    grid[50:60, 150:160] = -20.0
+    grid[60:70, 150:160] = 20.0
+    vel_data = _make_velocity_data([_make_sweep(grid)])
+    # Place object far from the couplet
+    obj = _make_object(1, 40.0, -90.0, 200.0, 180.0)
+    objects = [obj]
+    regions, rotations, annotated = analyze_velocity(vel_data, objects)
+    assert annotated[0].rotation is None
+    assert annotated[0].max_inbound_ms is None
