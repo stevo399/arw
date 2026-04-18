@@ -52,18 +52,17 @@
   - focus continuity now distinguishes strong focus dominance from true focus ambiguity in dense scenes, allowing stable mid-window motion to publish when challenger pressure is low while still suppressing reversal-heavy scans
   - replay, benchmark, and API diagnostics now expose the recent reported heading sequence directly, making dense-scene suppression decisions reviewable from the actual motion-history pattern instead of only aggregate flip counts
   - focus continuity now classifies recent reported-heading history as insufficient, stable, coherent-turn, mixed, or unstable, which lets dense live replays preserve one-direction turning motion while suppressing reversal-prone heading sequences under structural pressure
+  - all `mixed` heading stability cases are now suppressed under dense structural pressure (>= 4 merge/split events), closing the last remaining heading-stability calibration gap
+  - broader replay validation across 4 additional windows (KTLX afternoon, KTLX earlier evening, KEYX later evening, KTLX late window) confirmed no regressions from the mixed-suppression change
 - Full test suite: 164 tests all passing
 
 ## In Progress
-- Residual dense-scene validation for broader replay periods and focus-lineage edge cases, including heading-flip behavior in evolving rain objects
-- Review the remaining `mixed` heading-sequence cases to decide whether any should stay publishable or should be suppressed earlier under dense structural pressure
+- None — Phase 2 tracking quality work is complete
 
 ## Next
-- Validate focus stability over more replay periods and more storm morphologies
-- Stress-test the new confidence diagnostics across broader replay windows and future benchmark additions
-- Continue refining conservative multithreshold segmentation so simpler scenes do not fragment unnecessarily
 - Phase 3: Velocity ingestion, velocity region detection
 - NVGT frontend integration with the REST API
+- Continue refining conservative multithreshold segmentation so simpler scenes do not fragment unnecessarily
 
 ## Blockers / Decisions
-- No blocker for current API behavior. Remaining work is quality-related: broader validation now runs successfully, and the main remaining issue is interpreting and improving the low-continuity behavior in the denser earlier replay window.
+- No blockers. Phase 2 heading-stability calibration is resolved — all mixed/unstable cases suppress under structural pressure while coherent turning and stable motion publish correctly across all tested storm morphologies.
