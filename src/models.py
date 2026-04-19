@@ -34,6 +34,50 @@ class RainObject(BaseModel):
     peak_label: str
     area_km2: float
     layers: list[IntensityLayer]
+    max_inbound_ms: float | None = None
+    max_outbound_ms: float | None = None
+    rotation_strength: str | None = None
+
+
+class VelocityRegionModel(BaseModel):
+    region_type: str
+    peak_velocity_ms: float
+    mean_velocity_ms: float
+    area_km2: float
+    centroid_lat: float
+    centroid_lon: float
+    distance_km: float
+    bearing_deg: float
+    sweep_count: int
+    elevation_angles: list[float]
+
+
+class RotationSignatureModel(BaseModel):
+    centroid_lat: float
+    centroid_lon: float
+    distance_km: float
+    bearing_deg: float
+    max_shear_ms: float
+    max_inbound_ms: float
+    max_outbound_ms: float
+    diameter_km: float
+    sweep_count: int
+    elevation_angles: list[float]
+    strength: str
+    associated_object_id: int | None = None
+
+
+class VelocityResponse(BaseModel):
+    site_id: str
+    timestamp: str
+    regions: list[VelocityRegionModel]
+    rotation_signatures: list[RotationSignatureModel]
+
+
+class RotationHistoryEntryModel(BaseModel):
+    timestamp: str
+    strength: str | None = None
+    max_shear_ms: float | None = None
 
 
 class ObjectsResponse(BaseModel):
@@ -115,6 +159,7 @@ class StormTrack(BaseModel):
     split_from: int | None
     first_seen: str
     last_seen: str
+    rotation_history: list[RotationHistoryEntryModel] = []
 
 
 class TrackEvent(BaseModel):

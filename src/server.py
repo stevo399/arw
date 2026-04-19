@@ -5,6 +5,7 @@ from src.models import (
     RadarSite, ScanMeta, ObjectsResponse, SummaryResponse, RainObject, IntensityLayer,
     TracksResponse, StormTrack, TrackPosition, TrackMotion, TrackEvent, TrackIdentity, TrackFocus,
     TrackDetailResponse, PeakHistoryEntry,
+    VelocityResponse, VelocityRegionModel, RotationSignatureModel, RotationHistoryEntryModel,
 )
 from src.sites import geocode_city_state, rank_sites, NEXRAD_SITES
 from src.ingest import fetch_scan
@@ -136,6 +137,14 @@ def _track_to_model(track) -> StormTrack:
         split_from=track.split_from,
         first_seen=track.first_seen.isoformat() if track.first_seen else "",
         last_seen=track.last_seen.isoformat() if track.last_seen else "",
+        rotation_history=[
+            RotationHistoryEntryModel(
+                timestamp=entry.timestamp.isoformat() if isinstance(entry.timestamp, datetime) else entry.timestamp,
+                strength=entry.rotation.strength if entry.rotation else None,
+                max_shear_ms=entry.rotation.max_shear_ms if entry.rotation else None,
+            )
+            for entry in getattr(track, 'rotation_history', [])
+        ],
     )
 
 
@@ -185,6 +194,9 @@ def get_objects(site_id: str, datetime: str | None = Query(None)):
                 )
                 for layer in obj.layers
             ],
+            max_inbound_ms=getattr(obj, 'max_inbound_ms', None),
+            max_outbound_ms=getattr(obj, 'max_outbound_ms', None),
+            rotation_strength=obj.rotation.strength if getattr(obj, 'rotation', None) is not None else None,
         )
         for obj in buffered.detected_objects
     ]
@@ -236,6 +248,50 @@ def get_tracks(site_id: str, datetime: str | None = Query(None)):
             )
             for e in events
         ],
+    )
+
+
+@app.get("/velocity/{site_id}", response_model=VelocityResponse)
+def get_velocity(site_id: str, datetime: str | None = Query(None)):
+    dt = _parse_datetime(datetime)
+    buffered = _ingest_to_buffer(site_id, dt)
+    regions = [
+        VelocityRegionModel(
+            region_type=r.region_type,
+            peak_velocity_ms=r.peak_velocity_ms,
+            mean_velocity_ms=r.mean_velocity_ms,
+            area_km2=r.area_km2,
+            centroid_lat=r.centroid_lat,
+            centroid_lon=r.centroid_lon,
+            distance_km=r.distance_km,
+            bearing_deg=r.bearing_deg,
+            sweep_count=r.sweep_count,
+            elevation_angles=r.elevation_angles,
+        )
+        for r in buffered.velocity_regions
+    ]
+    rotation_sigs = [
+        RotationSignatureModel(
+            centroid_lat=s.centroid_lat,
+            centroid_lon=s.centroid_lon,
+            distance_km=s.distance_km,
+            bearing_deg=s.bearing_deg,
+            max_shear_ms=s.max_shear_ms,
+            max_inbound_ms=s.max_inbound_ms,
+            max_outbound_ms=s.max_outbound_ms,
+            diameter_km=s.diameter_km,
+            sweep_count=s.sweep_count,
+            elevation_angles=s.elevation_angles,
+            strength=s.strength,
+            associated_object_id=None,
+        )
+        for s in buffered.rotation_signatures
+    ]
+    return VelocityResponse(
+        site_id=site_id.upper(),
+        timestamp=buffered.reflectivity_data.timestamp,
+        regions=regions,
+        rotation_signatures=rotation_sigs,
     )
 
 
