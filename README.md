@@ -29,8 +29,8 @@ Key rule: **only the Ingest Manager makes network calls.**
 ## Current Status
 
 - **Phase 1** — Complete: site database, reflectivity ingest, rain object detection, speech summaries
-- **Phase 2** — Complete: motion tracking with segmentation, association, confidence-aware motion, focus stability, and live replay validation (164 tests passing)
-- **Phase 3** — Next: velocity ingestion, velocity region detection
+- **Phase 2** — Complete: motion tracking with segmentation, association, confidence-aware motion, focus stability, and live replay validation
+- **Phase 3** — Complete: velocity ingestion, multi-sweep extraction, inbound/outbound region detection, rotation signature detection, rotation persistence tracking (195 tests passing)
 - **Phase 4** — Planned: hail detection, debris scoring
 - **Phase 5** — Planned: spatial audio scene
 - **Phase 6** — Planned: native web app frontend

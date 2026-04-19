@@ -55,14 +55,26 @@
   - all `mixed` heading stability cases are now suppressed under dense structural pressure (>= 4 merge/split events), closing the last remaining heading-stability calibration gap
   - broader replay validation across 4 additional windows (KTLX afternoon, KTLX earlier evening, KEYX later evening, KTLX late window) confirmed no regressions from the mixed-suppression change
 - Full test suite: 164 tests all passing
+- Phase 3: velocity ingestion, velocity region detection, rotation signature detection
+  - Parser refactored: `parse_radar_file()` returns pyart Radar object; `extract_reflectivity_from_radar()` and `extract_velocity()` operate on the same radar object (no re-reading)
+  - Multi-sweep velocity extraction: up to 3 lowest sweeps with Py-ART region-based dealiasing
+  - Velocity region detection: connected-component labeling on thresholded inbound/outbound velocity fields with cross-sweep merging
+  - Rotation signature detection: gate-to-gate shear detection (NWS criteria: >= 15 m/s across < 5 km), strength classification (weak/moderate/strong), multi-sweep confirmation
+  - Rain object association: velocity regions and rotation signatures matched to nearest DetectedObject by haversine distance
+  - Buffer and pipeline integration: BufferedScan carries velocity data, server and replay scripts use the new parse-once pipeline
+  - Track rotation history: per-scan rotation entries on tracks with 6-scan cap, enabling persistence detection
+  - API: new `/velocity/{site_id}` endpoint, `/objects` gains `max_inbound_ms`/`max_outbound_ms`/`rotation_strength`, `/tracks` gains `rotation_history`
+  - Summary integration: rotation language in spoken summaries with persistence patterns ("new rotation", "persistent rotation", "rotation weakening"), standalone rotation reports for secondary objects
+  - Live validation: 2 KTLX replay windows confirmed working rotation detection, persistence language, and no tracking regressions
+- Full test suite: 195 tests all passing
 
 ## In Progress
-- None — Phase 2 tracking quality work is complete
+- None — Phase 3 velocity work is complete
 
 ## Next
-- Phase 3: Velocity ingestion, velocity region detection
+- Phase 4: Hail detection, debris scoring
 - Native web app frontend (replaces earlier NVGT plan)
 - Continue refining conservative multithreshold segmentation so simpler scenes do not fragment unnecessarily
 
 ## Blockers / Decisions
-- No blockers. Phase 2 heading-stability calibration is resolved — all mixed/unstable cases suppress under structural pressure while coherent turning and stable motion publish correctly across all tested storm morphologies.
+- No blockers. Phase 3 velocity pipeline is complete and validated against live NEXRAD data.
