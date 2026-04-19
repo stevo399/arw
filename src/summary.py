@@ -110,6 +110,29 @@ def _pick_summary_object(objects: list[DetectedObject], tracks) -> DetectedObjec
     )
 
 
+def _format_rotation(obj: DetectedObject, track=None) -> str:
+    """Format rotation info for speech, with persistence language if track available."""
+    rotation = getattr(obj, "rotation", None)
+    if rotation is None:
+        if track is not None and hasattr(track, "rotation_history"):
+            recent = [e for e in track.rotation_history[-3:] if e.rotation is not None]
+            if len(recent) > 0 and track.rotation_history[-1].rotation is None:
+                return " Rotation weakening."
+        return ""
+    if track is not None and hasattr(track, "rotation_history"):
+        consecutive_with = 0
+        for entry in reversed(track.rotation_history):
+            if entry.rotation is not None:
+                consecutive_with += 1
+            else:
+                break
+        if consecutive_with >= 3:
+            return f" Persistent {rotation.strength} rotation."
+        elif consecutive_with <= 1:
+            return f" New {rotation.strength} rotation detected."
+    return f" {rotation.strength.capitalize()} rotation detected."
+
+
 def _format_motion(motion: MotionVector | None, track=None, events: list[dict] | None = None) -> str:
     """Format motion info for speech."""
     if motion is None:
@@ -156,11 +179,13 @@ def generate_summary(
     focus_track = _get_track_for_object(strongest, tracks)
     motion = _get_motion_for_object(strongest, tracks)
     motion_str = _format_motion(motion, track=focus_track, events=events)
+    rotation_str = _format_rotation(strongest, track=focus_track)
 
     parts = [
         f"{site_name}: {count} {obj_word} detected. "
         f"Strongest: {strongest.peak_label}, "
         f"{distance_mi} miles {bearing} of the radar{motion_str}."
+        f"{rotation_str}"
     ]
 
     # Add merge/split events
@@ -173,6 +198,21 @@ def generate_summary(
         if split_count > 0:
             storms_word = "storm" if split_count == 1 else "storms"
             parts.append(f" Note: {split_count} {storms_word} split in the last scan.")
+
+    # Report additional rotation signatures not on the strongest object
+    standalone_rotations = [
+        obj for obj in objects
+        if obj.object_id != strongest.object_id
+        and getattr(obj, "rotation", None) is not None
+    ]
+    for obj in standalone_rotations[:2]:
+        rot = obj.rotation
+        rot_bearing = degrees_to_bearing(rot.bearing_deg)
+        rot_distance_mi = km_to_miles(rot.distance_km)
+        parts.append(
+            f" Rotation signature {rot_distance_mi} miles {rot_bearing} of the radar,"
+            f" {rot.strength} shear."
+        )
 
     parts.append(f" Covering approximately {area_mi2} square miles.")
 

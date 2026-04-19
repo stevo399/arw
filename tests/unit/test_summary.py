@@ -5,6 +5,7 @@ from src.summary import generate_summary, km_to_miles
 from src.detection import DetectedObject
 from src.motion import MotionVector
 from src.tracker import Track
+from src.velocity import RotationSignature
 
 
 def _make_object(obj_id=1, distance_km=40.2, bearing_deg=270.0, peak_dbz=45.0,
@@ -322,3 +323,49 @@ def test_generate_summary_uses_primary_focus_object_directly_when_available():
     )
     assert "intense rain" in text
     assert "37 miles N of the radar" in text
+
+
+def _make_object_with_rotation(strength="moderate"):
+    return DetectedObject(
+        object_id=1, centroid_lat=35.5, centroid_lon=-97.0,
+        distance_km=50.0, bearing_deg=90.0,
+        peak_dbz=55.0, peak_label="intense rain", area_km2=100.0,
+        rotation=RotationSignature(
+            centroid_lat=35.5, centroid_lon=-97.0,
+            distance_km=50.0, bearing_deg=90.0,
+            max_shear_ms=30.0, max_inbound_ms=-20.0, max_outbound_ms=15.0,
+            diameter_km=3.0, sweep_count=2, elevation_angles=[0.5, 1.5],
+            strength=strength,
+        ),
+    )
+
+
+def test_summary_includes_rotation_for_strongest_object():
+    obj = _make_object_with_rotation("moderate")
+    text = generate_summary(
+        site_id="KTLX", site_name="Oklahoma City",
+        timestamp="2026-04-10T21:00:00Z", objects=[obj],
+    )
+    assert "rotation" in text.lower()
+
+
+def test_summary_includes_rotation_strength():
+    obj = _make_object_with_rotation("strong")
+    text = generate_summary(
+        site_id="KTLX", site_name="Oklahoma City",
+        timestamp="2026-04-10T21:00:00Z", objects=[obj],
+    )
+    assert "strong rotation" in text.lower()
+
+
+def test_summary_no_rotation_when_none():
+    obj = DetectedObject(
+        object_id=1, centroid_lat=35.5, centroid_lon=-97.0,
+        distance_km=50.0, bearing_deg=90.0,
+        peak_dbz=55.0, peak_label="intense rain", area_km2=100.0,
+    )
+    text = generate_summary(
+        site_id="KTLX", site_name="Oklahoma City",
+        timestamp="2026-04-10T21:00:00Z", objects=[obj],
+    )
+    assert "rotation" not in text.lower()
