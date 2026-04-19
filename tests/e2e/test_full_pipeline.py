@@ -50,7 +50,9 @@ def test_full_pipeline_sites_to_summary():
     # Step 2: Get objects for KTLX with synthetic storm data
     ref_data = _make_reflectivity_data_with_storm()
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
-         patch("src.server.extract_reflectivity", return_value=ref_data):
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_reflectivity_from_radar", return_value=ref_data), \
+         patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/objects/KTLX")
     assert resp.status_code == 200
     data = resp.json()
@@ -64,7 +66,9 @@ def test_full_pipeline_sites_to_summary():
 
     # Step 3: Get summary for KTLX
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
-         patch("src.server.extract_reflectivity", return_value=ref_data):
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_reflectivity_from_radar", return_value=ref_data), \
+         patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/summary/KTLX")
     assert resp.status_code == 200
     summary = resp.json()
@@ -86,7 +90,9 @@ def test_full_pipeline_no_precipitation():
         timestamp="2026-04-08T18:30:00Z",
     )
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
-         patch("src.server.extract_reflectivity", return_value=ref_data):
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_reflectivity_from_radar", return_value=ref_data), \
+         patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/summary/KTLX")
     assert resp.status_code == 200
     assert "No significant precipitation" in resp.json()["text"]
@@ -96,7 +102,9 @@ def test_full_pipeline_scan_metadata():
     """Test getting scan metadata."""
     ref_data = _make_reflectivity_data_with_storm()
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
-         patch("src.server.extract_reflectivity", return_value=ref_data):
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_reflectivity_from_radar", return_value=ref_data), \
+         patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/scan/KTLX")
     assert resp.status_code == 200
     data = resp.json()
@@ -109,7 +117,9 @@ def test_tracks_endpoint_e2e():
     """Test /tracks endpoint with synthetic data."""
     ref_data = _make_reflectivity_data_with_storm()
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
-         patch("src.server.extract_reflectivity", return_value=ref_data):
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_reflectivity_from_radar", return_value=ref_data), \
+         patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/tracks/KTLX")
     assert resp.status_code == 200
     data = resp.json()
@@ -150,12 +160,16 @@ def test_tracks_accumulate_across_calls():
     ref_data2.reflectivity[86:96, 196:206] = 45.0  # Slightly moved
 
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
-         patch("src.server.extract_reflectivity", return_value=ref_data1):
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_reflectivity_from_radar", return_value=ref_data1), \
+         patch("src.server.extract_velocity", return_value=None):
         resp1 = client.get("/tracks/KTLX")
     assert resp1.status_code == 200
 
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
-         patch("src.server.extract_reflectivity", return_value=ref_data2):
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_reflectivity_from_radar", return_value=ref_data2), \
+         patch("src.server.extract_velocity", return_value=None):
         resp2 = client.get("/tracks/KTLX")
     assert resp2.status_code == 200
     data = resp2.json()

@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 import numpy as np
 from src.parser import ReflectivityData
 from src.server import app
@@ -45,7 +45,9 @@ def test_sites_endpoint_missing_params_returns_422():
 def test_scan_endpoint_returns_200():
     mock_ref = _make_reflectivity_data(0.0, [0.5, 1.5])
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
-         patch("src.server.extract_reflectivity", return_value=mock_ref):
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/scan/KTLX")
     assert resp.status_code == 200
     data = resp.json()
@@ -56,7 +58,9 @@ def test_scan_endpoint_returns_200():
 def test_objects_endpoint_returns_200():
     mock_ref = _make_reflectivity_data(np.nan)
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
-         patch("src.server.extract_reflectivity", return_value=mock_ref):
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/objects/KTLX")
     assert resp.status_code == 200
     data = resp.json()
@@ -67,7 +71,9 @@ def test_objects_endpoint_returns_200():
 def test_summary_endpoint_returns_200():
     mock_ref = _make_reflectivity_data(np.nan)
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
-         patch("src.server.extract_reflectivity", return_value=mock_ref):
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/summary/KTLX")
     assert resp.status_code == 200
     data = resp.json()
@@ -77,7 +83,9 @@ def test_summary_endpoint_returns_200():
 def test_tracks_endpoint_returns_200():
     mock_ref = _make_reflectivity_data(np.nan)
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
-         patch("src.server.extract_reflectivity", return_value=mock_ref):
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/tracks/KTLX")
     assert resp.status_code == 200
     data = resp.json()
@@ -89,10 +97,14 @@ def test_tracks_endpoint_returns_200():
 def test_tracks_endpoint_includes_motion_confidence_fields():
     mock_ref = _make_reflectivity_data(np.nan)
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
-         patch("src.server.extract_reflectivity", return_value=mock_ref):
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_velocity", return_value=None):
         client.get("/tracks/KTLX")
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
-         patch("src.server.extract_reflectivity", return_value=mock_ref):
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/tracks/KTLX")
     assert resp.status_code == 200
     data = resp.json()
@@ -119,3 +131,16 @@ def test_tracks_endpoint_includes_motion_confidence_fields():
 def test_motion_endpoint_missing_track_returns_404():
     resp = client.get("/motion/KTLX/999")
     assert resp.status_code == 404
+
+
+def test_velocity_endpoint_returns_200():
+    mock_ref = _make_reflectivity_data(np.nan)
+    with patch("src.server.fetch_scan", return_value="/fake/path"), \
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_velocity", return_value=None):
+        resp = client.get("/velocity/KTLX")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "regions" in data
+    assert "rotation_signatures" in data
