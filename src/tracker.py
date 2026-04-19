@@ -5,7 +5,7 @@ from src.motion import resolve_reported_motion, MotionVector, recent_heading_fli
 from src.tracking.motion import MotionContinuityContext
 from src.tracking.association import associate_tracks
 from src.tracking.events import normalize_merge_event, normalize_split_event
-from src.tracking.types import FocusContinuity, IdentityConfidence, MotionSample, Track
+from src.tracking.types import FocusContinuity, IdentityConfidence, MotionSample, RotationHistoryEntry, Track
 
 MAX_MISSED_SCANS = 2
 FOCUS_SWITCH_MARGIN = 2.0
@@ -162,6 +162,12 @@ class StormTracker:
         track = Track(track_id=self._next_id, status="active")
         self._next_id += 1
         track.add_position(timestamp, obj)
+        track.rotation_history.append(RotationHistoryEntry(
+            timestamp=timestamp,
+            rotation=getattr(obj, "rotation", None),
+        ))
+        if len(track.rotation_history) > 6:
+            track.rotation_history = track.rotation_history[-6:]
         track.identity_confidence = 0.3
         track.identity_diagnostics = self._build_identity_diagnostics(
             score_value=0.3,
@@ -537,6 +543,12 @@ class StormTracker:
                 continue
             primary_new_id = related_new_ids[0]
             parent_track.add_position(timestamp, new_objects[primary_new_id])
+            parent_track.rotation_history.append(RotationHistoryEntry(
+                timestamp=timestamp,
+                rotation=getattr(new_objects[primary_new_id], "rotation", None),
+            ))
+            if len(parent_track.rotation_history) > 6:
+                parent_track.rotation_history = parent_track.rotation_history[-6:]
             parent_track.identity_confidence = self._score_confidence(association, primary_new_id, parent_tid, scan, parent_track)
             if parent_track.identity_diagnostics is not None:
                 parent_track.identity_diagnostics.event_context = "split_parent"
@@ -571,6 +583,12 @@ class StormTracker:
                 continue
             if surviving_track_id not in handled_split_parents:
                 surviving.add_position(timestamp, new_objects[new_id])
+                surviving.rotation_history.append(RotationHistoryEntry(
+                    timestamp=timestamp,
+                    rotation=getattr(new_objects[new_id], "rotation", None),
+                ))
+                if len(surviving.rotation_history) > 6:
+                    surviving.rotation_history = surviving.rotation_history[-6:]
                 surviving.identity_confidence = self._score_confidence(association, new_id, surviving_track_id, scan, surviving)
                 if surviving.identity_diagnostics is not None:
                     surviving.identity_diagnostics.event_context = "merge_survivor"
@@ -593,6 +611,12 @@ class StormTracker:
             if track is None or track.status != "active":
                 continue
             track.add_position(timestamp, new_objects[new_id])
+            track.rotation_history.append(RotationHistoryEntry(
+                timestamp=timestamp,
+                rotation=getattr(new_objects[new_id], "rotation", None),
+            ))
+            if len(track.rotation_history) > 6:
+                track.rotation_history = track.rotation_history[-6:]
             track.identity_confidence = self._score_confidence(association, new_id, track_id, scan, track)
             new_obj_to_track[new_id] = track_id
 

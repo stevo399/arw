@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from src.detection import DetectedObject
+from src.velocity import RotationSignature
 
 
 @dataclass
@@ -93,6 +94,12 @@ class FocusContinuity:
 
 
 @dataclass
+class RotationHistoryEntry:
+    timestamp: datetime
+    rotation: RotationSignature | None
+
+
+@dataclass
 class Track:
     track_id: int
     status: str  # "active", "merged", "split", "lost"
@@ -113,6 +120,7 @@ class Track:
     last_motion: Any | None = None
     diagnostic_motion: Any | None = None
     motion_history: list[MotionSample] = field(default_factory=list)
+    rotation_history: list[RotationHistoryEntry] = field(default_factory=list)
     is_primary_focus: bool = False
     _missed_scans: int = 0
 
