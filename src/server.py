@@ -8,7 +8,8 @@ from src.models import (
 )
 from src.sites import geocode_city_state, rank_sites, NEXRAD_SITES
 from src.ingest import fetch_scan
-from src.parser import extract_reflectivity
+from src.parser import parse_radar_file, extract_reflectivity_from_radar, extract_velocity
+from src.velocity import analyze_velocity
 from src.detection import detect_objects_with_grid
 from src.preprocess import preprocess_reflectivity_data
 from src.summary import generate_summary
@@ -40,8 +41,10 @@ def _parse_datetime(dt_str: str | None) -> datetime | None:
 def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
     """Fetch a scan, detect objects, and add to buffer + tracker."""
     filepath = fetch_scan(site_id.upper(), dt)
-    raw_ref_data = extract_reflectivity(filepath)
+    radar = parse_radar_file(filepath)
+    raw_ref_data = extract_reflectivity_from_radar(radar)
     ref_data, scan_quality = preprocess_reflectivity_data(raw_ref_data)
+    vel_data = extract_velocity(radar)
     result = detect_objects_with_grid(
         reflectivity=ref_data.reflectivity,
         azimuths=ref_data.azimuths,
@@ -49,15 +52,19 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
         radar_lat=ref_data.radar_lat,
         radar_lon=ref_data.radar_lon,
     )
+    regions, rotations, annotated_objects = analyze_velocity(vel_data, result.objects)
     scan_timestamp = datetime.fromisoformat(ref_data.timestamp) if isinstance(ref_data.timestamp, str) else ref_data.timestamp
     buffered = BufferedScan(
         timestamp=scan_timestamp,
         site_id=site_id.upper(),
         reflectivity_data=ref_data,
-        detected_objects=result.objects,
+        detected_objects=annotated_objects,
         labeled_grid=result.labeled_grid,
         object_masks=result.object_masks,
         scan_quality=scan_quality,
+        velocity_data=vel_data,
+        velocity_regions=regions,
+        rotation_signatures=rotations,
     )
     _buffer.add_scan(buffered)
     _tracker.update(buffered)

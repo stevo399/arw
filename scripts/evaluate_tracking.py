@@ -13,7 +13,8 @@ if str(REPO_ROOT) not in sys.path:
 from src.buffer import BufferedScan
 from src.detection import detect_objects_with_grid
 from src.ingest import fetch_scan, get_cache_path
-from src.parser import extract_reflectivity
+from src.parser import parse_radar_file, extract_reflectivity_from_radar, extract_velocity
+from src.velocity import analyze_velocity
 from src.preprocess import preprocess_reflectivity_data
 from src.tracker import StormTracker
 from scripts.live_replay import (
@@ -245,8 +246,10 @@ def run_benchmark(entry: dict) -> BenchmarkResult:
     for scan in scans:
         scan_dt = _scan_timestamp(scan)
         filepath = get_cache_path(site_id, _scan_filename(scan)) if local_only else fetch_scan(site_id, scan_dt)
-        raw_reflectivity = extract_reflectivity(filepath)
+        radar = parse_radar_file(filepath)
+        raw_reflectivity = extract_reflectivity_from_radar(radar)
         reflectivity, scan_quality = preprocess_reflectivity_data(raw_reflectivity)
+        vel_data = extract_velocity(radar)
         detection = detect_objects_with_grid(
             reflectivity=reflectivity.reflectivity,
             azimuths=reflectivity.azimuths,
@@ -254,14 +257,18 @@ def run_benchmark(entry: dict) -> BenchmarkResult:
             radar_lat=reflectivity.radar_lat,
             radar_lon=reflectivity.radar_lon,
         )
+        regions, rotations, annotated_objects = analyze_velocity(vel_data, detection.objects)
         buffered = BufferedScan(
             timestamp=datetime.fromisoformat(reflectivity.timestamp),
             site_id=site_id,
             reflectivity_data=reflectivity,
-            detected_objects=detection.objects,
+            detected_objects=annotated_objects,
             labeled_grid=detection.labeled_grid,
             object_masks=detection.object_masks,
             scan_quality=scan_quality,
+            velocity_data=vel_data,
+            velocity_regions=regions,
+            rotation_signatures=rotations,
         )
         tracker.update(buffered)
         snapshots.append(_snapshot(site_name, buffered, tracker, seen_track_ids))

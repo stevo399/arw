@@ -11,7 +11,8 @@ if str(REPO_ROOT) not in sys.path:
 from src.buffer import BufferedScan
 from src.detection import detect_objects_with_grid
 from src.ingest import get_cache_path, list_latest_scans, list_scans_for_date, fetch_scan, scan_is_cached
-from src.parser import extract_reflectivity
+from src.parser import parse_radar_file, extract_reflectivity_from_radar, extract_velocity
+from src.velocity import analyze_velocity
 from src.preprocess import preprocess_reflectivity_data
 from src.sites import NEXRAD_SITES
 from src.summary import generate_summary
@@ -275,8 +276,10 @@ def main() -> None:
     for scan in scans:
         scan_dt = _scan_timestamp(scan)
         filepath = get_cache_path(site_id, _scan_filename(scan)) if args.local_only else fetch_scan(site_id, scan_dt)
-        raw_reflectivity = extract_reflectivity(filepath)
+        radar = parse_radar_file(filepath)
+        raw_reflectivity = extract_reflectivity_from_radar(radar)
         reflectivity, scan_quality = preprocess_reflectivity_data(raw_reflectivity)
+        vel_data = extract_velocity(radar)
         detection = detect_objects_with_grid(
             reflectivity=reflectivity.reflectivity,
             azimuths=reflectivity.azimuths,
@@ -284,14 +287,18 @@ def main() -> None:
             radar_lat=reflectivity.radar_lat,
             radar_lon=reflectivity.radar_lon,
         )
+        regions, rotations, annotated_objects = analyze_velocity(vel_data, detection.objects)
         buffered = BufferedScan(
             timestamp=datetime.fromisoformat(reflectivity.timestamp),
             site_id=site_id,
             reflectivity_data=reflectivity,
-            detected_objects=detection.objects,
+            detected_objects=annotated_objects,
             labeled_grid=detection.labeled_grid,
             object_masks=detection.object_masks,
             scan_quality=scan_quality,
+            velocity_data=vel_data,
+            velocity_regions=regions,
+            rotation_signatures=rotations,
         )
         tracker.update(buffered)
         diagnostics = summarize_scan(site_name, buffered, tracker)
@@ -317,7 +324,8 @@ def main() -> None:
             f"scan_quality={diagnostics.scan_quality_score:.2f} "
             f"quality_flags={quality_flags} "
             f"merges={diagnostics.merge_count} "
-            f"splits={diagnostics.split_count}"
+            f"splits={diagnostics.split_count} "
+            f"ROTATIONS={len(rotations)}"
         )
         print(f"  {diagnostics.summary}")
 

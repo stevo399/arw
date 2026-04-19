@@ -1,11 +1,12 @@
 # src/buffer.py
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from collections import deque
 import numpy as np
-from src.parser import ReflectivityData
+from src.parser import ReflectivityData, VelocityData
 from src.detection import DetectedObject
 from src.preprocess import ScanQuality
+from src.velocity import VelocityRegion, RotationSignature
 
 
 @dataclass
@@ -18,6 +19,9 @@ class BufferedScan:
     labeled_grid: np.ndarray
     object_masks: dict[int, np.ndarray]
     scan_quality: ScanQuality | None = None
+    velocity_data: VelocityData | None = None
+    velocity_regions: list[VelocityRegion] = field(default_factory=list)
+    rotation_signatures: list[RotationSignature] = field(default_factory=list)
 
 
 class ReplayBuffer:
