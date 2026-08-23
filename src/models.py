@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+from typing import Any
+
+from pydantic import BaseModel, Field
 
 
 class RadarSite(BaseModel):
@@ -189,3 +191,34 @@ class TrackDetailResponse(BaseModel):
     split_from: int | None
     first_seen: str
     last_seen: str
+
+
+class MapLocation(BaseModel):
+    latitude: float
+    longitude: float
+    label: str
+
+
+class EsriLayerField(BaseModel):
+    name: str
+    type: str
+    alias: str
+
+
+class StormMapLayerResponse(BaseModel):
+    layer_name: str
+    layer_type: str
+    geometryType: str
+    objectIdField: str
+    displayFieldName: str
+    spatialReference: dict[str, int]
+    fields: list[EsriLayerField]
+    drawingInfo: dict[str, Any]
+    site: RadarSite
+    location: MapLocation
+    timestamp: str
+    feature_count: int
+    geojson: dict[str, Any] = Field(default_factory=dict)
+    intensity_geojson: dict[str, Any] = Field(default_factory=dict)
+    audiom_geojson: dict[str, Any] = Field(default_factory=dict)
+    centroid_geojson: dict[str, Any] = Field(default_factory=dict)

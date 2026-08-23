@@ -179,6 +179,15 @@ def geocode_city_state(city: str, state: str) -> tuple[float, float]:
     return location.latitude, location.longitude
 
 
+def geocode_zipcode(zipcode: str) -> tuple[float, float]:
+    """Convert a US ZIP code to (latitude, longitude) using Nominatim."""
+    geolocator = Nominatim(user_agent="arw_nexrad_app")
+    location = geolocator.geocode(f"{zipcode}, USA")
+    if location is None:
+        raise ValueError(f"Could not geocode ZIP code '{zipcode}'")
+    return location.latitude, location.longitude
+
+
 def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculate great-circle distance between two points in kilometers."""
     r = EARTH_RADIUS_KM

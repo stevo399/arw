@@ -1,23 +1,60 @@
 # src/server.py
-from datetime import datetime
+from datetime import datetime, date as date_type
+import math
+import os
+
 from fastapi import FastAPI, Query, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse
 from src.models import (
     RadarSite, ScanMeta, ObjectsResponse, SummaryResponse, RainObject, IntensityLayer,
     TracksResponse, StormTrack, TrackPosition, TrackMotion, TrackEvent, TrackIdentity, TrackFocus,
     TrackDetailResponse, PeakHistoryEntry,
     VelocityResponse, VelocityRegionModel, RotationSignatureModel, RotationHistoryEntryModel,
+    MapLocation, StormMapLayerResponse,
 )
-from src.sites import geocode_city_state, rank_sites, NEXRAD_SITES
+from src.sites import geocode_city_state, geocode_zipcode, rank_sites, NEXRAD_SITES
 from src.ingest import fetch_scan
 from src.parser import parse_radar_file, extract_reflectivity_from_radar, extract_velocity
 from src.velocity import analyze_velocity
 from src.detection import detect_objects_with_grid
 from src.preprocess import preprocess_reflectivity_data
 from src.summary import generate_summary
+from src.map_layer import (
+    build_storm_audiom_geojson,
+    build_storm_centroid_geojson,
+    build_storm_geojson,
+    build_storm_intensity_geojson,
+    storm_layer_drawing_info,
+    storm_layer_fields,
+)
 from src.buffer import ReplayBuffer, BufferedScan
+from src.radar_page import radar_page_html
 from src.tracker import StormTracker
 
 app = FastAPI(title="ARW - Accessible Radar Workstation", version="0.2.0")
+
+
+def _cors_origins() -> list[str]:
+    configured = os.getenv("ARW_CORS_ORIGINS")
+    if configured:
+        return [origin.strip() for origin in configured.split(",") if origin.strip()]
+    return [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "https://www.audiom.net",
+        "https://audiom.net",
+        "https://audiom-staging.herokuapp.com",
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins(),
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 # Module-level state for buffer and tracker
 _buffer = ReplayBuffer()
@@ -37,6 +74,47 @@ def _parse_datetime(dt_str: str | None) -> datetime | None:
     if dt_str is None:
         return None
     return datetime.fromisoformat(dt_str)
+
+
+def _parse_layer_datetime(
+    datetime_value: str | None,
+    date_value: date_type | None,
+    time_value: str | None,
+) -> datetime | None:
+    if datetime_value is not None:
+        return _parse_datetime(datetime_value)
+    if date_value is None:
+        return None
+    if time_value is None:
+        return datetime.combine(date_value, datetime.min.time())
+    return datetime.fromisoformat(f"{date_value.isoformat()}T{time_value}")
+
+
+def _json_safe(value):
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    return value
+
+
+def _resolve_map_location(
+    city: str | None,
+    state: str | None,
+    zipcode: str | None,
+) -> tuple[float, float, str]:
+    if zipcode:
+        lat, lon = geocode_zipcode(zipcode)
+        return lat, lon, zipcode
+    if city and state:
+        lat, lon = geocode_city_state(city, state)
+        return lat, lon, f"{city}, {state}"
+    raise HTTPException(
+        status_code=422,
+        detail="Provide either zipcode or both city and state.",
+    )
 
 
 def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
@@ -153,6 +231,20 @@ def root():
     return {"name": "ARW - Accessible Radar Workstation", "version": "0.2.0"}
 
 
+@app.get("/radar", response_class=HTMLResponse)
+def radar_page():
+    return HTMLResponse(radar_page_html())
+
+
+@app.get("/radar/config")
+def radar_config():
+    return {
+        "audiom_map_url": os.getenv("AUDIOM_MAP_URL", "https://www.audiom.net/map"),
+        "audiom_rules_path": os.getenv("AUDIOM_STORM_RULES_PATH", "/rules/arw-storms.json"),
+        "has_audiom_api_key": bool(os.getenv("AUDIOM_API_KEY", "")),
+    }
+
+
 @app.get("/sites", response_model=list[RadarSite])
 def get_sites(city: str = Query(...), state: str = Query(...)):
     lat, lon = geocode_city_state(city, state)
@@ -206,6 +298,86 @@ def get_objects(site_id: str, datetime: str | None = Query(None)):
         object_count=len(rain_objects),
         objects=rain_objects,
     )
+
+
+@app.get("/map/storms", response_model=StormMapLayerResponse)
+def get_storm_map_layer(
+    city: str | None = Query(None),
+    state: str | None = Query(None),
+    zipcode: str | None = Query(None),
+    datetime: str | None = Query(None),
+    date: date_type | None = Query(None),
+    time: str | None = Query(None),
+):
+    try:
+        lat, lon, label = _resolve_map_location(city, state, zipcode)
+        dt = _parse_layer_datetime(datetime, date, time)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    ranked_sites = rank_sites(lat, lon)
+    if not ranked_sites:
+        raise HTTPException(status_code=404, detail="No radar site found for that location")
+
+    site = ranked_sites[0]
+    buffered = _ingest_to_buffer(site["site_id"], dt)
+    geojson = build_storm_geojson(buffered)
+    intensity_geojson = build_storm_intensity_geojson(buffered)
+    audiom_geojson = build_storm_audiom_geojson(buffered)
+    centroid_geojson = build_storm_centroid_geojson(buffered)
+    return StormMapLayerResponse(
+        layer_name="ARW storm polygons",
+        layer_type="FeatureLayer",
+        geometryType="esriGeometryPolygon",
+        objectIdField="object_id",
+        displayFieldName="peak_label",
+        spatialReference={"wkid": 4326},
+        fields=storm_layer_fields(),
+        drawingInfo=storm_layer_drawing_info(),
+        site=RadarSite(**site),
+        location=MapLocation(latitude=lat, longitude=lon, label=label),
+        timestamp=buffered.reflectivity_data.timestamp,
+        feature_count=len(geojson["features"]),
+        geojson=geojson,
+        intensity_geojson=intensity_geojson,
+        audiom_geojson=audiom_geojson,
+        centroid_geojson=centroid_geojson,
+    )
+
+
+@app.get("/map/storms.geojson")
+def get_storm_map_geojson(
+    city: str | None = Query(None),
+    state: str | None = Query(None),
+    zipcode: str | None = Query(None),
+    datetime: str | None = Query(None),
+    date: date_type | None = Query(None),
+    time: str | None = Query(None),
+    mode: str = Query("audiom"),
+):
+    try:
+        lat, lon, _label = _resolve_map_location(city, state, zipcode)
+        dt = _parse_layer_datetime(datetime, date, time)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    ranked_sites = rank_sites(lat, lon)
+    if not ranked_sites:
+        raise HTTPException(status_code=404, detail="No radar site found for that location")
+
+    buffered = _ingest_to_buffer(ranked_sites[0]["site_id"], dt)
+    if mode == "footprints":
+        geojson = build_storm_geojson(buffered)
+    elif mode == "intensity":
+        geojson = build_storm_intensity_geojson(buffered)
+    elif mode == "audiom":
+        geojson = build_storm_audiom_geojson(buffered)
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail="mode must be one of: audiom, intensity, footprints",
+        )
+    return JSONResponse(_json_safe(geojson))
 
 
 @app.get("/summary/{site_id}", response_model=SummaryResponse)
