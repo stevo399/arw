@@ -1,0 +1,69 @@
+import math
+
+import numpy as np
+import pyart
+import pytest
+
+from src.detection import polar_to_latlon
+from src.geometry import gate_coordinates
+
+REFERENCE_VOLUME = "cache/KEMX/KEMX20260712_022646_V06"
+
+
+@pytest.fixture(scope="module")
+def radar():
+    return pyart.io.read_nexrad_archive(REFERENCE_VOLUME)
+
+
+def test_gate_coordinates_match_pyart_reference(radar):
+    """Our georeferencing must agree with Py-ART's Doviak & Zrnic implementation."""
+    sweep_start, sweep_end = radar.get_start_end(0)
+    azimuths = radar.azimuth["data"][sweep_start:sweep_end + 1]
+    ranges_m = radar.range["data"]
+    elevation = float(radar.fixed_angle["data"][0])
+
+    lat, lon = gate_coordinates(
+        azimuths=azimuths,
+        ranges_m=ranges_m,
+        elevation_deg=elevation,
+        radar_lat=float(radar.latitude["data"][0]),
+        radar_lon=float(radar.longitude["data"][0]),
+    )
+
+    expected_lat = radar.gate_latitude["data"][sweep_start:sweep_end + 1]
+    expected_lon = radar.gate_longitude["data"][sweep_start:sweep_end + 1]
+
+    assert lat.shape == expected_lat.shape
+    np.testing.assert_allclose(lat, expected_lat, atol=1e-6)
+    np.testing.assert_allclose(lon, expected_lon, atol=1e-6)
+
+
+def test_legacy_polar_to_latlon_displacement_is_documented(radar):
+    """Records how far the pre-correction implementation was wrong.
+
+    This test exists to document the magnitude of the error that motivated
+    the correction. Delete it only when polar_to_latlon is removed.
+    """
+    sweep_start, sweep_end = radar.get_start_end(0)
+    azimuths = radar.azimuth["data"][sweep_start:sweep_end + 1]
+    ranges_m = radar.range["data"]
+    gate_lat = radar.gate_latitude["data"][sweep_start:sweep_end + 1]
+    gate_lon = radar.gate_longitude["data"][sweep_start:sweep_end + 1]
+
+    expected_displacement_m = {200: 8, 400: 26, 800: 107, 1600: 546}
+
+    for range_index, expected_m in expected_displacement_m.items():
+        legacy_lat, legacy_lon = polar_to_latlon(
+            float(radar.latitude["data"][0]),
+            float(radar.longitude["data"][0]),
+            float(azimuths[0]),
+            float(ranges_m[range_index]),
+        )
+        reference_lat = float(gate_lat[0, range_index])
+        reference_lon = float(gate_lon[0, range_index])
+        delta_north_m = (legacy_lat - reference_lat) * 111195.0
+        delta_east_m = (
+            (legacy_lon - reference_lon) * 111195.0 * math.cos(math.radians(reference_lat))
+        )
+        displacement_m = math.hypot(delta_north_m, delta_east_m)
+        assert displacement_m == pytest.approx(expected_m, abs=5)
