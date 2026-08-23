@@ -16,16 +16,32 @@ EFFECTIVE_EARTH_RADIUS_M = EARTH_RADIUS_M * 4.0 / 3.0
 def gate_coordinates(
     azimuths: np.ndarray,
     ranges_m: np.ndarray,
-    elevation_deg: float,
+    elevation_deg: float | np.ndarray,
     radar_lat: float,
     radar_lon: float,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Geographic coordinates of every gate in a sweep.
 
-    Returns (latitudes, longitudes), each shaped (n_rays, n_gates).
+    Args:
+        azimuths: Azimuth angle for each ray, shaped (n_rays,).
+        ranges_m: Range to each gate, shaped (n_gates,).
+        elevation_deg: Elevation angle(s). Either a scalar (nominal sweep angle, less preferred)
+            or a 1-D array of per-ray elevation angles (preferred). Per-ray elevation is physically
+            correct — it reflects where the antenna actually pointed. Pyart.gate_latitude uses
+            per-ray elevation; passing nominal fixed_angle instead causes 10-100m disagreement.
+        radar_lat: Latitude of radar site.
+        radar_lon: Longitude of radar site.
+
+    Returns:
+        (latitudes, longitudes), each shaped (n_rays, n_gates).
     """
     ranges_km = np.asarray(ranges_m, dtype=float) / 1000.0
     ranges_2d, azimuths_2d = np.meshgrid(ranges_km, np.asarray(azimuths, dtype=float))
-    x, y, _z = antenna_to_cartesian(ranges_2d, azimuths_2d, elevation_deg)
+
+    elevations = np.asarray(elevation_deg, dtype=float)
+    # One angle per ray broadcasts down the range axis; a scalar broadcasts everywhere.
+    elevations_2d = elevations[:, None] if elevations.ndim == 1 else elevations
+
+    x, y, _z = antenna_to_cartesian(ranges_2d, azimuths_2d, elevations_2d)
     lon, lat = cartesian_to_geographic_aeqd(x, y, radar_lon, radar_lat)
     return lat, lon

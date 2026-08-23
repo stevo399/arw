@@ -20,12 +20,15 @@ def test_gate_coordinates_match_pyart_reference(radar):
     sweep_start, sweep_end = radar.get_start_end(0)
     azimuths = radar.azimuth["data"][sweep_start:sweep_end + 1]
     ranges_m = radar.range["data"]
-    elevation = float(radar.fixed_angle["data"][0])
+    # Per-ray elevation, not the nominal fixed_angle. Py-ART georeferences with
+    # the real pointing angle of each ray, and they differ enough within one
+    # sweep to move far gates by tens of metres.
+    elevations = radar.elevation["data"][sweep_start:sweep_end + 1]
 
     lat, lon = gate_coordinates(
         azimuths=azimuths,
         ranges_m=ranges_m,
-        elevation_deg=elevation,
+        elevation_deg=elevations,
         radar_lat=float(radar.latitude["data"][0]),
         radar_lon=float(radar.longitude["data"][0]),
     )
