@@ -5,7 +5,7 @@ import pyart
 import pytest
 
 from src.detection import polar_to_latlon
-from src.geometry import gate_coordinates
+from src.geometry import gate_coordinates, gate_areas_km2, ground_range_m
 
 REFERENCE_VOLUME = "cache/KEMX/KEMX20260712_022646_V06"
 
@@ -105,3 +105,30 @@ def test_beam_height_adds_site_altitude():
     at_sea_level = beam_height_m(100_000, elevation_deg=0.5)
     at_altitude = beam_height_m(100_000, elevation_deg=0.5, site_alt_m=400.0)
     assert at_altitude == pytest.approx(at_sea_level + 400.0, abs=0.1)
+
+
+def test_ground_range_is_shorter_than_slant_range():
+    slant = np.array([100_000.0, 300_000.0])
+    ground = ground_range_m(slant, elevation_deg=0.5)
+    assert np.all(ground < slant)
+    # At low elevation the difference is small but non-zero.
+    assert ground[0] == pytest.approx(100_000.0, rel=1e-3)
+
+
+def test_gate_areas_grow_with_range():
+    azimuths = np.linspace(0.0, 359.5, 720)
+    ranges_m = np.arange(2125.0, 460_000.0, 250.0)
+    areas = gate_areas_km2(azimuths, ranges_m, elevation_deg=0.5)
+    assert areas.shape == ranges_m.shape
+    assert np.all(np.diff(areas) > 0)
+
+
+def test_gate_areas_use_ground_range_not_slant():
+    """Areas must be computed from ground range, so they are smaller than the
+    slant-range calculation the legacy code used."""
+    azimuths = np.linspace(0.0, 359.5, 720)
+    ranges_m = np.array([300_000.0, 300_250.0])
+    areas = gate_areas_km2(azimuths, ranges_m, elevation_deg=0.5)
+    az_spacing_rad = np.radians(0.5)
+    slant_area_km2 = (300_000.0 * az_spacing_rad * 250.0) / 1e6
+    assert areas[0] < slant_area_km2

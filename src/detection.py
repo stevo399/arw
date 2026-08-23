@@ -86,28 +86,14 @@ def polar_to_latlon(
     return (math.degrees(lat2), math.degrees(lon2))
 
 
-def _compute_pixel_area_km2(
-    azimuths: np.ndarray, ranges_m: np.ndarray,
-    az_idx: int, rng_idx: int,
-) -> float:
-    """Approximate the area of a single polar pixel in km²."""
-    if len(ranges_m) < 2 or len(azimuths) < 2:
-        return 0.0
-    range_spacing_m = abs(ranges_m[1] - ranges_m[0])
-    az_spacing_deg = abs(azimuths[1] - azimuths[0]) if len(azimuths) > 1 else 1.0
-    az_spacing_rad = math.radians(az_spacing_deg)
-    r = ranges_m[rng_idx]
-    area_m2 = r * az_spacing_rad * range_spacing_m
-    return area_m2 / 1e6
+def _range_bin_areas_km2(
+    azimuths: np.ndarray,
+    ranges_m: np.ndarray,
+    elevation_deg: float = 0.5,
+) -> np.ndarray:
+    from src.geometry import gate_areas_km2
 
-
-def _range_bin_areas_km2(azimuths: np.ndarray, ranges_m: np.ndarray) -> np.ndarray:
-    if len(ranges_m) < 2 or len(azimuths) < 2:
-        return np.zeros_like(ranges_m, dtype=float)
-    range_spacing_m = abs(float(ranges_m[1] - ranges_m[0]))
-    az_spacing_deg = abs(float(azimuths[1] - azimuths[0])) if len(azimuths) > 1 else 1.0
-    az_spacing_rad = math.radians(az_spacing_deg)
-    return (ranges_m.astype(float) * az_spacing_rad * range_spacing_m) / 1e6
+    return gate_areas_km2(azimuths, ranges_m, elevation_deg)
 
 
 def compute_object_properties(

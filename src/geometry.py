@@ -61,3 +61,41 @@ def beam_height_m(
     R = EFFECTIVE_EARTH_RADIUS_M
     height = np.sqrt(r**2 + R**2 + 2.0 * r * R * np.sin(theta)) - R + site_alt_m
     return float(height) if np.isscalar(range_m) or height.ndim == 0 else height
+
+
+def ground_range_m(
+    slant_range_m: float | np.ndarray,
+    elevation_deg: float,
+) -> np.ndarray:
+    """Great-circle distance along the ground beneath each gate.
+
+    Doviak and Zrnic equation 2.28c under the 4/3 effective earth radius model.
+    """
+    r = np.asarray(slant_range_m, dtype=float)
+    theta = np.radians(elevation_deg)
+    R = EFFECTIVE_EARTH_RADIUS_M
+    height = np.sqrt(r**2 + R**2 + 2.0 * r * R * np.sin(theta)) - R
+    return R * np.arcsin(r * np.cos(theta) / (R + height))
+
+
+def gate_areas_km2(
+    azimuths: np.ndarray,
+    ranges_m: np.ndarray,
+    elevation_deg: float,
+) -> np.ndarray:
+    """Ground-projected area of one gate at each range bin, in square km.
+
+    Azimuth spacing is the median gap between consecutive rays, which is robust
+    to the small irregularities in real NEXRAD azimuth sequences. The legacy
+    implementation used the gap between the first two rays only.
+    """
+    ranges_m = np.asarray(ranges_m, dtype=float)
+    if len(ranges_m) < 2 or len(azimuths) < 2:
+        return np.zeros_like(ranges_m, dtype=float)
+
+    range_spacing_m = float(np.median(np.abs(np.diff(ranges_m))))
+    azimuth_gaps = np.abs(np.diff(np.unwrap(np.asarray(azimuths, dtype=float), period=360.0)))
+    az_spacing_rad = np.radians(float(np.median(azimuth_gaps)))
+
+    ground = ground_range_m(ranges_m, elevation_deg)
+    return (ground * az_spacing_rad * range_spacing_m) / 1e6
