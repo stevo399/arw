@@ -6,14 +6,19 @@ Select the radar that observes a storm at the lowest useful beam height.
 
 ## Beam Height Formula
 
-beam_height =
-distance * tan(elevation_angle) +
-(distance² / (2 * earth_radius)) +
-radar_elevation
+Doviak and Zrnic equation 2.28b, under the 4/3 effective earth radius model:
 
-Typical values:
-lowest elevation angle ≈ 0.5°
-earth radius ≈ 6371 km
+beam_height = sqrt(r^2 + R^2 + 2*r*R*sin(elevation)) - R + radar_elevation
+
+where:
+  r = slant range from the radar
+  R = effective earth radius = 4/3 * 6371 km = 8494.7 km
+  elevation = beam elevation angle, lowest tilt ~= 0.5 degrees
+
+The effective radius accounts for standard atmospheric refraction bending the
+beam downward relative to a straight line. Using the true earth radius of
+6371 km overestimates beam height by up to 1766 m at 300 km and wrongly
+rejects radar sites beyond 306 km.
 
 ## Algorithm
 

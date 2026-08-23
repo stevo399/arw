@@ -1,4 +1,7 @@
 import math
+
+import pytest
+
 from src.sites import (
     NEXRAD_SITES,
     geocode_city_state,
@@ -60,3 +63,18 @@ def test_rank_sites_includes_distance():
     results = rank_sites(lat=35.4676, lon=-97.5164)
     for r in results:
         assert r["distance_km"] > 0
+
+
+def test_site_selection_reaches_345km():
+    """Sites out to ~345 km must remain selectable under the corrected model."""
+    assert compute_beam_height_m(distance_km=340.0, radar_elevation_m=0.0) < 10_000.0
+    assert compute_beam_height_m(distance_km=350.0, radar_elevation_m=0.0) > 10_000.0
+
+
+def test_compute_beam_height_delegates_to_geometry():
+    """sites.py must not carry its own earth model."""
+    from src.geometry import beam_height_m
+
+    expected = beam_height_m(200_000.0, elevation_deg=0.5, site_alt_m=100.0)
+    actual = compute_beam_height_m(distance_km=200.0, radar_elevation_m=100.0)
+    assert actual == pytest.approx(expected, abs=0.1)

@@ -45,3 +45,19 @@ def gate_coordinates(
     x, y, _z = antenna_to_cartesian(ranges_2d, azimuths_2d, elevations_2d)
     lon, lat = cartesian_to_geographic_aeqd(x, y, radar_lon, radar_lat)
     return lat, lon
+
+
+def beam_height_m(
+    range_m: float | np.ndarray,
+    elevation_deg: float,
+    site_alt_m: float = 0.0,
+) -> float | np.ndarray:
+    """Height of the radar beam centre above sea level at a given slant range.
+
+    Doviak and Zrnic equation 2.28b under the 4/3 effective earth radius model.
+    """
+    r = np.asarray(range_m, dtype=float)
+    theta = np.radians(elevation_deg)
+    R = EFFECTIVE_EARTH_RADIUS_M
+    height = np.sqrt(r**2 + R**2 + 2.0 * r * R * np.sin(theta)) - R + site_alt_m
+    return float(height) if np.isscalar(range_m) or height.ndim == 0 else height

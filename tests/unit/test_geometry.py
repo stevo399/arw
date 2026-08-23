@@ -70,3 +70,38 @@ def test_legacy_polar_to_latlon_displacement_is_documented(radar):
         )
         displacement_m = math.hypot(delta_north_m, delta_east_m)
         assert displacement_m == pytest.approx(expected_m, abs=5)
+
+
+def test_beam_height_uses_effective_earth_radius():
+    """Beam height must use the 4/3 effective radius, not the true radius.
+
+    Expected values computed from the Doviak and Zrnic exact form at 0.5
+    degrees elevation with the antenna at sea level.
+    """
+    from src.geometry import beam_height_m
+
+    expected_m = {
+        50_000: 583.5,
+        100_000: 1461.1,
+        200_000: 4098.7,
+        300_000: 7911.7,
+    }
+    for range_m, expected in expected_m.items():
+        assert beam_height_m(range_m, elevation_deg=0.5) == pytest.approx(expected, abs=1.0)
+
+
+def test_beam_height_ten_km_cutoff_reaches_345km():
+    """The 10 km rejection threshold must be crossed near 345 km, not 306 km."""
+    from src.geometry import beam_height_m
+
+    assert beam_height_m(340_000, elevation_deg=0.5) < 10_000.0
+    assert beam_height_m(350_000, elevation_deg=0.5) > 10_000.0
+
+
+def test_beam_height_adds_site_altitude():
+    """Site altitude must be added directly to beam height."""
+    from src.geometry import beam_height_m
+
+    at_sea_level = beam_height_m(100_000, elevation_deg=0.5)
+    at_altitude = beam_height_m(100_000, elevation_deg=0.5, site_alt_m=400.0)
+    assert at_altitude == pytest.approx(at_sea_level + 400.0, abs=0.1)

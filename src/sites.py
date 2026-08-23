@@ -202,30 +202,17 @@ def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) ->
 
 
 def compute_beam_height_m(distance_km: float, radar_elevation_m: float) -> float:
+    """Height of the lowest radar beam above sea level at a given distance.
+
+    Delegates to src.geometry, which owns the 4/3 effective earth radius model.
     """
-    Compute the height of the lowest radar beam above ground at a given distance.
+    from src.geometry import beam_height_m
 
-    Uses the formula:
-        beam_height = distance * tan(elevation_angle) + (distance^2 / (2 * earth_radius)) + radar_elevation
-
-    Args:
-        distance_km: Distance from the radar in km
-        radar_elevation_m: Elevation of the radar antenna in meters
-
-    Returns:
-        Beam height in meters
-    """
-    elevation_rad = math.radians(LOWEST_ELEVATION_DEG)
-    # Convert distance to meters for height calculation
-    distance_m = distance_km * 1000.0
-    earth_radius_m = EARTH_RADIUS_KM * 1000.0
-
-    beam_height = (
-        distance_m * math.tan(elevation_rad)
-        + (distance_m ** 2) / (2 * earth_radius_m)
-        + radar_elevation_m
+    return beam_height_m(
+        range_m=distance_km * 1000.0,
+        elevation_deg=LOWEST_ELEVATION_DEG,
+        site_alt_m=radar_elevation_m,
     )
-    return beam_height
 
 
 def rank_sites(lat: float, lon: float) -> list[dict]:
