@@ -132,3 +132,27 @@ def test_gate_areas_use_ground_range_not_slant():
     az_spacing_rad = np.radians(0.5)
     slant_area_km2 = (300_000.0 * az_spacing_rad * 250.0) / 1e6
     assert areas[0] < slant_area_km2
+
+
+def test_gate_areas_use_median_azimuth_spacing_not_first_gap():
+    """One anomalous gap must not set the spacing for the whole sweep.
+
+    The legacy implementation used az[1] - az[0]. Here that first gap is ten
+    times the true spacing, so first-gap logic would inflate every area 10x.
+    """
+    azimuths = np.concatenate(([0.0, 5.0], np.arange(5.5, 359.5, 0.5)))
+    ranges_m = np.array([100_000.0, 100_250.0])
+    areas = gate_areas_km2(azimuths, ranges_m, elevation_deg=0.5)
+    ground = ground_range_m(ranges_m, 0.5)
+    expected = (ground * np.radians(0.5) * 250.0) / 1e6
+    np.testing.assert_allclose(areas, expected, rtol=1e-6)
+
+
+def test_gate_areas_handle_azimuth_wraparound():
+    """Rays straddling 0/360 must not be read as a 359.5 degree gap."""
+    azimuths = np.array([359.5, 0.0])
+    ranges_m = np.array([100_000.0, 100_250.0])
+    areas = gate_areas_km2(azimuths, ranges_m, elevation_deg=0.5)
+    ground = ground_range_m(ranges_m, 0.5)
+    expected = (ground * np.radians(0.5) * 250.0) / 1e6
+    np.testing.assert_allclose(areas, expected, rtol=1e-6)
