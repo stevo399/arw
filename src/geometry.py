@@ -47,6 +47,30 @@ def gate_coordinates(
     return lat, lon
 
 
+def gate_latlon(
+    azimuth_deg: float,
+    range_m: float,
+    elevation_deg: float,
+    radar_lat: float,
+    radar_lon: float,
+) -> tuple[float, float]:
+    """Geographic coordinates of a single gate.
+
+    Scalar convenience wrapper around `gate_coordinates` for call sites that
+    convert one (azimuth, range) pair at a time (e.g. per-point polygon
+    vertex construction). Delegates to the same Py-ART-conforming maths
+    rather than reimplementing them.
+    """
+    lat, lon = gate_coordinates(
+        azimuths=np.asarray([azimuth_deg], dtype=float),
+        ranges_m=np.asarray([range_m], dtype=float),
+        elevation_deg=elevation_deg,
+        radar_lat=radar_lat,
+        radar_lon=radar_lon,
+    )
+    return float(lat[0, 0]), float(lon[0, 0])
+
+
 def beam_height_m(
     range_m: float | np.ndarray,
     elevation_deg: float,

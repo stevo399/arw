@@ -8,13 +8,13 @@ from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 import numpy as np
 from src.server import app
-from src.parser import ReflectivityData
+from src.parser import SweepData
 
 client = TestClient(app)
 
 
-def _make_reflectivity_data_with_storm() -> ReflectivityData:
-    """Create a ReflectivityData with a synthetic storm."""
+def _make_reflectivity_data_with_storm() -> SweepData:
+    """Create a SweepData with a synthetic storm."""
     reflectivity = np.full((360, 500), np.nan)
     # Storm 1: large, intense — centered at azimuth 90, range bin 200
     reflectivity[80:110, 180:220] = 25.0   # light rain shell
@@ -24,14 +24,16 @@ def _make_reflectivity_data_with_storm() -> ReflectivityData:
     reflectivity[265:280, 340:360] = 30.0  # moderate rain
     reflectivity[268:278, 345:355] = 42.0  # heavy rain core
 
-    return ReflectivityData(
+    return SweepData(
         reflectivity=reflectivity,
         azimuths=np.linspace(0, 359, 360),
         ranges_m=np.linspace(2000, 250000, 500),
         radar_lat=35.3331,
         radar_lon=-97.2778,
         elevation_angle=0.5,
+        elevations=np.full(360, 0.5),
         elevation_angles=[0.5, 1.5, 2.4],
+        radar_alt_m=390.0,
         timestamp="2026-04-08T18:30:00Z",
     )
 
@@ -51,7 +53,7 @@ def test_full_pipeline_sites_to_summary():
     ref_data = _make_reflectivity_data_with_storm()
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=ref_data), \
+         patch("src.server.extract_sweep_data", return_value=ref_data), \
          patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/objects/KTLX")
     assert resp.status_code == 200
@@ -67,7 +69,7 @@ def test_full_pipeline_sites_to_summary():
     # Step 3: Get summary for KTLX
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=ref_data), \
+         patch("src.server.extract_sweep_data", return_value=ref_data), \
          patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/summary/KTLX")
     assert resp.status_code == 200
@@ -79,19 +81,21 @@ def test_full_pipeline_sites_to_summary():
 
 def test_full_pipeline_no_precipitation():
     """Test the pipeline when there is no precipitation."""
-    ref_data = ReflectivityData(
+    ref_data = SweepData(
         reflectivity=np.full((360, 500), np.nan),
         azimuths=np.linspace(0, 359, 360),
         ranges_m=np.linspace(2000, 250000, 500),
         radar_lat=35.3331,
         radar_lon=-97.2778,
         elevation_angle=0.5,
+        elevations=np.full(360, 0.5),
         elevation_angles=[0.5],
+        radar_alt_m=390.0,
         timestamp="2026-04-08T18:30:00Z",
     )
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=ref_data), \
+         patch("src.server.extract_sweep_data", return_value=ref_data), \
          patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/summary/KTLX")
     assert resp.status_code == 200
@@ -103,7 +107,7 @@ def test_full_pipeline_scan_metadata():
     ref_data = _make_reflectivity_data_with_storm()
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=ref_data), \
+         patch("src.server.extract_sweep_data", return_value=ref_data), \
          patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/scan/KTLX")
     assert resp.status_code == 200
@@ -118,7 +122,7 @@ def test_tracks_endpoint_e2e():
     ref_data = _make_reflectivity_data_with_storm()
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=ref_data), \
+         patch("src.server.extract_sweep_data", return_value=ref_data), \
          patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/tracks/KTLX")
     assert resp.status_code == 200
@@ -135,40 +139,44 @@ def test_tracks_accumulate_across_calls():
     srv._buffer = type(srv._buffer)()
     srv._tracker = type(srv._tracker)()
 
-    ref_data1 = ReflectivityData(
+    ref_data1 = SweepData(
         reflectivity=np.full((360, 500), np.nan),
         azimuths=np.linspace(0, 359, 360),
         ranges_m=np.linspace(2000, 250000, 500),
         radar_lat=35.3331,
         radar_lon=-97.2778,
         elevation_angle=0.5,
+        elevations=np.full(360, 0.5),
         elevation_angles=[0.5],
+        radar_alt_m=390.0,
         timestamp="2026-04-08T18:30:00Z",
     )
     ref_data1.reflectivity[85:95, 195:205] = 45.0
 
-    ref_data2 = ReflectivityData(
+    ref_data2 = SweepData(
         reflectivity=np.full((360, 500), np.nan),
         azimuths=np.linspace(0, 359, 360),
         ranges_m=np.linspace(2000, 250000, 500),
         radar_lat=35.3331,
         radar_lon=-97.2778,
         elevation_angle=0.5,
+        elevations=np.full(360, 0.5),
         elevation_angles=[0.5],
+        radar_alt_m=390.0,
         timestamp="2026-04-08T18:35:00Z",
     )
     ref_data2.reflectivity[86:96, 196:206] = 45.0  # Slightly moved
 
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=ref_data1), \
+         patch("src.server.extract_sweep_data", return_value=ref_data1), \
          patch("src.server.extract_velocity", return_value=None):
         resp1 = client.get("/tracks/KTLX")
     assert resp1.status_code == 200
 
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=ref_data2), \
+         patch("src.server.extract_sweep_data", return_value=ref_data2), \
          patch("src.server.extract_velocity", return_value=None):
         resp2 = client.get("/tracks/KTLX")
     assert resp2.status_code == 200

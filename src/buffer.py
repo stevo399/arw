@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from collections import deque
 import numpy as np
-from src.parser import ReflectivityData, VelocityData
+from src.parser import SweepData, VelocityData
 from src.detection import DetectedObject
 from src.preprocess import ScanQuality
 from src.velocity import VelocityRegion, RotationSignature
@@ -14,7 +14,7 @@ class BufferedScan:
     """A single scan stored in the replay buffer."""
     timestamp: datetime
     site_id: str
-    reflectivity_data: ReflectivityData
+    reflectivity_data: SweepData
     detected_objects: list[DetectedObject]
     labeled_grid: np.ndarray
     object_masks: dict[int, np.ndarray]

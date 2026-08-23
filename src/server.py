@@ -15,7 +15,7 @@ from src.models import (
 )
 from src.sites import geocode_city_state, geocode_zipcode, rank_sites, NEXRAD_SITES
 from src.ingest import fetch_scan
-from src.parser import parse_radar_file, extract_reflectivity_from_radar, extract_velocity
+from src.parser import parse_radar_file, extract_sweep_data, extract_velocity
 from src.velocity import analyze_velocity
 from src.detection import detect_objects_with_grid
 from src.preprocess import preprocess_reflectivity_data
@@ -121,7 +121,7 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
     """Fetch a scan, detect objects, and add to buffer + tracker."""
     filepath = fetch_scan(site_id.upper(), dt)
     radar = parse_radar_file(filepath)
-    raw_ref_data = extract_reflectivity_from_radar(radar)
+    raw_ref_data = extract_sweep_data(radar)
     ref_data, scan_quality = preprocess_reflectivity_data(raw_ref_data)
     vel_data = extract_velocity(radar)
     result = detect_objects_with_grid(
@@ -130,6 +130,7 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
         ranges_m=ref_data.ranges_m,
         radar_lat=ref_data.radar_lat,
         radar_lon=ref_data.radar_lon,
+        elevation_deg=ref_data.elevation_angle,
     )
     regions, rotations, annotated_objects = analyze_velocity(vel_data, result.objects)
     scan_timestamp = datetime.fromisoformat(ref_data.timestamp) if isinstance(ref_data.timestamp, str) else ref_data.timestamp

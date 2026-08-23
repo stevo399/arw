@@ -2,20 +2,22 @@
 from datetime import datetime, timedelta
 import numpy as np
 from src.buffer import ReplayBuffer, BufferedScan
-from src.parser import ReflectivityData
+from src.parser import SweepData
 from src.detection import DetectedObject
 
 
 def _make_buffered_scan(site_id: str, timestamp: datetime, num_objects: int = 1) -> BufferedScan:
     """Create a minimal BufferedScan for testing."""
-    ref_data = ReflectivityData(
+    ref_data = SweepData(
         reflectivity=np.full((360, 500), np.nan),
         azimuths=np.linspace(0, 359, 360),
         ranges_m=np.linspace(2000, 250000, 500),
         radar_lat=35.3331,
         radar_lon=-97.2778,
         elevation_angle=0.5,
+        elevations=np.full(360, 0.5),
         elevation_angles=[0.5],
+        radar_alt_m=390.0,
         timestamp=timestamp.isoformat(),
     )
     objects = [

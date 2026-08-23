@@ -15,7 +15,7 @@ from src.tracking.motion_field import (
     predict_pixel_position,
 )
 from src.buffer import BufferedScan
-from src.parser import ReflectivityData
+from src.parser import SweepData
 from src.tracking.types import SegmentedStormObject
 from src.detection import DetectedObject
 
@@ -139,14 +139,16 @@ def test_estimate_scan_geographic_motion_field_uses_phase_shift():
     prev_scan = BufferedScan(
         timestamp=datetime(2026, 4, 10, 20, 0),
         site_id="KTLX",
-        reflectivity_data=ReflectivityData(
+        reflectivity_data=SweepData(
             reflectivity=prev_reflectivity,
             azimuths=azimuths,
             ranges_m=ranges_m,
             radar_lat=35.0,
             radar_lon=-97.0,
             elevation_angle=0.5,
+            elevations=np.full_like(azimuths, 0.5, dtype=float),
             elevation_angles=[0.5],
+            radar_alt_m=390.0,
             timestamp="2026-04-10T20:00:00Z",
         ),
         detected_objects=[],
@@ -156,14 +158,16 @@ def test_estimate_scan_geographic_motion_field_uses_phase_shift():
     curr_scan = BufferedScan(
         timestamp=datetime(2026, 4, 10, 20, 5),
         site_id="KTLX",
-        reflectivity_data=ReflectivityData(
+        reflectivity_data=SweepData(
             reflectivity=curr_reflectivity,
             azimuths=azimuths,
             ranges_m=ranges_m,
             radar_lat=35.0,
             radar_lon=-97.0,
             elevation_angle=0.5,
+            elevations=np.full_like(azimuths, 0.5, dtype=float),
             elevation_angles=[0.5],
+            radar_alt_m=390.0,
             timestamp="2026-04-10T20:05:00Z",
         ),
         detected_objects=[],
@@ -198,14 +202,16 @@ def test_estimate_local_scan_geographic_motion_field_uses_bbox_region():
     prev_scan = BufferedScan(
         timestamp=datetime(2026, 4, 10, 20, 0),
         site_id="KTLX",
-        reflectivity_data=ReflectivityData(
+        reflectivity_data=SweepData(
             reflectivity=prev_reflectivity,
             azimuths=azimuths,
             ranges_m=ranges_m,
             radar_lat=35.0,
             radar_lon=-97.0,
             elevation_angle=0.5,
+            elevations=np.full_like(azimuths, 0.5, dtype=float),
             elevation_angles=[0.5],
+            radar_alt_m=390.0,
             timestamp="2026-04-10T20:00:00Z",
         ),
         detected_objects=[],
@@ -215,14 +221,16 @@ def test_estimate_local_scan_geographic_motion_field_uses_bbox_region():
     curr_scan = BufferedScan(
         timestamp=datetime(2026, 4, 10, 20, 5),
         site_id="KTLX",
-        reflectivity_data=ReflectivityData(
+        reflectivity_data=SweepData(
             reflectivity=curr_reflectivity,
             azimuths=azimuths,
             ranges_m=ranges_m,
             radar_lat=35.0,
             radar_lon=-97.0,
             elevation_angle=0.5,
+            elevations=np.full_like(azimuths, 0.5, dtype=float),
             elevation_angles=[0.5],
+            radar_alt_m=390.0,
             timestamp="2026-04-10T20:05:00Z",
         ),
         detected_objects=[],

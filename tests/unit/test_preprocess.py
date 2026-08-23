@@ -1,18 +1,20 @@
 import numpy as np
 
-from src.parser import ReflectivityData
+from src.parser import SweepData
 from src.preprocess import preprocess_reflectivity_data
 
 
-def _make_reflectivity_data(grid: np.ndarray) -> ReflectivityData:
-    return ReflectivityData(
+def _make_reflectivity_data(grid: np.ndarray) -> SweepData:
+    return SweepData(
         reflectivity=grid,
         azimuths=np.linspace(0, 359, grid.shape[0]),
         ranges_m=np.linspace(2000, 250000, grid.shape[1]),
         radar_lat=35.3331,
         radar_lon=-97.2778,
         elevation_angle=0.5,
+        elevations=np.full(grid.shape[0], 0.5),
         elevation_angles=[0.5],
+        radar_alt_m=390.0,
         timestamp="2026-04-11T00:00:00Z",
     )
 

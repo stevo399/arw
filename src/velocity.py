@@ -4,7 +4,8 @@ from dataclasses import dataclass, replace
 import numpy as np
 from scipy.ndimage import label
 
-from src.detection import DetectedObject, polar_to_latlon, _range_bin_areas_km2
+from src.detection import DetectedObject
+from src.geometry import gate_areas_km2, gate_latlon
 from src.parser import VelocityData
 
 MIN_VELOCITY_MS = 10.0
@@ -35,7 +36,7 @@ def _detect_regions_single_sweep(
     elevation_angle: float,
 ) -> list[tuple[VelocityRegion, np.ndarray]]:
     """Detect inbound/outbound regions on a single sweep. Returns (region, mask) pairs."""
-    range_bin_areas = _range_bin_areas_km2(azimuths, ranges_m)
+    range_bin_areas = gate_areas_km2(azimuths, ranges_m, elevation_angle)
     results: list[tuple[VelocityRegion, np.ndarray]] = []
 
     for region_type, condition in [
@@ -69,8 +70,12 @@ def _detect_regions_single_sweep(
             centroid_az = float(np.interp(centroid_az_idx, range(len(azimuths)), azimuths))
             centroid_range = float(np.interp(centroid_rng_idx, range(len(ranges_m)), ranges_m))
 
-            centroid_lat, centroid_lon = polar_to_latlon(
-                radar_lat, radar_lon, centroid_az, centroid_range,
+            centroid_lat, centroid_lon = gate_latlon(
+                azimuth_deg=centroid_az,
+                range_m=centroid_range,
+                elevation_deg=elevation_angle,
+                radar_lat=radar_lat,
+                radar_lon=radar_lon,
             )
 
             results.append((VelocityRegion(
@@ -249,8 +254,12 @@ def _detect_shear_single_sweep(
             + rng_extent ** 2
         ) / 1000.0
 
-        centroid_lat, centroid_lon = polar_to_latlon(
-            radar_lat, radar_lon, centroid_az, centroid_range,
+        centroid_lat, centroid_lon = gate_latlon(
+            azimuth_deg=centroid_az,
+            range_m=centroid_range,
+            elevation_deg=elevation_angle,
+            radar_lat=radar_lat,
+            radar_lon=radar_lon,
         )
 
         results.append((RotationSignature(

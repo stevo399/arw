@@ -3,7 +3,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 from scipy.ndimage import label
 
-from src.parser import ReflectivityData
+from src.parser import SweepData
 
 MIN_DBZ_FOR_OBJECTS = 20.0
 MAX_SPECKLE_PIXELS = 3
@@ -64,7 +64,7 @@ def assess_scan_quality(
     )
 
 
-def preprocess_reflectivity_data(reflectivity_data: ReflectivityData) -> tuple[ReflectivityData, ScanQuality]:
+def preprocess_reflectivity_data(reflectivity_data: SweepData) -> tuple[SweepData, ScanQuality]:
     processed_reflectivity, removed_speckle_pixels = _remove_weak_speckle(reflectivity_data.reflectivity)
     quality = assess_scan_quality(
         original_reflectivity=reflectivity_data.reflectivity,

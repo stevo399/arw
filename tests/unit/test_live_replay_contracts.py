@@ -6,7 +6,7 @@ import numpy as np
 from src.buffer import BufferedScan
 from src.detection import DetectedObject
 from src.motion import MotionVector
-from src.parser import ReflectivityData
+from src.parser import SweepData
 from src.preprocess import ScanQuality
 from src.tracker import StormTracker, Track
 from src.tracking.types import MotionSample
@@ -20,14 +20,16 @@ from scripts.live_replay import (
 
 
 def _make_buffered_scan() -> BufferedScan:
-    reflectivity = ReflectivityData(
+    reflectivity = SweepData(
         reflectivity=np.full((360, 500), np.nan),
         azimuths=np.linspace(0, 359, 360),
         ranges_m=np.linspace(2000, 250000, 500),
         radar_lat=35.0,
         radar_lon=-97.0,
         elevation_angle=0.5,
+        elevations=np.full(360, 0.5),
         elevation_angles=[0.5],
+        radar_alt_m=390.0,
         timestamp="2026-04-10T20:00:00Z",
     )
     detected = DetectedObject(

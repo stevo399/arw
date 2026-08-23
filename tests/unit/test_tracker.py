@@ -4,7 +4,7 @@ import numpy as np
 from src.tracker import StormTracker, Track
 from src.detection import DetectedObject
 from src.buffer import BufferedScan
-from src.parser import ReflectivityData
+from src.parser import SweepData
 from src.preprocess import ScanQuality
 
 
@@ -29,14 +29,16 @@ def _make_scan(
     grid_shape: tuple[int, int] = (360, 500),
     masks: dict[int, np.ndarray] | None = None,
 ) -> BufferedScan:
-    ref_data = ReflectivityData(
+    ref_data = SweepData(
         reflectivity=np.full(grid_shape, np.nan),
         azimuths=np.linspace(0, 359, grid_shape[0]),
         ranges_m=np.linspace(2000, 250000, grid_shape[1]),
         radar_lat=35.3331,
         radar_lon=-97.2778,
         elevation_angle=0.5,
+        elevations=np.full(grid_shape[0], 0.5),
         elevation_angles=[0.5],
+        radar_alt_m=390.0,
         timestamp=timestamp.isoformat(),
     )
     labeled_grid = np.zeros(grid_shape, dtype=int)

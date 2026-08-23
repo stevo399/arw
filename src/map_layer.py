@@ -4,7 +4,8 @@ import numpy as np
 from scipy.spatial import ConvexHull, QhullError
 
 from src.buffer import BufferedScan
-from src.detection import DetectedObject, IntensityLayerData, degrees_to_bearing, polar_to_latlon
+from src.detection import DetectedObject, IntensityLayerData, degrees_to_bearing
+from src.geometry import gate_latlon
 from src.summary import km2_to_mi2, km_to_miles
 
 
@@ -120,11 +121,12 @@ def mask_to_polygon(
     coordinates = []
     ref = scan.reflectivity_data
     for az_idx, range_idx in zip(az_indices, range_indices):
-        lat, lon = polar_to_latlon(
-            ref.radar_lat,
-            ref.radar_lon,
-            float(ref.azimuths[az_idx]),
-            float(ref.ranges_m[range_idx]),
+        lat, lon = gate_latlon(
+            azimuth_deg=float(ref.azimuths[az_idx]),
+            range_m=float(ref.ranges_m[range_idx]),
+            elevation_deg=float(ref.elevations[az_idx]),
+            radar_lat=ref.radar_lat,
+            radar_lon=ref.radar_lon,
         )
         coordinates.append([float(lon), float(lat)])
 

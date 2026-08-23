@@ -68,7 +68,16 @@ def polar_to_latlon(
     radar_lat: float, radar_lon: float,
     azimuth_deg: float, range_m: float,
 ) -> tuple[float, float]:
-    """Convert a polar coordinate (azimuth, range) relative to a radar to lat/lon."""
+    """Convert a polar coordinate (azimuth, range) relative to a radar to lat/lon.
+
+    Deprecated: uses a spherical-earth great-circle approximation that
+    disagrees with Py-ART's antenna-coordinate georeferencing by tens to
+    hundreds of meters at typical storm ranges (see
+    tests/unit/test_geometry.py::test_legacy_polar_to_latlon_displacement_is_documented).
+    Use `src.geometry.gate_coordinates` / `src.geometry.gate_latlon` instead.
+    Retained only for that regression test and for any legacy callers not yet
+    migrated; do not use in new code.
+    """
     earth_radius_m = 6371000.0
     az_rad = math.radians(azimuth_deg)
     lat1 = math.radians(radar_lat)
@@ -104,13 +113,14 @@ def compute_object_properties(
     radar_lat: float,
     radar_lon: float,
     object_id: int,
+    elevation_deg: float = 0.5,
 ) -> "DetectedObject | None":
     """Compute properties for a single detected object. Returns None if too small."""
     az_indices, rng_indices = np.where(obj_mask)
     if len(az_indices) == 0:
         return None
 
-    range_bin_areas_km2 = _range_bin_areas_km2(azimuths, ranges_m)
+    range_bin_areas_km2 = _range_bin_areas_km2(azimuths, ranges_m, elevation_deg)
     total_area_km2 = float(np.sum(range_bin_areas_km2[rng_indices]))
 
     if total_area_km2 < MIN_OBJECT_AREA_KM2:
@@ -358,6 +368,7 @@ def detect_objects_with_grid(
     ranges_m: np.ndarray,
     radar_lat: float,
     radar_lon: float,
+    elevation_deg: float = 0.5,
 ) -> DetectionResult:
     """Detect rain objects and return labeled grid + masks for tracking.
 
@@ -383,6 +394,7 @@ def detect_objects_with_grid(
                 radar_lat=radar_lat,
                 radar_lon=radar_lon,
                 object_id=next_object_id,
+                elevation_deg=elevation_deg,
             )
             if obj is None:
                 continue
@@ -409,6 +421,7 @@ def detect_objects(
     ranges_m: np.ndarray,
     radar_lat: float,
     radar_lon: float,
+    elevation_deg: float = 0.5,
 ) -> list[DetectedObject]:
     """Detect rain objects from reflectivity data.
     Returns list of DetectedObject sorted by peak_dbz descending.
@@ -419,5 +432,6 @@ def detect_objects(
         ranges_m=ranges_m,
         radar_lat=radar_lat,
         radar_lon=radar_lon,
+        elevation_deg=elevation_deg,
     )
     return result.objects

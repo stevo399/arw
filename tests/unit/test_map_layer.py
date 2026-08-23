@@ -10,7 +10,7 @@ from src.map_layer import (
     build_storm_geojson,
     build_storm_intensity_geojson,
 )
-from src.parser import ReflectivityData
+from src.parser import SweepData
 
 
 def test_build_storm_geojson_returns_polygon_features():
@@ -20,14 +20,16 @@ def test_build_storm_geojson_returns_polygon_features():
     scan = BufferedScan(
         timestamp=datetime(2026, 4, 10, 20, 0),
         site_id="KTLX",
-        reflectivity_data=ReflectivityData(
+        reflectivity_data=SweepData(
             reflectivity=reflectivity,
             azimuths=np.linspace(80, 100, 12),
             ranges_m=np.linspace(20000, 40000, 12),
             radar_lat=35.3331,
             radar_lon=-97.2778,
             elevation_angle=0.5,
+            elevations=np.full(12, 0.5),
             elevation_angles=[0.5],
+            radar_alt_m=390.0,
             timestamp="2026-04-10T20:00:00Z",
         ),
         detected_objects=[
@@ -84,14 +86,16 @@ def test_build_storm_intensity_geojson_returns_radar_band_features():
     scan = BufferedScan(
         timestamp=datetime(2026, 4, 10, 20, 0),
         site_id="KTLX",
-        reflectivity_data=ReflectivityData(
+        reflectivity_data=SweepData(
             reflectivity=reflectivity,
             azimuths=np.linspace(80, 100, 12),
             ranges_m=np.linspace(20000, 40000, 12),
             radar_lat=35.3331,
             radar_lon=-97.2778,
             elevation_angle=0.5,
+            elevations=np.full(12, 0.5),
             elevation_angles=[0.5],
+            radar_alt_m=390.0,
             timestamp="2026-04-10T20:00:00Z",
         ),
         detected_objects=[
@@ -133,14 +137,16 @@ def test_build_storm_audiom_geojson_combines_footprints_and_intensity_bands():
     scan = BufferedScan(
         timestamp=datetime(2026, 4, 10, 20, 0),
         site_id="KTLX",
-        reflectivity_data=ReflectivityData(
+        reflectivity_data=SweepData(
             reflectivity=reflectivity,
             azimuths=np.linspace(80, 100, 12),
             ranges_m=np.linspace(20000, 40000, 12),
             radar_lat=35.3331,
             radar_lon=-97.2778,
             elevation_angle=0.5,
+            elevations=np.full(12, 0.5),
             elevation_angles=[0.5],
+            radar_alt_m=390.0,
             timestamp="2026-04-10T20:00:00Z",
         ),
         detected_objects=[
@@ -173,14 +179,16 @@ def test_build_storm_centroid_geojson_returns_point_features():
     scan = BufferedScan(
         timestamp=datetime(2026, 4, 10, 20, 0),
         site_id="KTLX",
-        reflectivity_data=ReflectivityData(
+        reflectivity_data=SweepData(
             reflectivity=reflectivity,
             azimuths=np.linspace(80, 100, 12),
             ranges_m=np.linspace(20000, 40000, 12),
             radar_lat=35.3331,
             radar_lon=-97.2778,
             elevation_angle=0.5,
+            elevations=np.full(12, 0.5),
             elevation_angles=[0.5],
+            radar_alt_m=390.0,
             timestamp="2026-04-10T20:00:00Z",
         ),
         detected_objects=[

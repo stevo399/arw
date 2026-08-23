@@ -2,18 +2,42 @@ from dataclasses import dataclass
 import numpy as np
 import pyart
 
+from src.sweeps import select_reflectivity_sweep
+
+NEXRAD_FIELD_NAMES = {
+    "reflectivity": "reflectivity",
+    "velocity": "velocity",
+    "rhohv": "cross_correlation_ratio",
+    "zdr": "differential_reflectivity",
+    "phidp": "differential_phase",
+    "spectrum_width": "spectrum_width",
+    "clutter_power_removed": "clutter_filter_power_removed",
+}
+
 
 @dataclass
-class ReflectivityData:
-    """Parsed reflectivity data from a single radar sweep."""
+class SweepData:
+    """One radar sweep with all co-registered fields available for it."""
+
     reflectivity: np.ndarray
     azimuths: np.ndarray
     ranges_m: np.ndarray
+    elevation_angle: float          # nominal fixed_angle, for reporting
+    elevations: np.ndarray          # per-ray actual elevation, for georeferencing
+    elevation_angles: list[float]
     radar_lat: float
     radar_lon: float
-    elevation_angle: float
-    elevation_angles: list[float]
+    radar_alt_m: float
     timestamp: str
+
+    velocity: np.ndarray | None = None
+    rhohv: np.ndarray | None = None
+    zdr: np.ndarray | None = None
+    phidp: np.ndarray | None = None
+    spectrum_width: np.ndarray | None = None
+    clutter_power_removed: np.ndarray | None = None
+    nyquist_velocity: float | None = None
+    gate_classification: np.ndarray | None = None
 
 
 def parse_radar_file(filepath: str):
@@ -21,31 +45,52 @@ def parse_radar_file(filepath: str):
     return pyart.io.read_nexrad_archive(filepath)
 
 
-def extract_reflectivity_from_radar(radar) -> ReflectivityData:
-    """Extract reflectivity from the lowest sweep of a pyart Radar object."""
+def _extract_field(radar, nexrad_name: str, sweep_start: int, sweep_end: int) -> np.ndarray | None:
+    """Pull one field for one sweep, or None if the volume does not carry it."""
+    if nexrad_name not in radar.fields:
+        return None
+    data = radar.fields[nexrad_name]["data"][sweep_start:sweep_end + 1]
+    if hasattr(data, "filled"):
+        data = data.filled(np.nan)
+    return np.asarray(data, dtype=float)
+
+
+def extract_sweep_data(radar) -> SweepData:
+    """Extract the reflectivity sweep with every co-registered field it carries."""
+    sweep_index = select_reflectivity_sweep(radar)
+    sweep_start, sweep_end = radar.get_start_end(sweep_index)
+
+    fields = {
+        key: _extract_field(radar, nexrad_name, sweep_start, sweep_end)
+        for key, nexrad_name in NEXRAD_FIELD_NAMES.items()
+    }
+
+    nyquist = None
+    instrument = getattr(radar, "instrument_parameters", None)
+    if instrument and "nyquist_velocity" in instrument:
+        nyquist = float(instrument["nyquist_velocity"]["data"][sweep_start])
+
     elevation_angles = sorted(set(np.round(radar.fixed_angle["data"], 1)))
-    sweep_start, sweep_end = radar.get_start_end(0)
-    reflectivity = radar.fields["reflectivity"]["data"][sweep_start:sweep_end + 1]
-    azimuths = radar.azimuth["data"][sweep_start:sweep_end + 1]
-    ranges_m = radar.range["data"]
-    if hasattr(reflectivity, "filled"):
-        reflectivity = reflectivity.filled(np.nan)
-    return ReflectivityData(
-        reflectivity=reflectivity,
-        azimuths=azimuths,
-        ranges_m=ranges_m,
+
+    return SweepData(
+        reflectivity=fields["reflectivity"],
+        velocity=fields["velocity"],
+        rhohv=fields["rhohv"],
+        zdr=fields["zdr"],
+        phidp=fields["phidp"],
+        spectrum_width=fields["spectrum_width"],
+        clutter_power_removed=fields["clutter_power_removed"],
+        azimuths=np.asarray(radar.azimuth["data"][sweep_start:sweep_end + 1], dtype=float),
+        ranges_m=np.asarray(radar.range["data"], dtype=float),
+        elevation_angle=float(radar.fixed_angle["data"][sweep_index]),
+        elevations=np.asarray(radar.elevation["data"][sweep_start:sweep_end + 1], dtype=float),
+        elevation_angles=[float(a) for a in elevation_angles],
         radar_lat=float(radar.latitude["data"][0]),
         radar_lon=float(radar.longitude["data"][0]),
-        elevation_angle=float(radar.fixed_angle["data"][0]),
-        elevation_angles=[float(a) for a in elevation_angles],
+        radar_alt_m=float(radar.altitude["data"][0]),
         timestamp=str(radar.time["units"]).replace("seconds since ", ""),
+        nyquist_velocity=nyquist,
     )
-
-
-def extract_reflectivity(filepath: str) -> ReflectivityData:
-    """Read a NEXRAD Level II file and extract reflectivity from the lowest sweep."""
-    radar = parse_radar_file(filepath)
-    return extract_reflectivity_from_radar(radar)
 
 
 @dataclass

@@ -1,22 +1,24 @@
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 import numpy as np
-from src.parser import ReflectivityData
+from src.parser import SweepData
 from src.server import app
 
 client = TestClient(app)
 
 
-def _make_reflectivity_data(fill_value: float, elevation_angles: list[float] | None = None) -> ReflectivityData:
+def _make_reflectivity_data(fill_value: float, elevation_angles: list[float] | None = None) -> SweepData:
     grid = np.full((360, 500), fill_value)
-    return ReflectivityData(
+    return SweepData(
         reflectivity=grid,
         azimuths=np.linspace(0, 359, 360),
         ranges_m=np.linspace(2000, 250000, 500),
         radar_lat=35.3331,
         radar_lon=-97.2778,
         elevation_angle=0.5,
+        elevations=np.full(360, 0.5),
         elevation_angles=elevation_angles or [0.5],
+        radar_alt_m=390.0,
         timestamp="2026-04-08T18:30:00Z",
     )
 
@@ -76,7 +78,7 @@ def test_scan_endpoint_returns_200():
     mock_ref = _make_reflectivity_data(0.0, [0.5, 1.5])
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_sweep_data", return_value=mock_ref), \
          patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/scan/KTLX")
     assert resp.status_code == 200
@@ -89,7 +91,7 @@ def test_objects_endpoint_returns_200():
     mock_ref = _make_reflectivity_data(np.nan)
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_sweep_data", return_value=mock_ref), \
          patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/objects/KTLX")
     assert resp.status_code == 200
@@ -104,7 +106,7 @@ def test_storm_map_layer_endpoint_returns_geojson_layer():
     with patch("src.server.geocode_city_state", return_value=(35.4676, -97.5164)), \
          patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_sweep_data", return_value=mock_ref), \
          patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/map/storms?city=Oklahoma+City&state=OK&date=2026-04-10")
     assert resp.status_code == 200
@@ -131,7 +133,7 @@ def test_storm_map_layer_endpoint_accepts_zipcode():
     with patch("src.server.geocode_zipcode", return_value=(35.4676, -97.5164)), \
          patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_sweep_data", return_value=mock_ref), \
          patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/map/storms?zipcode=73102")
     assert resp.status_code == 200
@@ -146,7 +148,7 @@ def test_storm_map_geojson_endpoint_returns_raw_feature_collection():
     with patch("src.server.geocode_city_state", return_value=(35.4676, -97.5164)), \
          patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_sweep_data", return_value=mock_ref), \
          patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/map/storms.geojson?city=Oklahoma+City&state=OK")
     assert resp.status_code == 200
@@ -169,7 +171,7 @@ def test_summary_endpoint_returns_200():
     mock_ref = _make_reflectivity_data(np.nan)
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_sweep_data", return_value=mock_ref), \
          patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/summary/KTLX")
     assert resp.status_code == 200
@@ -181,7 +183,7 @@ def test_tracks_endpoint_returns_200():
     mock_ref = _make_reflectivity_data(np.nan)
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_sweep_data", return_value=mock_ref), \
          patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/tracks/KTLX")
     assert resp.status_code == 200
@@ -195,12 +197,12 @@ def test_tracks_endpoint_includes_motion_confidence_fields():
     mock_ref = _make_reflectivity_data(np.nan)
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_sweep_data", return_value=mock_ref), \
          patch("src.server.extract_velocity", return_value=None):
         client.get("/tracks/KTLX")
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_sweep_data", return_value=mock_ref), \
          patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/tracks/KTLX")
     assert resp.status_code == 200
@@ -234,7 +236,7 @@ def test_velocity_endpoint_returns_200():
     mock_ref = _make_reflectivity_data(np.nan)
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
-         patch("src.server.extract_reflectivity_from_radar", return_value=mock_ref), \
+         patch("src.server.extract_sweep_data", return_value=mock_ref), \
          patch("src.server.extract_velocity", return_value=None):
         resp = client.get("/velocity/KTLX")
     assert resp.status_code == 200
