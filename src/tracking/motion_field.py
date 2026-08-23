@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from src.buffer import BufferedScan
-from src.detection import polar_to_latlon
+from src.geometry import gate_latlon
 from src.tracking.types import SegmentedStormObject
 
 
@@ -223,17 +223,19 @@ def estimate_scan_geographic_motion_field(
     curr_azimuth = float(np.interp(curr_row, row_coords, current_ref.azimuths))
     curr_range_m = float(np.interp(curr_col, col_coords, current_ref.ranges_m))
 
-    prev_lat, prev_lon = polar_to_latlon(
-        previous_ref.radar_lat,
-        previous_ref.radar_lon,
-        prev_azimuth,
-        prev_range_m,
+    prev_lat, prev_lon = gate_latlon(
+        azimuth_deg=prev_azimuth,
+        range_m=prev_range_m,
+        elevation_deg=previous_ref.elevation_angle,
+        radar_lat=previous_ref.radar_lat,
+        radar_lon=previous_ref.radar_lon,
     )
-    curr_lat, curr_lon = polar_to_latlon(
-        current_ref.radar_lat,
-        current_ref.radar_lon,
-        curr_azimuth,
-        curr_range_m,
+    curr_lat, curr_lon = gate_latlon(
+        azimuth_deg=curr_azimuth,
+        range_m=curr_range_m,
+        elevation_deg=current_ref.elevation_angle,
+        radar_lat=current_ref.radar_lat,
+        radar_lon=current_ref.radar_lon,
     )
     return GeographicMotionFieldEstimate(
         delta_lat=round(curr_lat - prev_lat, 4),
@@ -283,17 +285,19 @@ def estimate_local_scan_geographic_motion_field(
     curr_azimuth = float(np.interp(curr_row, row_coords, current_ref.azimuths))
     curr_range_m = float(np.interp(curr_col, col_coords, current_ref.ranges_m))
 
-    prev_lat, prev_lon = polar_to_latlon(
-        previous_ref.radar_lat,
-        previous_ref.radar_lon,
-        prev_azimuth,
-        prev_range_m,
+    prev_lat, prev_lon = gate_latlon(
+        azimuth_deg=prev_azimuth,
+        range_m=prev_range_m,
+        elevation_deg=previous_ref.elevation_angle,
+        radar_lat=previous_ref.radar_lat,
+        radar_lon=previous_ref.radar_lon,
     )
-    curr_lat, curr_lon = polar_to_latlon(
-        current_ref.radar_lat,
-        current_ref.radar_lon,
-        curr_azimuth,
-        curr_range_m,
+    curr_lat, curr_lon = gate_latlon(
+        azimuth_deg=curr_azimuth,
+        range_m=curr_range_m,
+        elevation_deg=current_ref.elevation_angle,
+        radar_lat=current_ref.radar_lat,
+        radar_lon=current_ref.radar_lon,
     )
     return GeographicMotionFieldEstimate(
         delta_lat=round(curr_lat - prev_lat, 4),

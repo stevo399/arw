@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy.ndimage import label
 
+from src.geometry import gate_latlon
+
 MIN_OBJECT_AREA_KM2 = 4.0
 MIN_SIGNIFICANT_WEAK_OBJECT_AREA_KM2 = 8.0
 MIN_SMALL_OBJECT_PEAK_DBZ = 40.0
@@ -141,8 +143,12 @@ def compute_object_properties(
     centroid_az = float(np.interp(centroid_az_idx, range(len(azimuths)), azimuths))
     centroid_range = float(np.interp(centroid_rng_idx, range(len(ranges_m)), ranges_m))
 
-    centroid_lat, centroid_lon = polar_to_latlon(
-        radar_lat, radar_lon, centroid_az, centroid_range,
+    centroid_lat, centroid_lon = gate_latlon(
+        azimuth_deg=centroid_az,
+        range_m=centroid_range,
+        elevation_deg=elevation_deg,
+        radar_lat=radar_lat,
+        radar_lon=radar_lon,
     )
     distance_km = centroid_range / 1000.0
     bearing_deg = centroid_az % 360

@@ -75,6 +75,7 @@ def segment_storm_objects(
     ranges_m: np.ndarray,
     radar_lat: float,
     radar_lon: float,
+    elevation_deg: float = 0.5,
 ) -> SegmentationResult:
     """Create tracking-friendly segmented storm objects from reflectivity data."""
     detection = detect_objects_with_grid(
@@ -83,5 +84,6 @@ def segment_storm_objects(
         ranges_m=ranges_m,
         radar_lat=radar_lat,
         radar_lon=radar_lon,
+        elevation_deg=elevation_deg,
     )
     return adapt_detection_result(detection)
