@@ -34,8 +34,15 @@ Replaces `detection.polar_to_latlon`, which treats slant range as ground range a
 **Interfaces:**
 - Consumes: nothing (first task)
 - Produces:
-  - `gate_coordinates(azimuths: np.ndarray, ranges_m: np.ndarray, elevation_deg: float, radar_lat: float, radar_lon: float) -> tuple[np.ndarray, np.ndarray]` returning `(latitudes, longitudes)`, each shaped `(len(azimuths), len(ranges_m))`
+  - `gate_coordinates(azimuths: np.ndarray, ranges_m: np.ndarray, elevation_deg: float | np.ndarray, radar_lat: float, radar_lon: float) -> tuple[np.ndarray, np.ndarray]` returning `(latitudes, longitudes)`, each shaped `(len(azimuths), len(ranges_m))`
   - `EFFECTIVE_EARTH_RADIUS_M: float`
+
+**`elevation_deg` accepts a per-ray array, and the pipeline must pass one.**
+Antenna elevation wanders within a sweep — on the reference volume the rays span
+0.4807° to 0.6619° against a nominal `fixed_angle` of 0.4834°. Py-ART's
+`gate_latitude` uses the real per-ray elevation, so passing the scalar nominal
+angle disagrees with it by up to 91.5 m at long range. Pass
+`radar.elevation["data"][sweep_start:sweep_end + 1]`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -60,12 +67,15 @@ def test_gate_coordinates_match_pyart_reference(radar):
     sweep_start, sweep_end = radar.get_start_end(0)
     azimuths = radar.azimuth["data"][sweep_start:sweep_end + 1]
     ranges_m = radar.range["data"]
-    elevation = float(radar.fixed_angle["data"][0])
+    # Per-ray elevation, not the nominal fixed_angle. Py-ART georeferences with
+    # the real pointing angle of each ray, and they differ enough within one
+    # sweep to move far gates by tens of metres.
+    elevations = radar.elevation["data"][sweep_start:sweep_end + 1]
 
     lat, lon = gate_coordinates(
         azimuths=azimuths,
         ranges_m=ranges_m,
-        elevation_deg=elevation,
+        elevation_deg=elevations,
         radar_lat=float(radar.latitude["data"][0]),
         radar_lon=float(radar.longitude["data"][0]),
     )
@@ -105,17 +115,26 @@ EFFECTIVE_EARTH_RADIUS_M = EARTH_RADIUS_M * 4.0 / 3.0
 def gate_coordinates(
     azimuths: np.ndarray,
     ranges_m: np.ndarray,
-    elevation_deg: float,
+    elevation_deg: float | np.ndarray,
     radar_lat: float,
     radar_lon: float,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Geographic coordinates of every gate in a sweep.
 
+    elevation_deg may be a scalar or one angle per ray. Prefer per-ray: antenna
+    elevation wanders within a sweep, and Py-ART georeferences with the real
+    pointing angle, so a scalar nominal angle disagrees with it at long range.
+
     Returns (latitudes, longitudes), each shaped (n_rays, n_gates).
     """
     ranges_km = np.asarray(ranges_m, dtype=float) / 1000.0
     ranges_2d, azimuths_2d = np.meshgrid(ranges_km, np.asarray(azimuths, dtype=float))
-    x, y, _z = antenna_to_cartesian(ranges_2d, azimuths_2d, elevation_deg)
+
+    elevations = np.asarray(elevation_deg, dtype=float)
+    # One angle per ray broadcasts down the range axis; a scalar broadcasts everywhere.
+    elevations_2d = elevations[:, None] if elevations.ndim == 1 else elevations
+
+    x, y, _z = antenna_to_cartesian(ranges_2d, azimuths_2d, elevations_2d)
     lon, lat = cartesian_to_geographic_aeqd(x, y, radar_lon, radar_lat)
     return lat, lon
 ```
@@ -863,7 +882,8 @@ class SweepData:
     reflectivity: np.ndarray
     azimuths: np.ndarray
     ranges_m: np.ndarray
-    elevation_angle: float
+    elevation_angle: float          # nominal fixed_angle, for reporting
+    elevations: np.ndarray          # per-ray actual elevation, for georeferencing
     elevation_angles: list[float]
     radar_lat: float
     radar_lon: float
