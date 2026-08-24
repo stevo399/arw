@@ -267,3 +267,84 @@ def test_sweep_count_can_exceed_one_on_real_data():
     if not regions:
         pytest.skip("reference volume has no velocity regions above threshold")
     assert max(r.sweep_count for r in regions) > 1
+
+
+def _make_multi_couplet_single_sweep_grid() -> np.ndarray:
+    """A single sweep containing many separate, spatially close shear couplets.
+
+    `_detect_shear_single_sweep` emits one couplet result per connected
+    component of shear pixels. Each 1-row inbound / 1-row outbound pair here
+    forms its own connected component (separated from its neighbors by a
+    1-row NaN gap, which is enough for scipy's 8-connectivity labeling to
+    treat them as distinct), but all 15 couplets sit close enough in azimuth
+    and range (near-radar range bins 20:30, spanning ~42 degrees of azimuth)
+    that `_merge_cross_sweep_rotations` merges them into a single rotation
+    signature.
+    """
+    grid = np.full((360, 500), np.nan)
+    n_blocks = 15
+    step = 3
+    for i in range(n_blocks):
+        az0 = 40 + i * step
+        grid[az0, 20:30] = -20.0
+        grid[az0 + 1, 20:30] = 20.0
+    return grid
+
+
+def test_rotation_single_sweep_many_couplets_yield_sweep_count_one():
+    """A single sweep's many adjacent couplets must not inflate sweep_count.
+
+    This is the core regression test for the sweep_count defect: before the
+    fix, `_merge_cross_sweep_rotations` incremented sweep_count once per
+    MERGED COUPLET rather than once per distinct SWEEP. With this synthetic
+    single-sweep, 15-couplet grid, the pre-fix code produced exactly one
+    merged signature with sweep_count == 15 (measured directly against the
+    pre-fix implementation). Since every couplet here comes from the same
+    sweep (same elevation angle), the correct sweep_count is 1.
+    """
+    grid = _make_multi_couplet_single_sweep_grid()
+    vel_data = _make_velocity_data([_make_sweep(grid, elevation=0.48)])
+    signatures = detect_rotation_signatures(vel_data)
+    assert len(signatures) == 1
+    assert signatures[0].sweep_count == 1
+    assert signatures[0].elevation_angles == [0.48]
+
+
+def test_rotation_sweep_count_equals_distinct_elevation_count():
+    """sweep_count must equal the number of distinct elevation angles, and
+    can never exceed the number of sweeps supplied."""
+    grids = []
+    for inbound_peak, outbound_peak in ((-20.0, 20.0), (-22.0, 22.0), (-21.0, 21.0)):
+        grid = np.full((360, 500), np.nan)
+        grid[50:60, 150:160] = inbound_peak
+        grid[60:70, 150:160] = outbound_peak
+        grids.append(grid)
+    sweeps = [
+        _make_sweep(grids[0], elevation=0.48),
+        _make_sweep(grids[1], elevation=0.88),
+        _make_sweep(grids[2], elevation=1.27),
+    ]
+    vel_data = _make_velocity_data(sweeps)
+    signatures = detect_rotation_signatures(vel_data)
+    assert len(signatures) >= 1
+    for sig in signatures:
+        assert sig.sweep_count == len(set(sig.elevation_angles))
+        assert sig.sweep_count <= len(sweeps)
+
+
+def test_sweep_count_never_exceeds_three_sweeps_on_real_data():
+    """Regression guard for the measured defect on the reference volume.
+
+    Before the fix, rotation signatures on cache/KTLX/KTLX20260410_000100_V06
+    (3 velocity sweeps at elevations 0.48/0.88/1.27) had sweep_count values
+    up to 198, because couplets within a single sweep were counted as
+    separate sweeps. With 3 sweeps extracted, no signature may report more
+    than 3.
+    """
+    radar = pyart.io.read_nexrad_archive(REFERENCE_VOLUME)
+    vel_data = extract_velocity(radar, max_sweeps=3)
+    assert len(vel_data.sweeps) == 3
+    signatures = detect_rotation_signatures(vel_data)
+    if not signatures:
+        pytest.skip("reference volume has no rotation signatures above threshold")
+    assert max(s.sweep_count for s in signatures) <= 3

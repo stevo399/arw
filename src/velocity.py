@@ -287,6 +287,28 @@ def _detect_shear_single_sweep(
     return results
 
 
+def _merge_elevation_angles(existing: list[float], new: list[float]) -> list[float]:
+    """Combine two elevation-angle lists into a deduplicated, sorted list.
+
+    `_detect_shear_single_sweep` can emit many adjacent shear couplets for a
+    single circulation within one sweep, all carrying the same sweep
+    elevation angle. When those couplets are merged across sweeps by
+    proximity, the elevation angle must be counted once per distinct sweep,
+    not once per couplet. Elevation angles are floats read from the radar
+    file, so exact equality is unreliable; angles are compared after
+    rounding to 2 decimal places (finer than the 1-decimal rounding used to
+    dedupe fixed_angle values when sweeps are extracted in src/parser.py,
+    chosen here so distinct-but-close split-cut tilts, e.g. 0.48 vs 0.53,
+    are not collapsed together).
+    """
+    seen: dict[float, float] = {}
+    for angle in existing + new:
+        key = round(angle, 2)
+        if key not in seen:
+            seen[key] = angle
+    return sorted(seen.values())
+
+
 def _merge_cross_sweep_rotations(
     all_sweep_results: list[list[tuple[RotationSignature, float, float]]],
     ranges_m: np.ndarray,
@@ -311,6 +333,9 @@ def _merge_cross_sweep_rotations(
                 ) / 1000.0
 
                 if approx_dist_km <= ROTATION_MERGE_DISTANCE_KM:
+                    merged_elevation_angles = _merge_elevation_angles(
+                        existing_sig.elevation_angles, sig.elevation_angles
+                    )
                     merged[i] = (RotationSignature(
                         centroid_lat=existing_sig.centroid_lat,
                         centroid_lon=existing_sig.centroid_lon,
@@ -320,8 +345,8 @@ def _merge_cross_sweep_rotations(
                         max_inbound_ms=min(existing_sig.max_inbound_ms, sig.max_inbound_ms),
                         max_outbound_ms=max(existing_sig.max_outbound_ms, sig.max_outbound_ms),
                         diameter_km=max(existing_sig.diameter_km, sig.diameter_km),
-                        sweep_count=existing_sig.sweep_count + 1,
-                        elevation_angles=existing_sig.elevation_angles + sig.elevation_angles,
+                        sweep_count=len(merged_elevation_angles),
+                        elevation_angles=merged_elevation_angles,
                         strength=_classify_rotation_strength(
                             max(existing_sig.max_shear_ms, sig.max_shear_ms)
                         ),
