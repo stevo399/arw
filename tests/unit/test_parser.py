@@ -185,3 +185,29 @@ def test_parse_radar_file_returns_radar_object():
     with patch("src.parser.pyart.io.read_nexrad_archive", return_value=mock_radar):
         radar = parse_radar_file("/fake/path.V06")
     assert radar is mock_radar
+
+
+from src.parser import extract_velocity
+
+
+def test_extract_velocity_skips_empty_surveillance_cuts(radar):
+    """Every returned sweep must carry actual velocity data."""
+    velocity_data = extract_velocity(radar, max_sweeps=3)
+    assert velocity_data is not None
+    assert len(velocity_data.sweeps) == 3
+    for sweep in velocity_data.sweeps:
+        finite_fraction = np.count_nonzero(~np.isnan(sweep.velocity)) / sweep.velocity.size
+        assert finite_fraction > 0.0, "selected a sweep with no velocity data"
+
+
+def test_extract_velocity_returns_distinct_elevations(radar):
+    velocity_data = extract_velocity(radar, max_sweeps=3)
+    elevations = [round(s.elevation_angle, 2) for s in velocity_data.sweeps]
+    assert len(set(elevations)) == 3
+
+
+def test_extract_velocity_uses_doppler_nyquist(radar):
+    """Doppler cuts have a high Nyquist; surveillance cuts about 8 m/s."""
+    velocity_data = extract_velocity(radar, max_sweeps=3)
+    for sweep in velocity_data.sweeps:
+        assert sweep.nyquist_velocity > 20.0

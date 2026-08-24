@@ -34,6 +34,7 @@ def _detect_regions_single_sweep(
     radar_lat: float,
     radar_lon: float,
     elevation_angle: float,
+    elevations: np.ndarray,
 ) -> list[tuple[VelocityRegion, np.ndarray]]:
     """Detect inbound/outbound regions on a single sweep. Returns (region, mask) pairs."""
     range_bin_areas = gate_areas_km2(azimuths, ranges_m, elevation_angle)
@@ -69,11 +70,14 @@ def _detect_regions_single_sweep(
             centroid_rng_idx = float(np.average(rng_indices, weights=weights))
             centroid_az = interpolate_azimuth(azimuths, centroid_az_idx)
             centroid_range = float(np.interp(centroid_rng_idx, range(len(ranges_m)), ranges_m))
+            centroid_elevation = float(
+                np.interp(centroid_az_idx, range(len(elevations)), elevations)
+            )
 
             centroid_lat, centroid_lon = gate_latlon(
                 azimuth_deg=centroid_az,
                 range_m=centroid_range,
-                elevation_deg=elevation_angle,
+                elevation_deg=centroid_elevation,
                 radar_lat=radar_lat,
                 radar_lon=radar_lon,
             )
@@ -173,6 +177,7 @@ def _detect_shear_single_sweep(
     radar_lat: float,
     radar_lon: float,
     elevation_angle: float,
+    elevations: np.ndarray,
 ) -> list[tuple[RotationSignature, float, float]]:
     """Find gate-to-gate shear couplets on one sweep.
 
@@ -246,6 +251,9 @@ def _detect_shear_single_sweep(
         centroid_rng_idx = float(np.average(rng_indices, weights=weights))
         centroid_az = interpolate_azimuth(azimuths, centroid_az_idx)
         centroid_range = float(np.interp(centroid_rng_idx, range(len(ranges_m)), ranges_m))
+        centroid_elevation = float(
+            np.interp(centroid_az_idx, range(len(elevations)), elevations)
+        )
 
         az_extent = (float(np.max(az_indices)) - float(np.min(az_indices))) * az_spacing_deg
         rng_extent = (float(np.max(rng_indices)) - float(np.min(rng_indices))) * range_spacing_m
@@ -257,7 +265,7 @@ def _detect_shear_single_sweep(
         centroid_lat, centroid_lon = gate_latlon(
             azimuth_deg=centroid_az,
             range_m=centroid_range,
-            elevation_deg=elevation_angle,
+            elevation_deg=centroid_elevation,
             radar_lat=radar_lat,
             radar_lon=radar_lon,
         )
@@ -338,6 +346,7 @@ def detect_velocity_regions(vel_data: VelocityData) -> list[VelocityRegion]:
             radar_lat=vel_data.radar_lat,
             radar_lon=vel_data.radar_lon,
             elevation_angle=sweep.elevation_angle,
+            elevations=sweep.elevations,
         )
         all_sweep_results.append(sweep_results)
 
@@ -356,6 +365,7 @@ def detect_rotation_signatures(vel_data: VelocityData) -> list[RotationSignature
             radar_lat=vel_data.radar_lat,
             radar_lon=vel_data.radar_lon,
             elevation_angle=sweep.elevation_angle,
+            elevations=sweep.elevations,
         )
         all_sweep_results.append(sweep_results)
 

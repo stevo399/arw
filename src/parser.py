@@ -127,8 +127,9 @@ class VelocitySweep:
     velocity: np.ndarray
     azimuths: np.ndarray
     ranges_m: np.ndarray
-    elevation_angle: float
+    elevation_angle: float          # nominal fixed_angle, for reporting
     nyquist_velocity: float
+    elevations: np.ndarray          # per-ray actual elevation, for georeferencing
 
 
 @dataclass
@@ -140,39 +141,47 @@ class VelocityData:
 
 
 def extract_velocity(radar, max_sweeps: int = 3) -> VelocityData | None:
-    """Extract velocity from the lowest N sweeps of a pyart Radar object.
+    """Extract velocity from the lowest sweeps that actually carry it.
 
-    Returns None if the radar has no velocity field.
+    Split-cut VCPs pair a surveillance cut and a Doppler cut at each low
+    elevation. Only the Doppler cut carries usable velocity, so sweeps are
+    chosen by inspection rather than by index.
+
+    Dealiasing runs after selection, so surveillance cuts with no velocity are
+    not processed.
     """
+    from src.sweeps import select_velocity_sweeps
+
     if "velocity" not in radar.fields:
         return None
 
-    # Apply Py-ART region-based dealiasing to unwrap aliased velocities
+    sweep_indices = select_velocity_sweeps(radar, max_sweeps=max_sweeps)
+    if not sweep_indices:
+        return None
+
     try:
-        pyart.correct.dealias_region_based(radar, field="velocity")
+        dealiased = pyart.correct.dealias_region_based(radar, field="velocity")
+        radar.add_field("dealiased_velocity", dealiased, replace_existing=True)
+        velocity_field = "dealiased_velocity"
     except Exception:
-        pass  # proceed with raw velocity if dealiasing fails
+        velocity_field = "velocity"
 
-    sweeps_to_read = min(max_sweeps, radar.nsweeps)
     sweeps: list[VelocitySweep] = []
-
-    for sweep_index in range(sweeps_to_read):
+    for sweep_index in sweep_indices:
         sweep_start, sweep_end = radar.get_start_end(sweep_index)
-        velocity = radar.fields["velocity"]["data"][sweep_start:sweep_end + 1]
-        azimuths = radar.azimuth["data"][sweep_start:sweep_end + 1]
-        ranges_m = radar.range["data"]
-
+        velocity = radar.fields[velocity_field]["data"][sweep_start:sweep_end + 1]
         if hasattr(velocity, "filled"):
             velocity = velocity.filled(np.nan)
 
-        nyquist = float(radar.instrument_parameters["nyquist_velocity"]["data"][sweep_start])
-
         sweeps.append(VelocitySweep(
-            velocity=velocity,
-            azimuths=azimuths,
-            ranges_m=ranges_m,
+            velocity=np.asarray(velocity, dtype=float),
+            azimuths=np.asarray(radar.azimuth["data"][sweep_start:sweep_end + 1], dtype=float),
+            ranges_m=np.asarray(radar.range["data"], dtype=float),
             elevation_angle=float(radar.fixed_angle["data"][sweep_index]),
-            nyquist_velocity=nyquist,
+            nyquist_velocity=float(
+                radar.instrument_parameters["nyquist_velocity"]["data"][sweep_start]
+            ),
+            elevations=np.asarray(radar.elevation["data"][sweep_start:sweep_end + 1], dtype=float),
         ))
 
     return VelocityData(

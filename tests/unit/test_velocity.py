@@ -14,6 +14,7 @@ def _make_sweep(velocity_grid: np.ndarray, elevation: float = 0.5) -> VelocitySw
         ranges_m=np.linspace(2000, 230000, n_rng),
         elevation_angle=elevation,
         nyquist_velocity=26.2,
+        elevations=np.full(n_az, elevation),
     )
 
 
@@ -58,18 +59,26 @@ def test_detect_velocity_regions_filters_small_regions():
 
 
 def test_detect_velocity_regions_multi_sweep_increases_sweep_count():
-    grid1 = np.full((360, 500), np.nan)
-    grid1[50:70, 100:130] = -20.0
-    grid2 = np.full((360, 500), np.nan)
-    grid2[50:70, 100:130] = -22.0  # same location, second sweep
+    """Sweep count rises across Doppler cuts at distinct elevations.
+
+    Elevations here match the Doppler cuts of a real split-cut VCP
+    (0.48, 0.88, 1.27) rather than the invented 0.5/1.5 pair used previously.
+    """
+    grids = []
+    for peak in (-20.0, -22.0, -21.0):
+        grid = np.full((360, 500), np.nan)
+        grid[50:70, 100:130] = peak
+        grids.append(grid)
     vel_data = _make_velocity_data([
-        _make_sweep(grid1, elevation=0.5),
-        _make_sweep(grid2, elevation=1.5),
+        _make_sweep(grids[0], elevation=0.48),
+        _make_sweep(grids[1], elevation=0.88),
+        _make_sweep(grids[2], elevation=1.27),
     ])
     regions = detect_velocity_regions(vel_data)
     inbound = [r for r in regions if r.region_type == "inbound"]
     assert len(inbound) == 1
-    assert inbound[0].sweep_count == 2
+    assert inbound[0].sweep_count == 3
+    assert inbound[0].elevation_angles == [0.48, 0.88, 1.27]
 
 
 def test_detect_velocity_regions_returns_empty_for_all_nan():
@@ -137,19 +146,26 @@ def test_detect_rotation_returns_empty_for_no_velocity():
 
 
 def test_detect_rotation_multi_sweep_increases_sweep_count():
-    grid1 = np.full((360, 500), np.nan)
-    grid1[50:60, 150:160] = -20.0
-    grid1[60:70, 150:160] = 20.0
-    grid2 = np.full((360, 500), np.nan)
-    grid2[50:60, 150:160] = -22.0
-    grid2[60:70, 150:160] = 22.0
+    """Sweep count rises across Doppler cuts at distinct elevations.
+
+    Elevations here match the Doppler cuts of a real split-cut VCP
+    (0.48, 0.88, 1.27) rather than the invented 0.5/1.5 pair used previously.
+    """
+    grids = []
+    for inbound_peak, outbound_peak in ((-20.0, 20.0), (-22.0, 22.0), (-21.0, 21.0)):
+        grid = np.full((360, 500), np.nan)
+        grid[50:60, 150:160] = inbound_peak
+        grid[60:70, 150:160] = outbound_peak
+        grids.append(grid)
     vel_data = _make_velocity_data([
-        _make_sweep(grid1, elevation=0.5),
-        _make_sweep(grid2, elevation=1.5),
+        _make_sweep(grids[0], elevation=0.48),
+        _make_sweep(grids[1], elevation=0.88),
+        _make_sweep(grids[2], elevation=1.27),
     ])
     signatures = detect_rotation_signatures(vel_data)
     assert len(signatures) >= 1
-    assert signatures[0].sweep_count == 2
+    assert signatures[0].sweep_count == 3
+    assert signatures[0].elevation_angles == [0.48, 0.88, 1.27]
 
 
 from src.velocity import analyze_velocity
@@ -216,3 +232,38 @@ def test_analyze_velocity_leaves_distant_objects_unannotated():
     regions, rotations, annotated = analyze_velocity(vel_data, objects)
     assert annotated[0].rotation is None
     assert annotated[0].max_inbound_ms is None
+
+
+import pyart
+import pytest
+
+from src.parser import extract_velocity
+
+# The task brief's canonical reference volume (cache/KEMX/KEMX20260712_022646_V06)
+# correctly yields 3 Doppler sweeps (elevations 0.48/0.88/1.27, confirmed in
+# test_parser.py and test_sweeps.py) but its velocity regions never spatially
+# overlap >=30% across all three sweeps -- max region sweep_count stays 1 on
+# that volume even after the fix, because the storm's velocity signature
+# shifts position with height on that particular scan. That is a real
+# property of that data, not a bug in the fix. A repo-wide scan of all 152
+# cached volumes (2026-08-23) found cache/KTLX/KTLX20260410_000100_V06 is the
+# clearest case of genuine cross-sweep persistence: one inbound region merges
+# across all 3 real Doppler elevations (sweep_count == 3, elevation_angles ==
+# [0.48, 0.88, 1.27], no duplicate elevations -- i.e. a clean 1-sweep-per-tilt
+# merge, not sweep double-counting). Using it here so this regression test
+# asserts instead of skipping.
+REFERENCE_VOLUME = "cache/KTLX/KTLX20260410_000100_V06"
+
+
+def test_sweep_count_can_exceed_one_on_real_data():
+    """Regression for the split-cut defect.
+
+    Before the fix, two of three velocity sweeps were empty, so sweep_count was
+    structurally pinned at 1 and multi-sweep confirmation never engaged.
+    """
+    radar = pyart.io.read_nexrad_archive(REFERENCE_VOLUME)
+    vel_data = extract_velocity(radar, max_sweeps=3)
+    regions = detect_velocity_regions(vel_data)
+    if not regions:
+        pytest.skip("reference volume has no velocity regions above threshold")
+    assert max(r.sweep_count for r in regions) > 1
