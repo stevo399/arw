@@ -11,6 +11,20 @@ MIN_SPECKLE_PEAK_DBZ_TO_KEEP = 35.0
 HIGH_MISSING_FRACTION = 0.35
 NOTICEABLE_SPECKLE_FRACTION = 0.005
 
+# Every other SweepData field that shares reflectivity's (n_rays, n_gates)
+# grid. Speckle removal must blank these gates too, or SweepData's
+# "co-registered fields" promise is broken -- a gate reflectivity dropped
+# would still report a RhoHV/ZDR/PhiDP reading.
+CO_REGISTERED_FIELD_NAMES = (
+    "velocity",
+    "rhohv",
+    "zdr",
+    "phidp",
+    "spectrum_width",
+    "clutter_power_removed",
+    "gate_classification",
+)
+
 
 @dataclass
 class ScanQuality:
@@ -64,6 +78,13 @@ def assess_scan_quality(
     )
 
 
+def _blank_at_mask(field: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Return a copy of `field` with `mask` positions set to NaN."""
+    updated = np.array(field, dtype=float, copy=True)
+    updated[mask] = np.nan
+    return updated
+
+
 def preprocess_reflectivity_data(reflectivity_data: SweepData) -> tuple[SweepData, ScanQuality]:
     processed_reflectivity, removed_speckle_pixels = _remove_weak_speckle(reflectivity_data.reflectivity)
     quality = assess_scan_quality(
@@ -71,4 +92,13 @@ def preprocess_reflectivity_data(reflectivity_data: SweepData) -> tuple[SweepDat
         processed_reflectivity=processed_reflectivity,
         removed_speckle_pixels=removed_speckle_pixels,
     )
-    return replace(reflectivity_data, reflectivity=processed_reflectivity), quality
+
+    updates: dict[str, np.ndarray] = {"reflectivity": processed_reflectivity}
+    removed_mask = np.isnan(processed_reflectivity) & ~np.isnan(reflectivity_data.reflectivity)
+    if np.any(removed_mask):
+        for field_name in CO_REGISTERED_FIELD_NAMES:
+            value = getattr(reflectivity_data, field_name)
+            if value is not None:
+                updates[field_name] = _blank_at_mask(value, removed_mask)
+
+    return replace(reflectivity_data, **updates), quality

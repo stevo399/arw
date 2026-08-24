@@ -38,6 +38,71 @@ def test_extract_sweep_data_records_per_ray_elevations(radar):
     assert isinstance(sweep.elevation_angle, float)
 
 
+def test_extract_sweep_data_treats_all_nan_field_as_absent(radar):
+    """velocity/spectrum_width are present-but-all-NaN on the reflectivity
+    sweep (split-cut scan strategy artifact) -- must read as None, not as
+    a usable all-NaN array, or Tasks 6-7 will treat "key present" as
+    "data available"."""
+    sweep = extract_sweep_data(radar)
+    assert sweep.velocity is None
+    assert sweep.spectrum_width is None
+
+
+def test_extract_sweep_data_all_nan_field_returns_none_not_array():
+    """Synthetic, deterministic version of the same rule: a field key that
+    exists on the radar but is 100% NaN for this sweep must come back as
+    None."""
+
+    class AllNanVelocityRadar:
+        nsweeps = 1
+        fixed_angle = {"data": np.array([0.5])}
+        latitude = {"data": np.array([35.0])}
+        longitude = {"data": np.array([-97.0])}
+        altitude = {"data": np.array([390.0])}
+        azimuth = {"data": np.linspace(0, 359.5, 8)}
+        elevation = {"data": np.full(8, 0.5)}
+        range = {"data": np.arange(2125.0, 4625.0, 250.0)}
+        time = {"units": "seconds since 2026-01-01T00:00:00Z"}
+        fields = {
+            "reflectivity": {"data": np.ma.masked_invalid(np.full((8, 10), 25.0))},
+            "velocity": {"data": np.ma.masked_invalid(np.full((8, 10), np.nan))},
+        }
+        instrument_parameters = None
+
+        def get_start_end(self, sweep_index):
+            return 0, 7
+
+    sweep = extract_sweep_data(AllNanVelocityRadar())
+    assert sweep.velocity is None
+    assert sweep.reflectivity is not None
+
+
+def test_extract_sweep_data_all_nan_reflectivity_stays_an_array_not_none():
+    """Reflectivity is required and can legitimately be all-NaN on a
+    genuinely clear-air scan -- that must NOT be collapsed to None, unlike
+    the optional co-registered fields."""
+
+    class ClearAirRadar:
+        nsweeps = 1
+        fixed_angle = {"data": np.array([0.5])}
+        latitude = {"data": np.array([35.0])}
+        longitude = {"data": np.array([-97.0])}
+        altitude = {"data": np.array([390.0])}
+        azimuth = {"data": np.linspace(0, 359.5, 8)}
+        elevation = {"data": np.full(8, 0.5)}
+        range = {"data": np.arange(2125.0, 4625.0, 250.0)}
+        time = {"units": "seconds since 2026-01-01T00:00:00Z"}
+        fields = {"reflectivity": {"data": np.ma.masked_invalid(np.full((8, 10), np.nan))}}
+        instrument_parameters = None
+
+        def get_start_end(self, sweep_index):
+            return 0, 7
+
+    sweep = extract_sweep_data(ClearAirRadar())
+    assert sweep.reflectivity is not None
+    assert np.isnan(sweep.reflectivity).all()
+
+
 def test_extract_sweep_data_handles_absent_polarimetric_fields():
     """Pre-2013 volumes have no RhoHV. Absent must mean None, never zeros."""
 

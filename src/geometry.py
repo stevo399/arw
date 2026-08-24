@@ -47,6 +47,18 @@ def gate_coordinates(
     return lat, lon
 
 
+def interpolate_azimuth(azimuths: np.ndarray, index: float) -> float:
+    """Interpolate a fractional ray index to a compass azimuth, seam-safe.
+
+    NEXRAD azimuth arrays wrap once from ~360 back to ~0. Interpolating the raw
+    array across that seam yields a bearing 180 degrees wrong, so a storm due
+    north reads as due south. Unwrap first, interpolate, then fold back.
+    """
+    azimuths = np.asarray(azimuths, dtype=float)
+    unwrapped = np.unwrap(azimuths, period=360.0)
+    return float(np.interp(index, np.arange(len(unwrapped)), unwrapped)) % 360.0
+
+
 def gate_latlon(
     azimuth_deg: float,
     range_m: float,

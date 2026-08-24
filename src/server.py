@@ -131,6 +131,7 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
         radar_lat=ref_data.radar_lat,
         radar_lon=ref_data.radar_lon,
         elevation_deg=ref_data.elevation_angle,
+        elevations=ref_data.elevations,
     )
     regions, rotations, annotated_objects = analyze_velocity(vel_data, result.objects)
     scan_timestamp = datetime.fromisoformat(ref_data.timestamp) if isinstance(ref_data.timestamp, str) else ref_data.timestamp

@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy.ndimage import label
 
-from src.geometry import gate_latlon
+from src.geometry import gate_latlon, interpolate_azimuth
 
 MIN_OBJECT_AREA_KM2 = 4.0
 MIN_SIGNIFICANT_WEAK_OBJECT_AREA_KM2 = 8.0
@@ -116,8 +116,16 @@ def compute_object_properties(
     radar_lon: float,
     object_id: int,
     elevation_deg: float = 0.5,
+    elevations: np.ndarray | None = None,
 ) -> "DetectedObject | None":
-    """Compute properties for a single detected object. Returns None if too small."""
+    """Compute properties for a single detected object. Returns None if too small.
+
+    `elevations`, if given, is the per-ray elevation array for this sweep
+    (`SweepData.elevations`) and is preferred over the scalar
+    `elevation_deg` for georeferencing the centroid -- see
+    `geometry.gate_coordinates`'s docstring. When absent, `elevation_deg`
+    (the nominal sweep angle) is used for every centroid instead.
+    """
     az_indices, rng_indices = np.where(obj_mask)
     if len(az_indices) == 0:
         return None
@@ -140,13 +148,19 @@ def compute_object_properties(
 
     centroid_az_idx = np.average(az_indices[valid], weights=weights[valid])
     centroid_rng_idx = np.average(rng_indices[valid], weights=weights[valid])
-    centroid_az = float(np.interp(centroid_az_idx, range(len(azimuths)), azimuths))
+    # Seam-safe: azimuths wrap once from ~360 back to ~0, and a straight
+    # np.interp across that seam reverses the bearing by 180 degrees.
+    centroid_az = interpolate_azimuth(azimuths, centroid_az_idx)
     centroid_range = float(np.interp(centroid_rng_idx, range(len(ranges_m)), ranges_m))
+    if elevations is not None:
+        centroid_elevation_deg = float(np.interp(centroid_az_idx, range(len(elevations)), elevations))
+    else:
+        centroid_elevation_deg = elevation_deg
 
     centroid_lat, centroid_lon = gate_latlon(
         azimuth_deg=centroid_az,
         range_m=centroid_range,
-        elevation_deg=elevation_deg,
+        elevation_deg=centroid_elevation_deg,
         radar_lat=radar_lat,
         radar_lon=radar_lon,
     )
@@ -375,6 +389,7 @@ def detect_objects_with_grid(
     radar_lat: float,
     radar_lon: float,
     elevation_deg: float = 0.5,
+    elevations: np.ndarray | None = None,
 ) -> DetectionResult:
     """Detect rain objects and return labeled grid + masks for tracking.
 
@@ -401,6 +416,7 @@ def detect_objects_with_grid(
                 radar_lon=radar_lon,
                 object_id=next_object_id,
                 elevation_deg=elevation_deg,
+                elevations=elevations,
             )
             if obj is None:
                 continue
@@ -428,6 +444,7 @@ def detect_objects(
     radar_lat: float,
     radar_lon: float,
     elevation_deg: float = 0.5,
+    elevations: np.ndarray | None = None,
 ) -> list[DetectedObject]:
     """Detect rain objects from reflectivity data.
     Returns list of DetectedObject sorted by peak_dbz descending.
@@ -439,5 +456,6 @@ def detect_objects(
         radar_lat=radar_lat,
         radar_lon=radar_lon,
         elevation_deg=elevation_deg,
+        elevations=elevations,
     )
     return result.objects

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from src.buffer import BufferedScan
-from src.geometry import gate_latlon
+from src.geometry import gate_latlon, interpolate_azimuth
 from src.tracking.types import SegmentedStormObject
 
 
@@ -218,22 +218,29 @@ def estimate_scan_geographic_motion_field(
 
     row_coords = np.arange(len(previous_ref.azimuths))
     col_coords = np.arange(len(previous_ref.ranges_m))
-    prev_azimuth = float(np.interp(prev_row, row_coords, previous_ref.azimuths))
+    # Seam-safe: azimuths wrap once from ~360 back to ~0, and a straight
+    # np.interp across that seam reverses the bearing by 180 degrees.
+    prev_azimuth = interpolate_azimuth(previous_ref.azimuths, prev_row)
     prev_range_m = float(np.interp(prev_col, col_coords, previous_ref.ranges_m))
-    curr_azimuth = float(np.interp(curr_row, row_coords, current_ref.azimuths))
+    curr_azimuth = interpolate_azimuth(current_ref.azimuths, curr_row)
     curr_range_m = float(np.interp(curr_col, col_coords, current_ref.ranges_m))
+    # Per-ray elevation (does not wrap, plain interp is correct) rather than
+    # the nominal sweep angle -- geometry.gate_coordinates' docstring calls
+    # the scalar path "less preferred".
+    prev_elevation_deg = float(np.interp(prev_row, row_coords, previous_ref.elevations))
+    curr_elevation_deg = float(np.interp(curr_row, row_coords, current_ref.elevations))
 
     prev_lat, prev_lon = gate_latlon(
         azimuth_deg=prev_azimuth,
         range_m=prev_range_m,
-        elevation_deg=previous_ref.elevation_angle,
+        elevation_deg=prev_elevation_deg,
         radar_lat=previous_ref.radar_lat,
         radar_lon=previous_ref.radar_lon,
     )
     curr_lat, curr_lon = gate_latlon(
         azimuth_deg=curr_azimuth,
         range_m=curr_range_m,
-        elevation_deg=current_ref.elevation_angle,
+        elevation_deg=curr_elevation_deg,
         radar_lat=current_ref.radar_lat,
         radar_lon=current_ref.radar_lon,
     )
@@ -280,22 +287,29 @@ def estimate_local_scan_geographic_motion_field(
 
     row_coords = np.arange(len(previous_ref.azimuths))
     col_coords = np.arange(len(previous_ref.ranges_m))
-    prev_azimuth = float(np.interp(prev_row, row_coords, previous_ref.azimuths))
+    # Seam-safe: azimuths wrap once from ~360 back to ~0, and a straight
+    # np.interp across that seam reverses the bearing by 180 degrees.
+    prev_azimuth = interpolate_azimuth(previous_ref.azimuths, prev_row)
     prev_range_m = float(np.interp(prev_col, col_coords, previous_ref.ranges_m))
-    curr_azimuth = float(np.interp(curr_row, row_coords, current_ref.azimuths))
+    curr_azimuth = interpolate_azimuth(current_ref.azimuths, curr_row)
     curr_range_m = float(np.interp(curr_col, col_coords, current_ref.ranges_m))
+    # Per-ray elevation (does not wrap, plain interp is correct) rather than
+    # the nominal sweep angle -- geometry.gate_coordinates' docstring calls
+    # the scalar path "less preferred".
+    prev_elevation_deg = float(np.interp(prev_row, row_coords, previous_ref.elevations))
+    curr_elevation_deg = float(np.interp(curr_row, row_coords, current_ref.elevations))
 
     prev_lat, prev_lon = gate_latlon(
         azimuth_deg=prev_azimuth,
         range_m=prev_range_m,
-        elevation_deg=previous_ref.elevation_angle,
+        elevation_deg=prev_elevation_deg,
         radar_lat=previous_ref.radar_lat,
         radar_lon=previous_ref.radar_lon,
     )
     curr_lat, curr_lon = gate_latlon(
         azimuth_deg=curr_azimuth,
         range_m=curr_range_m,
-        elevation_deg=current_ref.elevation_angle,
+        elevation_deg=curr_elevation_deg,
         radar_lat=current_ref.radar_lat,
         radar_lon=current_ref.radar_lon,
     )

@@ -5,7 +5,7 @@ import numpy as np
 from scipy.ndimage import label
 
 from src.detection import DetectedObject
-from src.geometry import gate_areas_km2, gate_latlon
+from src.geometry import gate_areas_km2, gate_latlon, interpolate_azimuth
 from src.parser import VelocityData
 
 MIN_VELOCITY_MS = 10.0
@@ -67,7 +67,7 @@ def _detect_regions_single_sweep(
                 continue
             centroid_az_idx = float(np.average(az_indices, weights=weights))
             centroid_rng_idx = float(np.average(rng_indices, weights=weights))
-            centroid_az = float(np.interp(centroid_az_idx, range(len(azimuths)), azimuths))
+            centroid_az = interpolate_azimuth(azimuths, centroid_az_idx)
             centroid_range = float(np.interp(centroid_rng_idx, range(len(ranges_m)), ranges_m))
 
             centroid_lat, centroid_lon = gate_latlon(
@@ -244,7 +244,7 @@ def _detect_shear_single_sweep(
             continue
         centroid_az_idx = float(np.average(az_indices, weights=weights))
         centroid_rng_idx = float(np.average(rng_indices, weights=weights))
-        centroid_az = float(np.interp(centroid_az_idx, range(len(azimuths)), azimuths))
+        centroid_az = interpolate_azimuth(azimuths, centroid_az_idx)
         centroid_range = float(np.interp(centroid_rng_idx, range(len(ranges_m)), ranges_m))
 
         az_extent = (float(np.max(az_indices)) - float(np.min(az_indices))) * az_spacing_deg

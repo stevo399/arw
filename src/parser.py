@@ -45,14 +45,39 @@ def parse_radar_file(filepath: str):
     return pyart.io.read_nexrad_archive(filepath)
 
 
-def _extract_field(radar, nexrad_name: str, sweep_start: int, sweep_end: int) -> np.ndarray | None:
-    """Pull one field for one sweep, or None if the volume does not carry it."""
+def _extract_field(
+    radar,
+    nexrad_name: str,
+    sweep_start: int,
+    sweep_end: int,
+    treat_all_nan_as_absent: bool = True,
+) -> np.ndarray | None:
+    """Pull one field for one sweep, or None if it carries no usable data.
+
+    A field key can be present in `radar.fields` while every gate for this
+    particular sweep is masked/NaN (e.g. `velocity`/`spectrum_width` are
+    reflectivity-sweep artifacts of the split-cut scan strategy: they exist
+    on the volume but were never populated for the surveillance cut this
+    sweep selects). Treating "key present" as "data available" would hand
+    downstream code (and Tasks 6-7's dealiasing/QC) an all-NaN array it
+    reads as real data. Absent must mean None regardless of *why* there is
+    nothing usable -- missing key or all-NaN slice.
+
+    `treat_all_nan_as_absent` is off for `reflectivity`: it is SweepData's
+    one required field, and a genuinely clear-air scan (no precipitation
+    anywhere) is a legitimate all-NaN reading, not a missing field -- the
+    caller already selected the sweep with the best reflectivity coverage
+    available, so an empty result there is real data, not an artifact.
+    """
     if nexrad_name not in radar.fields:
         return None
     data = radar.fields[nexrad_name]["data"][sweep_start:sweep_end + 1]
     if hasattr(data, "filled"):
         data = data.filled(np.nan)
-    return np.asarray(data, dtype=float)
+    data = np.asarray(data, dtype=float)
+    if treat_all_nan_as_absent and not np.any(np.isfinite(data)):
+        return None
+    return data
 
 
 def extract_sweep_data(radar) -> SweepData:
@@ -61,7 +86,10 @@ def extract_sweep_data(radar) -> SweepData:
     sweep_start, sweep_end = radar.get_start_end(sweep_index)
 
     fields = {
-        key: _extract_field(radar, nexrad_name, sweep_start, sweep_end)
+        key: _extract_field(
+            radar, nexrad_name, sweep_start, sweep_end,
+            treat_all_nan_as_absent=(key != "reflectivity"),
+        )
         for key, nexrad_name in NEXRAD_FIELD_NAMES.items()
     }
 
