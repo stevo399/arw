@@ -1,6 +1,7 @@
 import numpy as np
 
-from src.qc.collocation import rotation_proximity_mask
+from src.geometry import gate_coordinates
+from src.qc.collocation import rotation_proximity_mask, _haversine_km
 from src.velocity import RotationSignature
 
 
@@ -86,7 +87,6 @@ def test_collocation_radius_applied_correctly():
     - Correctly apply the distance and radius logic (would pass)
     """
     sweep = _sweep()
-    from src.geometry import gate_coordinates
 
     lat, lon = gate_coordinates(
         sweep.azimuths, sweep.ranges_m, sweep.elevation_angle,
@@ -109,3 +109,76 @@ def test_collocation_radius_applied_correctly():
 
     # Loose should mark significantly more gates than tight
     assert loose.sum() > tight.sum() * 2
+
+
+def test_collocation_radius_is_half_diameter_plus_margin():
+    """Pin the radius arithmetic, not merely its monotonicity.
+
+    A multiplicative radius (diameter * margin) or a margin-only radius
+    (diameter ignored) both satisfy the widening inequality tests, so those
+    cannot catch a wrong formula. This asserts the actual boundary: every
+    marked gate lies within diameter/2 + margin, and every unmarked gate lies
+    outside it.
+    """
+    sweep = _sweep()
+    lat, lon = gate_coordinates(
+        sweep.azimuths, sweep.ranges_m, sweep.elevation_angle,
+        sweep.radar_lat, sweep.radar_lon,
+    )
+    signature = _signature(float(lat[10, 30]), float(lon[10, 30]), diameter_km=3.0)
+    margin_km = 5.0
+    expected_radius_km = signature.diameter_km / 2.0 + margin_km
+
+    mask = rotation_proximity_mask(sweep, [signature], margin_km=margin_km)
+    distance_km = _haversine_km(lat, lon, signature.centroid_lat, signature.centroid_lon)
+
+    assert mask.any() and not mask.all()
+    assert distance_km[mask].max() <= expected_radius_km
+    assert distance_km[~mask].min() > expected_radius_km
+
+
+def test_multi_signature_union_respects_individual_diameters():
+    """Multi-signature masks are unions, each using its own diameter.
+
+    When multiple rotation signatures are provided, each contributes its own
+    region (based on its diameter and the shared margin), and the result is
+    their union. Regions do not bleed into each other.
+    """
+    sweep = _sweep()
+    lat, lon = gate_coordinates(
+        sweep.azimuths, sweep.ranges_m, sweep.elevation_angle,
+        sweep.radar_lat, sweep.radar_lon,
+    )
+
+    # Two signatures at well-separated locations with different diameters
+    sig1_lat, sig1_lon = float(lat[10, 20]), float(lon[10, 20])
+    sig2_lat, sig2_lon = float(lat[50, 40]), float(lon[50, 40])
+
+    sig1 = _signature(sig1_lat, sig1_lon, diameter_km=2.0)
+    sig2 = _signature(sig2_lat, sig2_lon, diameter_km=4.0)
+
+    margin_km = 1.0
+
+    # Get masks for each signature individually
+    mask1 = rotation_proximity_mask(sweep, [sig1], margin_km=margin_km)
+    mask2 = rotation_proximity_mask(sweep, [sig2], margin_km=margin_km)
+
+    # Get combined mask
+    mask_combined = rotation_proximity_mask(sweep, [sig1, sig2], margin_km=margin_km)
+
+    # Combined mask should be the union of individual masks
+    assert np.array_equal(mask_combined, mask1 | mask2)
+
+    # Both regions should be marked in the combined mask
+    assert mask_combined[10, 20]
+    assert mask_combined[50, 40]
+
+    # Verify each signature's radius is independent
+    dist1 = _haversine_km(lat, lon, sig1_lat, sig1_lon)
+    dist2 = _haversine_km(lat, lon, sig2_lat, sig2_lon)
+    radius1 = sig1.diameter_km / 2.0 + margin_km
+    radius2 = sig2.diameter_km / 2.0 + margin_km
+
+    # Each region respects its own radius
+    assert dist1[mask1].max() <= radius1
+    assert dist2[mask2].max() <= radius2
