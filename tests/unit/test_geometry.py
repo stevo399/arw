@@ -192,3 +192,33 @@ def test_label_periodic_azimuth_leaves_separate_components_alone():
     ids = sorted(np.unique(labeled[labeled > 0]).tolist())
     assert ids == [1, 2]
     assert labeled[3, 3] != labeled[6, 6]
+
+
+def test_label_periodic_azimuth_merges_diagonally_across_seam():
+    """A component crossing the seam at a shifted gate index must merge under
+    8-connectivity, and must NOT merge under 4-connectivity.
+
+    Both production call sites that pass an explicit structure rely on this
+    branch: real storm echo rarely lands on exactly the same gate index either
+    side of due north.
+    """
+    mask = np.zeros((36, 40), dtype=bool)
+    mask[-1, 10] = True
+    mask[0, 11] = True
+
+    _four_conn, four_count = label_periodic_azimuth(mask)
+    _eight_conn, eight_count = label_periodic_azimuth(
+        mask, structure=np.ones((3, 3), dtype=int)
+    )
+
+    assert four_count == 2
+    assert eight_count == 1
+
+
+def test_label_periodic_azimuth_does_not_wrap_the_range_axis():
+    """Only azimuth is periodic. Gate 0 and gate N-1 are far apart in space."""
+    mask = np.zeros((36, 40), dtype=bool)
+    mask[0, 0] = True
+    mask[-1, 39] = True
+    _labeled, count = label_periodic_azimuth(mask, structure=np.ones((3, 3), dtype=int))
+    assert count == 2
