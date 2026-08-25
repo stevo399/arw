@@ -60,6 +60,28 @@ def test_separate_components_are_independent():
     assert mask[20:26, 20:26].all()
 
 
+def test_rule_three_protects_across_the_azimuth_seam():
+    """Ray 0 and ray N-1 are physically adjacent (both point just either side
+    of due north). A storm body straddling that seam, with its only intense
+    core on one side, must be protected in its entirety -- including the rows
+    on the far side of the seam.
+
+    Pre-fix, scipy.ndimage.label treats row 0 and row N-1 as unconnected
+    array edges, splits the storm into two components, and the far side
+    (rows 30:36, no core) is left unprotected.
+    """
+    reflectivity = np.full((36, 40), np.nan)
+    reflectivity[0:6, 8:16] = 30.0          # near-seam half of the storm body
+    reflectivity[30:36, 8:16] = 30.0        # far-seam half of the storm body
+    reflectivity[2, 11] = 58.0              # intense core, near-seam side only
+    mask = protected_mask(_sweep(reflectivity), [])
+    assert mask[0:6, 8:16].all(), "near-seam half (with the core) must be protected"
+    assert mask[30:36, 8:16].all(), (
+        "far-seam half must be protected too -- it is the same connected "
+        "storm across the azimuth seam"
+    )
+
+
 def test_rotation_collocation_protects_weak_debris_gates():
     """The tornado case: debris is weak enough to look like clutter, and is
     saved only by sitting on top of a rotation couplet."""

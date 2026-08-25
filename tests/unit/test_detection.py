@@ -329,6 +329,32 @@ def test_detect_objects_seam_storm_bearing_is_near_zero_not_180():
     )
 
 
+def test_detect_objects_seam_straddling_storm_is_one_object_not_two():
+    """Ray 0 and ray N-1 are physically adjacent. A storm occupying the same
+    gate indices at both the top and bottom row of the array is a single
+    storm, and must be detected as one object with one centroid -- not two.
+
+    Pre-fix, scipy.ndimage.label treats row 0 and row 359 as unconnected
+    array edges and splits this storm into two objects.
+    """
+    reflectivity = np.full((360, 500), np.nan)
+    reflectivity[0:6, 195:205] = 45.0
+    reflectivity[354:360, 195:205] = 45.0
+    azimuths = np.linspace(0, 359, 360)
+    ranges_m = np.linspace(2000, 250000, 500)
+    objects = detect_objects(
+        reflectivity=reflectivity,
+        azimuths=azimuths,
+        ranges_m=ranges_m,
+        radar_lat=35.0,
+        radar_lon=-97.0,
+    )
+    assert len(objects) == 1, (
+        f"expected one storm straddling the azimuth seam, got {len(objects)} -- "
+        "looks like the array-seam component-labelling bug"
+    )
+
+
 def test_compute_object_properties_centroid_matches_pyart_georeferencing(radar):
     """A compact, uniform storm's reported centroid must match Py-ART's own
     gate_latitude/gate_longitude at that gate, not just be roughly close.

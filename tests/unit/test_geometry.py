@@ -3,9 +3,10 @@ import math
 import numpy as np
 import pyart
 import pytest
+from scipy.ndimage import label
 
 from src.detection import polar_to_latlon
-from src.geometry import gate_coordinates, gate_areas_km2, ground_range_m
+from src.geometry import gate_coordinates, gate_areas_km2, ground_range_m, label_periodic_azimuth
 
 REFERENCE_VOLUME = "cache/KEMX/KEMX20260712_022646_V06"
 
@@ -156,3 +157,38 @@ def test_gate_areas_handle_azimuth_wraparound():
     ground = ground_range_m(ranges_m, 0.5)
     expected = (ground * np.radians(0.5) * 250.0) / 1e6
     np.testing.assert_allclose(areas, expected, rtol=1e-6)
+
+
+def test_label_periodic_azimuth_merges_across_seam():
+    """Ray 0 and ray N-1 are physically adjacent. A storm occupying the same
+    gate index in both must be one component, not two.
+
+    Plain scipy.ndimage.label treats row 0 and row N-1 as unconnected array
+    edges and yields count == 2 for this mask; that is the bug this function
+    corrects.
+    """
+    mask = np.zeros((10, 10), dtype=bool)
+    mask[0, 5] = True
+    mask[-1, 5] = True
+
+    plain_labeled, plain_count = label(mask)
+    assert plain_count == 2, "test setup assumption: plain label sees two components here"
+
+    labeled, count = label_periodic_azimuth(mask)
+    assert count == 1
+    assert labeled[0, 5] == labeled[-1, 5]
+    assert labeled[0, 5] != 0
+
+
+def test_label_periodic_azimuth_leaves_separate_components_alone():
+    """Two blobs that do not touch the seam must remain two components with
+    contiguous ids -- guards against a fix that merges everything."""
+    mask = np.zeros((10, 10), dtype=bool)
+    mask[3:5, 3:5] = True
+    mask[6:8, 6:8] = True
+
+    labeled, count = label_periodic_azimuth(mask)
+    assert count == 2
+    ids = sorted(np.unique(labeled[labeled > 0]).tolist())
+    assert ids == [1, 2]
+    assert labeled[3, 3] != labeled[6, 6]

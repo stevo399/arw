@@ -8,6 +8,7 @@ standard for WSR-88D data and what Py-ART implements internally.
 
 import numpy as np
 from pyart.core.transforms import antenna_to_cartesian, cartesian_to_geographic_aeqd
+from scipy.ndimage import label
 
 EARTH_RADIUS_M = 6371000.0
 EFFECTIVE_EARTH_RADIUS_M = EARTH_RADIUS_M * 4.0 / 3.0
@@ -112,6 +113,67 @@ def ground_range_m(
     R = EFFECTIVE_EARTH_RADIUS_M
     height = np.sqrt(r**2 + R**2 + 2.0 * r * R * np.sin(theta)) - R
     return R * np.arcsin(r * np.cos(theta) / (R + height))
+
+
+def label_periodic_azimuth(
+    mask: np.ndarray,
+    structure: np.ndarray | None = None,
+) -> tuple[np.ndarray, int]:
+    """Connected-component labelling that treats the azimuth axis as periodic.
+
+    Ray 0 and ray N-1 of a radar sweep are physically adjacent -- both point just
+    either side of due north. scipy.ndimage.label treats them as opposite edges
+    of the array, so a storm straddling due north becomes two components: two
+    objects with two wrong centroids, and a protected core that fails to protect
+    the other half of its own storm.
+
+    Returns (labeled, count) with the same contract as scipy.ndimage.label.
+    """
+    labeled, count = label(mask, structure=structure)
+    if count < 2 or labeled.shape[0] < 2:
+        return labeled, count
+
+    first_row = labeled[0]
+    last_row = labeled[-1]
+    n_gates = labeled.shape[1]
+
+    parent = np.arange(count + 1)
+
+    def find(node):
+        while parent[node] != node:
+            parent[node] = parent[parent[node]]
+            node = parent[node]
+        return node
+
+    def union(a, b):
+        root_a, root_b = find(a), find(b)
+        if root_a != root_b:
+            parent[max(root_a, root_b)] = min(root_a, root_b)
+
+    # A structure of None means 4-connectivity: only the same gate index is
+    # adjacent across the seam. An explicit 3x3 structure means 8-connectivity,
+    # so neighbouring gate indices touch diagonally across the seam too.
+    offsets = (0,) if structure is None else (-1, 0, 1)
+
+    for offset in offsets:
+        if offset < 0:
+            head, tail = first_row[-offset:], last_row[:n_gates + offset]
+        elif offset > 0:
+            head, tail = first_row[:n_gates - offset], last_row[offset:]
+        else:
+            head, tail = first_row, last_row
+        both = (head > 0) & (tail > 0)
+        for a, b in zip(head[both], tail[both]):
+            union(int(a), int(b))
+
+    roots = np.array([find(i) for i in range(count + 1)])
+    roots[0] = 0
+    surviving = np.unique(roots[1:])
+    remap = np.zeros(count + 1, dtype=labeled.dtype)
+    for new_id, root in enumerate(surviving, start=1):
+        remap[roots == root] = new_id
+    remap[0] = 0
+    return remap[labeled], int(len(surviving))
 
 
 def gate_areas_km2(

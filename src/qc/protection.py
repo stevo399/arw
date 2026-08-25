@@ -10,8 +10,8 @@ deleted tornado is not.
 """
 
 import numpy as np
-from scipy.ndimage import label
 
+from src.geometry import label_periodic_azimuth
 from src.qc.collocation import rotation_proximity_mask
 
 # ARW-tuned. Above this, echo is too intense to be biological or ground clutter
@@ -41,7 +41,7 @@ def protected_mask(
     if not seeds.any():
         return np.zeros_like(seeds, dtype=bool)
 
-    labeled, component_count = label(finite, structure=_CONNECTIVITY)
+    labeled, component_count = label_periodic_azimuth(finite, structure=_CONNECTIVITY)
     if component_count == 0:
         return seeds
 

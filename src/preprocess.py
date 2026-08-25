@@ -1,8 +1,8 @@
 from dataclasses import dataclass, replace
 
 import numpy as np
-from scipy.ndimage import label
 
+from src.geometry import label_periodic_azimuth
 from src.parser import SweepData
 
 MIN_DBZ_FOR_OBJECTS = 20.0
@@ -38,7 +38,7 @@ class ScanQuality:
 def _remove_weak_speckle(reflectivity: np.ndarray) -> tuple[np.ndarray, int]:
     processed = np.array(reflectivity, copy=True)
     storm_like = ~np.isnan(processed) & (processed >= MIN_DBZ_FOR_OBJECTS)
-    labeled, count = label(storm_like, structure=np.ones((3, 3), dtype=int))
+    labeled, count = label_periodic_azimuth(storm_like, structure=np.ones((3, 3), dtype=int))
     removed_pixels = 0
     for component_id in range(1, count + 1):
         component_mask = labeled == component_id

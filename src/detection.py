@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy.ndimage import label
 
-from src.geometry import gate_latlon, interpolate_azimuth
+from src.geometry import gate_latlon, interpolate_azimuth, label_periodic_azimuth
 
 MIN_OBJECT_AREA_KM2 = 4.0
 MIN_SIGNIFICANT_WEAK_OBJECT_AREA_KM2 = 8.0
@@ -397,7 +397,10 @@ def detect_objects_with_grid(
     per-object boolean masks needed for overlap-based tracking.
     """
     valid = ~np.isnan(reflectivity) & (reflectivity >= MIN_DBZ_THRESHOLD)
-    labeled, num_features = label(valid)
+    # No structure argument => 4-connectivity, preserved from the original
+    # scipy.ndimage.label call. label_periodic_azimuth additionally merges
+    # components that touch across the row 0 / row N-1 azimuth seam.
+    labeled, num_features = label_periodic_azimuth(valid)
 
     objects = []
     object_masks = {}
