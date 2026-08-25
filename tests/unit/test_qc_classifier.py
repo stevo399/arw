@@ -75,14 +75,26 @@ def test_nan_gates_classify_as_unknown():
     assert (result.classes == CLASS_CODES[GateClass.UNKNOWN]).all()
 
 
-def test_missing_polarimetric_fields_do_not_classify_everything_as_clutter():
-    """Global constraint: absent is not low. A pre-2013 scan must not become
-    wall-to-wall ground clutter."""
+def test_absent_polarimetric_fields_are_omitted_not_substituted():
+    """Absent variables must be dropped from scoring, not read as zero.
+
+    A uniform 45 dBZ field with no dual-pol available is precipitation. If the
+    missing RhoHV and ZDR were substituted with 0.0 instead of omitted, the same
+    field classifies as 100% tornado debris - a low RhoHV and a zero ZDR are
+    exactly the debris signature. Pre-2013 volumes have no dual-pol at all, so
+    this is the guard that stops an entire historical scan being mislabelled.
+    """
     shape = (36, 40)
-    sweep = _sweep(rhohv=None, zdr=None)
-    result = classify_gates(sweep)
-    clutter = CLASS_CODES[GateClass.GROUND_CLUTTER]
-    assert (result.classes == clutter).mean() < 0.2
+    reflectivity = np.full(shape, 45.0)
+
+    omitted = classify_gates(_sweep(reflectivity=reflectivity, rhohv=None, zdr=None))
+    substituted = classify_gates(
+        _sweep(reflectivity=reflectivity, rhohv=np.zeros(shape), zdr=np.zeros(shape))
+    )
+
+    precipitation = CLASS_CODES[GateClass.PRECIPITATION]
+    assert (omitted.classes == precipitation).mean() > 0.9
+    assert (substituted.classes == precipitation).mean() < 0.1
 
 
 def test_classes_array_is_int8():
