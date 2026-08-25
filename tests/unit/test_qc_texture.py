@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from src.qc.texture import local_standard_deviation
 
@@ -33,3 +34,18 @@ def test_all_nan_field_returns_all_nan():
     field = np.full((10, 10), np.nan)
     texture = local_standard_deviation(field)
     assert np.all(np.isnan(texture))
+
+
+def test_nan_neighbour_is_not_biased_by_the_nan():
+    """A neighbour of a lone NaN must not see it as a zero.
+
+    In a constant field, excluding the NaN leaves every value in the window
+    identical, so texture stays ~0. If the NaN were folded in as 0.0 the
+    window would span 0 to 30 and the deviation would be large.
+    """
+    field = np.full((7, 7), 30.0)
+    field[3, 3] = np.nan
+    texture = local_standard_deviation(field)
+    assert texture[2, 3] == pytest.approx(0.0, abs=1e-9)
+    assert texture[3, 2] == pytest.approx(0.0, abs=1e-9)
+    assert texture[4, 4] == pytest.approx(0.0, abs=1e-9)
