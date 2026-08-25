@@ -119,11 +119,70 @@ def test_hail_gate_is_never_rejected():
     assert np.isfinite(filtered.reflectivity[5, 5])
 
 
+def test_debris_gate_is_never_rejected():
+    """Mirrors test_hail_gate_is_never_rejected. Debris is the tornado
+    signature -- the single most important class that must never be deleted
+    by quality control. A grid search over classify_gates confirmed a 4x4
+    block at reflectivity 49.0 dBZ / zdr 0.0 / rhohv 0.7 is classified
+    'debris' with confidence 0.85, and is NOT protected (max reflectivity in
+    the whole fixture is 49 dBZ, deliberately below PROTECTED_MIN_DBZ =
+    50.0, and there is no rotation signature), so protected_mask contributes
+    nothing here and only NON_METEOROLOGICAL_CLASSES decides the outcome.
+    """
+    shape = (36, 40)
+    reflectivity = np.full(shape, 20.0)
+    reflectivity[4:8, 4:8] = 49.0
+    zdr = np.full(shape, 0.5)
+    zdr[4:8, 4:8] = 0.0
+    rhohv = np.full(shape, 0.99)
+    rhohv[4:8, 4:8] = 0.7
+    sweep = _sweep(reflectivity=reflectivity, zdr=zdr, rhohv=rhohv)
+
+    filtered, rejected, _report = apply_quality_control(
+        sweep, [], velocity=np.zeros(shape)
+    )
+
+    from src.qc.classifier import CLASS_CODES
+
+    assert filtered.gate_classification[5, 5] == CLASS_CODES[GateClass.DEBRIS]
+    assert not rejected.mask[5, 5]
+    assert np.isfinite(filtered.reflectivity[5, 5])
+
+
 def test_missing_dual_pol_reports_degraded_mode():
     _filtered, _rejected, report = apply_quality_control(
         _sweep(rhohv=None, zdr=None), []
     )
     assert DEGRADED_NO_DUAL_POL in report.degraded_modes
+
+
+def test_low_confidence_reports_degraded_mode():
+    """DEGRADED_LOW_CONFIDENCE must be reachable, not dead code.
+
+    Found by a real end-to-end search (not a synthetic freeform texture
+    value): a checkerboard reflectivity field with dual-pol AND velocity
+    both present drove classify_gates's mean confidence down to 0.3125,
+    below LOW_CONFIDENCE_THRESHOLD (0.35). Every class's memberships are
+    weak here at once -- reflectivity is negative and noisy (texture from
+    the -15/-7 dBZ checkerboard), rhohv (0.89) sits in the ambiguous band
+    between clutter and precipitation, zdr (-7.0) is outside every class's
+    membership window, and velocity (5.0 m/s) doesn't strongly indicate
+    clutter either. See task-12-report.md for the search that found this.
+    """
+    shape = (36, 40)
+    reflectivity = np.empty(shape)
+    reflectivity[:, 0::2] = -15.0
+    reflectivity[:, 1::2] = -7.0
+    sweep = _sweep(
+        reflectivity=reflectivity,
+        rhohv=np.full(shape, 0.89),
+        zdr=np.full(shape, -7.0),
+    )
+    _filtered, _rejected, report = apply_quality_control(
+        sweep, [], velocity=np.full(shape, 5.0)
+    )
+    assert report.mean_confidence < 0.35
+    assert DEGRADED_LOW_CONFIDENCE in report.degraded_modes
 
 
 def test_gates_beyond_velocity_range_report_degraded_mode():
