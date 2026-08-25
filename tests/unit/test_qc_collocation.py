@@ -75,3 +75,37 @@ def test_margin_widens_the_mask():
     narrow = rotation_proximity_mask(sweep, [signature], margin_km=0.0)
     wide = rotation_proximity_mask(sweep, [signature], margin_km=20.0)
     assert wide.sum() > narrow.sum()
+
+
+def test_collocation_radius_applied_correctly():
+    """Verify that proximity radius (diameter/2 + margin) is applied correctly.
+
+    This test distinguishes between implementations that:
+    - Always return False (would fail here)
+    - Always return True (would fail here)
+    - Correctly apply the distance and radius logic (would pass)
+    """
+    sweep = _sweep()
+    from src.geometry import gate_coordinates
+
+    lat, lon = gate_coordinates(
+        sweep.azimuths, sweep.ranges_m, sweep.elevation_angle,
+        sweep.radar_lat, sweep.radar_lon,
+    )
+
+    # Test with a very small margin that shouldn't mark many gates
+    target_lat, target_lon = float(lat[10, 30]), float(lon[10, 30])
+    signature = _signature(target_lat, target_lon, diameter_km=0.5)
+
+    # With minimal margin, only the gate at/near the centroid should be marked
+    tight = rotation_proximity_mask(sweep, [signature], margin_km=0.01)
+
+    # With generous margin, many gates should be marked
+    loose = rotation_proximity_mask(sweep, [signature], margin_km=50.0)
+
+    # Both should have the target gate marked
+    assert tight[10, 30]
+    assert loose[10, 30]
+
+    # Loose should mark significantly more gates than tight
+    assert loose.sum() > tight.sum() * 2
