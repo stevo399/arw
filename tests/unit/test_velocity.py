@@ -310,26 +310,53 @@ def test_rotation_single_sweep_many_couplets_yield_sweep_count_one():
     assert signatures[0].elevation_angles == [0.48]
 
 
+def _make_single_couplet_grid(az0: int = 40, rng_slice: slice = slice(20, 30)) -> np.ndarray:
+    """A single sweep containing exactly one shear couplet at a fixed location.
+
+    Placed at the same azimuth/range location as the first block emitted by
+    `_make_multi_couplet_single_sweep_grid` (az0=40, range bins 20:30), so a
+    couplet built from this helper merges (within `ROTATION_MERGE_DISTANCE_KM`)
+    with the signature produced by that grid.
+    """
+    grid = np.full((360, 500), np.nan)
+    grid[az0, rng_slice] = -20.0
+    grid[az0 + 1, rng_slice] = 20.0
+    return grid
+
+
 def test_rotation_sweep_count_equals_distinct_elevation_count():
     """sweep_count must equal the number of distinct elevation angles, and
-    can never exceed the number of sweeps supplied."""
-    grids = []
-    for inbound_peak, outbound_peak in ((-20.0, 20.0), (-22.0, 22.0), (-21.0, 21.0)):
-        grid = np.full((360, 500), np.nan)
-        grid[50:60, 150:160] = inbound_peak
-        grid[60:70, 150:160] = outbound_peak
-        grids.append(grid)
+    can never exceed the number of sweeps supplied -- even when one sweep
+    contributes many merged couplets from a single circulation.
+
+    Sweep 1 (elevation 0.48) reuses the 15-couplet broad shear region from
+    `_make_multi_couplet_single_sweep_grid`; all 15 couplets merge into one
+    signature within that single sweep (see
+    test_rotation_single_sweep_many_couplets_yield_sweep_count_one). Sweeps 2
+    and 3 (elevations 0.88, 1.27) each contribute exactly one further couplet
+    at the same location as that grid's first block, so all three sweeps'
+    couplets merge into a single cross-sweep signature.
+
+    Before the fix, `_merge_cross_sweep_rotations` incremented sweep_count
+    once per merged COUPLET rather than once per distinct SWEEP: 15 couplets
+    from sweep 1 plus one couplet each from sweeps 2 and 3 drove sweep_count
+    to 17 (measured directly against the pre-fix implementation), which also
+    violates "sweep_count can never exceed the number of sweeps supplied"
+    (3). The fix must report exactly 3 -- one per distinct elevation.
+    """
     sweeps = [
-        _make_sweep(grids[0], elevation=0.48),
-        _make_sweep(grids[1], elevation=0.88),
-        _make_sweep(grids[2], elevation=1.27),
+        _make_sweep(_make_multi_couplet_single_sweep_grid(), elevation=0.48),
+        _make_sweep(_make_single_couplet_grid(), elevation=0.88),
+        _make_sweep(_make_single_couplet_grid(), elevation=1.27),
     ]
     vel_data = _make_velocity_data(sweeps)
     signatures = detect_rotation_signatures(vel_data)
-    assert len(signatures) >= 1
-    for sig in signatures:
-        assert sig.sweep_count == len(set(sig.elevation_angles))
-        assert sig.sweep_count <= len(sweeps)
+    assert len(signatures) == 1
+    sig = signatures[0]
+    assert sig.sweep_count == len(set(sig.elevation_angles))
+    assert sig.sweep_count <= len(sweeps)
+    assert sig.sweep_count == 3
+    assert set(sig.elevation_angles) == {0.48, 0.88, 1.27}
 
 
 def test_sweep_count_never_exceeds_three_sweeps_on_real_data():
