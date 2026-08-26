@@ -1,4 +1,4 @@
-﻿from src.models import RadarSite, ScanMeta, IntensityLayer, RainObject, ObjectsResponse, SummaryResponse
+from src.models import RadarSite, ScanMeta, IntensityLayer, RainObject, ObjectsResponse, SummaryResponse
 from src.models import TrackPosition, TrackMotion, TrackFocus, StormTrack, TracksResponse, TrackDetailResponse, TrackEvent
 
 

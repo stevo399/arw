@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 
 from src.tracking.events import normalize_merge_event, normalize_split_event
 from src.tracking.types import AssociationScore, MotionConfidence, Track

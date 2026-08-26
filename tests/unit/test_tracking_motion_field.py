@@ -1,4 +1,4 @@
-﻿import numpy as np
+import numpy as np
 from datetime import datetime
 
 from src.tracking.motion_field import (

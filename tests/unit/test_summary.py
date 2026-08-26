@@ -1,4 +1,4 @@
-﻿# tests/unit/test_summary.py
+# tests/unit/test_summary.py
 from datetime import datetime, timedelta
 
 from src.summary import generate_summary, km_to_miles

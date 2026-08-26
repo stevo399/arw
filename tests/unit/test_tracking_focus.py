@@ -1,4 +1,4 @@
-﻿from datetime import datetime, timedelta
+from datetime import datetime, timedelta
 
 from src.detection import DetectedObject
 from src.motion import MotionVector
