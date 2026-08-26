@@ -1,4 +1,4 @@
-import numpy as np
+﻿import numpy as np
 from datetime import datetime
 
 from src.tracking.motion_field import (
@@ -93,7 +93,7 @@ def _make_segmented_object(
             distance_km=40.0,
             bearing_deg=270.0,
             peak_dbz=peak_dbz,
-            peak_label="heavy rain",
+            peak_label="heavy precipitation",
             area_km2=area_km2,
             layers=[],
         ),
@@ -278,3 +278,4 @@ def test_blend_geographic_motion_fields_rejects_inconsistent_local_estimate():
     blended = blend_geographic_motion_fields(global_estimate, local_estimate)
     assert blended.source == "phase_correlation"
     assert blended.delta_lat == 0.002
+

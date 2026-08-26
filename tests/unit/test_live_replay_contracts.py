@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -39,7 +39,7 @@ def _make_buffered_scan() -> BufferedScan:
         distance_km=40.0,
         bearing_deg=270.0,
         peak_dbz=45.0,
-        peak_label="heavy rain",
+        peak_label="heavy precipitation",
         area_km2=100.0,
         layers=[],
     )
@@ -255,3 +255,4 @@ def test_local_only_scans_backfills_when_selected_window_is_partially_cached(mon
         "KEYX20260410_233755_V06",
         "KEYX20260410_234237_V06",
     ]
+

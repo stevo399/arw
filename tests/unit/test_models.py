@@ -1,4 +1,4 @@
-from src.models import RadarSite, ScanMeta, IntensityLayer, RainObject, ObjectsResponse, SummaryResponse
+﻿from src.models import RadarSite, ScanMeta, IntensityLayer, RainObject, ObjectsResponse, SummaryResponse
 from src.models import TrackPosition, TrackMotion, TrackFocus, StormTrack, TracksResponse, TrackDetailResponse, TrackEvent
 
 
@@ -28,12 +28,12 @@ def test_scan_meta_model():
 
 def test_intensity_layer_model():
     layer = IntensityLayer(
-        label="heavy rain",
+        label="heavy precipitation",
         min_dbz=40.0,
         max_dbz=50.0,
         area_km2=12.5,
     )
-    assert layer.label == "heavy rain"
+    assert layer.label == "heavy precipitation"
 
 
 def test_rain_object_model():
@@ -44,16 +44,16 @@ def test_rain_object_model():
         distance_km=25.0,
         bearing_deg=270.0,
         peak_dbz=55.0,
-        peak_label="intense rain",
+        peak_label="intense precipitation",
         area_km2=80.0,
         layers=[
-            IntensityLayer(label="light rain", min_dbz=20.0, max_dbz=30.0, area_km2=80.0),
-            IntensityLayer(label="moderate rain", min_dbz=30.0, max_dbz=40.0, area_km2=40.0),
-            IntensityLayer(label="heavy rain", min_dbz=40.0, max_dbz=50.0, area_km2=15.0),
-            IntensityLayer(label="intense rain", min_dbz=50.0, max_dbz=60.0, area_km2=5.0),
+            IntensityLayer(label="light precipitation", min_dbz=20.0, max_dbz=30.0, area_km2=80.0),
+            IntensityLayer(label="moderate precipitation", min_dbz=30.0, max_dbz=40.0, area_km2=40.0),
+            IntensityLayer(label="heavy precipitation", min_dbz=40.0, max_dbz=50.0, area_km2=15.0),
+            IntensityLayer(label="intense precipitation", min_dbz=50.0, max_dbz=60.0, area_km2=5.0),
         ],
     )
-    assert obj.peak_label == "intense rain"
+    assert obj.peak_label == "intense precipitation"
     assert len(obj.layers) == 4
 
 
@@ -144,7 +144,7 @@ def test_storm_track_model():
         motion=TrackMotion(speed_kmh=56.3, speed_mph=35, heading_deg=45.0, heading_label="NE"),
         focus=TrackFocus(label="high", score=0.9),
         peak_dbz=55.0,
-        peak_label="intense rain",
+        peak_label="intense precipitation",
         merged_into=None,
         split_from=None,
         first_seen="2026-04-08T18:20:00Z",
@@ -189,3 +189,4 @@ def test_track_detail_response_model():
         last_seen="2026-04-08T18:30:00Z",
     )
     assert resp.track_id == 1
+

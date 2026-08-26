@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+﻿from datetime import datetime, timedelta
 
 import numpy as np
 
@@ -17,7 +17,7 @@ def _make_object(obj_id: int, lat: float, lon: float, peak_dbz: float = 45.0, ar
         distance_km=40.0,
         bearing_deg=270.0,
         peak_dbz=peak_dbz,
-        peak_label="heavy rain",
+        peak_label="heavy precipitation",
         area_km2=area_km2,
         layers=[],
     )
@@ -173,3 +173,4 @@ def test_associate_tracks_uses_advected_geometry_to_keep_match():
     assert result.primary_matches == {1: 1}
     score = result.candidate_scores[0]
     assert score.advected_overlap_score > score.overlap_score
+

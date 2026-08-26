@@ -17,12 +17,12 @@ def _make_reflectivity_data_with_storm() -> SweepData:
     """Create a SweepData with a synthetic storm."""
     reflectivity = np.full((360, 500), np.nan)
     # Storm 1: large, intense — centered at azimuth 90, range bin 200
-    reflectivity[80:110, 180:220] = 25.0   # light rain shell
+    reflectivity[80:110, 180:220] = 25.0   # light precipitation shell
     reflectivity[85:105, 190:210] = 35.0   # moderate core
     reflectivity[90:100, 195:205] = 50.0   # intense core
     # Storm 2: smaller, moderate — centered at azimuth 270, range bin 350
-    reflectivity[265:280, 340:360] = 30.0  # moderate rain
-    reflectivity[268:278, 345:355] = 42.0  # heavy rain core
+    reflectivity[265:280, 340:360] = 30.0  # moderate precipitation
+    reflectivity[268:278, 345:355] = 42.0  # heavy precipitation core
 
     return SweepData(
         reflectivity=reflectivity,
@@ -74,9 +74,9 @@ def test_full_pipeline_sites_to_summary():
     assert data["objects"][0]["peak_dbz"] >= data["objects"][1]["peak_dbz"]
     strongest = data["objects"][0]
     layer_labels = [l["label"] for l in strongest["layers"]]
-    assert "light rain" in layer_labels
-    assert "moderate rain" in layer_labels
-    assert "intense rain" in layer_labels
+    assert "light precipitation" in layer_labels
+    assert "moderate precipitation" in layer_labels
+    assert "intense precipitation" in layer_labels
 
     # Step 3: Get summary for KTLX
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
@@ -87,7 +87,7 @@ def test_full_pipeline_sites_to_summary():
     assert resp.status_code == 200
     summary = resp.json()
     assert "3 rain objects" in summary["text"]
-    assert "intense rain" in summary["text"]
+    assert "intense precipitation" in summary["text"]
     assert "Oklahoma City" in summary["text"]
 
 

@@ -26,10 +26,10 @@ def _storm_fill_color(peak_dbz: float) -> str:
 
 def _intensity_fill_color(label: str) -> str:
     return {
-        "light rain": "#2ca25f",
-        "moderate rain": "#ffff66",
-        "heavy rain": "#ffcc33",
-        "intense rain": "#ff6600",
+        "light precipitation": "#2ca25f",
+        "moderate precipitation": "#ffff66",
+        "heavy precipitation": "#ffcc33",
+        "intense precipitation": "#ff6600",
         "severe core": "#cc00cc",
     }.get(label, "#56b4e9")
 
@@ -53,11 +53,18 @@ def _storm_rule_type(peak_dbz: float) -> str:
 
 
 def _intensity_rule_type(label: str) -> str:
+    # The ruleType values (radar_*_rain) are machine identifiers consumed by the
+    # Audiom accessible-mapping tool for styling. They remain unchanged despite
+    # the human-readable labels becoming phase-neutral (rain -> precipitation).
+    # ARW cannot distinguish rain from snow without melting-layer height (deferred
+    # to Spec 4), so labels stop asserting phase. The ruleType values stay stable
+    # to preserve existing Audiom map styling (renaming them would silently break
+    # the user's styling configuration).
     return {
-        "light rain": "radar_light_rain",
-        "moderate rain": "radar_moderate_rain",
-        "heavy rain": "radar_heavy_rain",
-        "intense rain": "radar_intense_rain",
+        "light precipitation": "radar_light_rain",
+        "moderate precipitation": "radar_moderate_rain",
+        "heavy precipitation": "radar_heavy_rain",
+        "intense precipitation": "radar_intense_rain",
         "severe core": "radar_severe_core",
     }.get(label, "radar_echo")
 
@@ -378,10 +385,10 @@ def storm_layer_drawing_info() -> dict[str, Any]:
             "type": "classBreaks",
             "field": "heat_value",
             "classBreakInfos": [
-                {"classMaxValue": 30, "label": "Light rain", "symbol": {"color": [86, 180, 233, 120]}},
-                {"classMaxValue": 40, "label": "Moderate rain", "symbol": {"color": [0, 158, 115, 140]}},
-                {"classMaxValue": 50, "label": "Heavy rain", "symbol": {"color": [240, 228, 66, 160]}},
-                {"classMaxValue": 60, "label": "Intense rain", "symbol": {"color": [230, 159, 0, 180]}},
+                {"classMaxValue": 30, "label": "Light precipitation", "symbol": {"color": [86, 180, 233, 120]}},
+                {"classMaxValue": 40, "label": "Moderate precipitation", "symbol": {"color": [0, 158, 115, 140]}},
+                {"classMaxValue": 50, "label": "Heavy precipitation", "symbol": {"color": [240, 228, 66, 160]}},
+                {"classMaxValue": 60, "label": "Intense precipitation", "symbol": {"color": [230, 159, 0, 180]}},
                 {"classMaxValue": 90, "label": "Severe core", "symbol": {"color": [213, 94, 0, 200]}},
             ],
         }

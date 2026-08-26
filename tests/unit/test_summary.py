@@ -1,4 +1,4 @@
-# tests/unit/test_summary.py
+﻿# tests/unit/test_summary.py
 from datetime import datetime, timedelta
 
 from src.summary import generate_summary, km_to_miles
@@ -9,7 +9,7 @@ from src.velocity import RotationSignature
 
 
 def _make_object(obj_id=1, distance_km=40.2, bearing_deg=270.0, peak_dbz=45.0,
-                 peak_label="heavy rain", area_km2=120.5) -> DetectedObject:
+                 peak_label="heavy precipitation", area_km2=120.5) -> DetectedObject:
     return DetectedObject(
         object_id=obj_id,
         centroid_lat=35.5,
@@ -58,7 +58,7 @@ def test_generate_summary_single_object_no_tracks():
     )
     assert "Oklahoma City" in text
     assert "1 rain object" in text
-    assert "heavy rain" in text
+    assert "heavy precipitation" in text
     assert "25 miles" in text
     assert "W" in text
     assert "47 square miles" in text
@@ -199,8 +199,8 @@ def test_generate_summary_downgrades_primary_focus_motion_under_repeated_heading
 
 
 def test_generate_summary_multiple_objects():
-    obj1 = _make_object(obj_id=1, peak_dbz=55.0, peak_label="intense rain", area_km2=200.0)
-    obj2 = _make_object(obj_id=2, peak_dbz=30.0, peak_label="moderate rain", area_km2=50.0)
+    obj1 = _make_object(obj_id=1, peak_dbz=55.0, peak_label="intense precipitation", area_km2=200.0)
+    obj2 = _make_object(obj_id=2, peak_dbz=30.0, peak_label="moderate precipitation", area_km2=50.0)
     text = generate_summary(
         site_id="KTLX",
         site_name="Oklahoma City",
@@ -208,12 +208,12 @@ def test_generate_summary_multiple_objects():
         objects=[obj1, obj2],
     )
     assert "2 rain objects" in text
-    assert "intense rain" in text
+    assert "intense precipitation" in text
 
 
 def test_generate_summary_uses_total_coverage_area():
-    obj1 = _make_object(obj_id=1, peak_dbz=55.0, peak_label="intense rain", area_km2=200.0)
-    obj2 = _make_object(obj_id=2, peak_dbz=30.0, peak_label="moderate rain", area_km2=50.0)
+    obj1 = _make_object(obj_id=1, peak_dbz=55.0, peak_label="intense precipitation", area_km2=200.0)
+    obj2 = _make_object(obj_id=2, peak_dbz=30.0, peak_label="moderate precipitation", area_km2=50.0)
     text = generate_summary(
         site_id="KTLX",
         site_name="Oklahoma City",
@@ -229,7 +229,7 @@ def test_generate_summary_prefers_stable_larger_tracked_object_over_tiny_peak_sp
         distance_km=30.0,
         bearing_deg=45.0,
         peak_dbz=58.0,
-        peak_label="intense rain",
+        peak_label="intense precipitation",
         area_km2=800.0,
     )
     spiky = _make_object(
@@ -251,7 +251,7 @@ def test_generate_summary_prefers_stable_larger_tracked_object_over_tiny_peak_sp
         objects=[spiky, stable],
         tracks=[stable_track],
     )
-    assert "intense rain" in text
+    assert "intense precipitation" in text
     assert "19 miles NE of the radar" in text
 
 
@@ -261,7 +261,7 @@ def test_generate_summary_prefers_primary_focus_track():
         distance_km=40.0,
         bearing_deg=90.0,
         peak_dbz=55.0,
-        peak_label="intense rain",
+        peak_label="intense precipitation",
         area_km2=250.0,
     )
     challenger = _make_object(
@@ -288,7 +288,7 @@ def test_generate_summary_prefers_primary_focus_track():
         objects=[challenger, focused],
         tracks=[focus_track, challenger_track],
     )
-    assert "intense rain" in text
+    assert "intense precipitation" in text
     assert "25 miles E of the radar" in text
 
 
@@ -298,7 +298,7 @@ def test_generate_summary_uses_primary_focus_object_directly_when_available():
         distance_km=60.0,
         bearing_deg=0.0,
         peak_dbz=50.0,
-        peak_label="intense rain",
+        peak_label="intense precipitation",
         area_km2=180.0,
     )
     challenger = _make_object(
@@ -321,7 +321,7 @@ def test_generate_summary_uses_primary_focus_object_directly_when_available():
         objects=[challenger, focused],
         tracks=[focus_track, challenger_track],
     )
-    assert "intense rain" in text
+    assert "intense precipitation" in text
     assert "37 miles N of the radar" in text
 
 
@@ -329,7 +329,7 @@ def _make_object_with_rotation(strength="moderate"):
     return DetectedObject(
         object_id=1, centroid_lat=35.5, centroid_lon=-97.0,
         distance_km=50.0, bearing_deg=90.0,
-        peak_dbz=55.0, peak_label="intense rain", area_km2=100.0,
+        peak_dbz=55.0, peak_label="intense precipitation", area_km2=100.0,
         rotation=RotationSignature(
             centroid_lat=35.5, centroid_lon=-97.0,
             distance_km=50.0, bearing_deg=90.0,
@@ -362,10 +362,11 @@ def test_summary_no_rotation_when_none():
     obj = DetectedObject(
         object_id=1, centroid_lat=35.5, centroid_lon=-97.0,
         distance_km=50.0, bearing_deg=90.0,
-        peak_dbz=55.0, peak_label="intense rain", area_km2=100.0,
+        peak_dbz=55.0, peak_label="intense precipitation", area_km2=100.0,
     )
     text = generate_summary(
         site_id="KTLX", site_name="Oklahoma City",
         timestamp="2026-04-10T21:00:00Z", objects=[obj],
     )
     assert "rotation" not in text.lower()
+

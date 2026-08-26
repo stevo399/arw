@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 import numpy as np
 
@@ -40,10 +40,10 @@ def test_build_storm_geojson_returns_polygon_features():
                 distance_km=30.0,
                 bearing_deg=90.0,
                 peak_dbz=50.0,
-                peak_label="intense rain",
+                peak_label="intense precipitation",
                 area_km2=24.0,
                 layers=[
-                    IntensityLayerData("intense rain", 50, 60, 24.0),
+                    IntensityLayerData("intense precipitation", 50, 60, 24.0),
                 ],
             )
         ],
@@ -58,7 +58,7 @@ def test_build_storm_geojson_returns_polygon_features():
     feature = geojson["features"][0]
     assert feature["geometry"]["type"] == "Polygon"
     assert feature["properties"]["heat_value"] == 50.0
-    assert feature["properties"]["name"] == "Intense rain storm 19 miles E"
+    assert feature["properties"]["name"] == "Intense precipitation storm 19 miles E"
     assert feature["properties"]["ruleName"] == "Storm polygon"
     assert feature["properties"]["ruleType"] == "storm_intense"
     assert feature["properties"]["passable"] is True
@@ -109,7 +109,7 @@ def test_build_storm_intensity_geojson_returns_radar_band_features():
                 peak_label="severe core",
                 area_km2=24.0,
                 layers=[
-                    IntensityLayerData("heavy rain", 40, 50, 18.0),
+                    IntensityLayerData("heavy precipitation", 40, 50, 18.0),
                     IntensityLayerData("severe core", 60, float("inf"), 6.0),
                 ],
             )
@@ -157,9 +157,9 @@ def test_build_storm_audiom_geojson_combines_footprints_and_intensity_bands():
                 distance_km=30.0,
                 bearing_deg=90.0,
                 peak_dbz=45.0,
-                peak_label="heavy rain",
+                peak_label="heavy precipitation",
                 area_km2=24.0,
-                layers=[IntensityLayerData("heavy rain", 40, 50, 24.0)],
+                layers=[IntensityLayerData("heavy precipitation", 40, 50, 24.0)],
             )
         ],
         labeled_grid=mask.astype(int),
@@ -199,7 +199,7 @@ def test_build_storm_centroid_geojson_returns_point_features():
                 distance_km=30.0,
                 bearing_deg=90.0,
                 peak_dbz=50.0,
-                peak_label="intense rain",
+                peak_label="intense precipitation",
                 area_km2=24.0,
             )
         ],
@@ -216,3 +216,4 @@ def test_build_storm_centroid_geojson_returns_point_features():
     }
     assert feature["properties"]["object_id"] == 1
     assert geojson["metadata"]["sourceName"] == "arw-storm-centroids"
+

@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 import numpy as np
 
@@ -17,7 +17,7 @@ def _make_object(obj_id: int, lat: float, lon: float, peak_dbz: float = 45.0) ->
         distance_km=40.0,
         bearing_deg=270.0,
         peak_dbz=peak_dbz,
-        peak_label="heavy rain",
+        peak_label="heavy precipitation",
         area_km2=100.0,
         layers=[],
     )
@@ -128,4 +128,5 @@ def test_tracker_suppresses_history_motion_for_fragile_merge_survivor():
     motion = track.get_motion()
     assert motion.source == "suppressed"
     assert motion.heading_label == "uncertain"
+
 

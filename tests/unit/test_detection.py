@@ -27,16 +27,16 @@ def radar():
 
 def test_intensity_thresholds_defined():
     assert len(INTENSITY_THRESHOLDS) == 5
-    assert INTENSITY_THRESHOLDS[0] == (20, 30, "light rain")
+    assert INTENSITY_THRESHOLDS[0] == (20, 30, "light precipitation")
     assert INTENSITY_THRESHOLDS[-1] == (60, float("inf"), "severe core")
 
 
 def test_classify_intensity():
     assert classify_intensity(15.0) == "drizzle"
-    assert classify_intensity(25.0) == "light rain"
-    assert classify_intensity(35.0) == "moderate rain"
-    assert classify_intensity(45.0) == "heavy rain"
-    assert classify_intensity(55.0) == "intense rain"
+    assert classify_intensity(25.0) == "light precipitation"
+    assert classify_intensity(35.0) == "moderate precipitation"
+    assert classify_intensity(45.0) == "heavy precipitation"
+    assert classify_intensity(55.0) == "intense precipitation"
     assert classify_intensity(65.0) == "severe core"
 
 
@@ -90,7 +90,7 @@ def test_detect_objects_single_blob():
     )
     assert len(objects) == 1
     assert objects[0].peak_dbz == 45.0
-    assert objects[0].peak_label == "heavy rain"
+    assert objects[0].peak_label == "heavy precipitation"
 
 
 def test_detect_objects_two_separate_blobs():
@@ -113,11 +113,11 @@ def test_detect_objects_two_separate_blobs():
 def test_detect_objects_nested_layers():
     """An object with varying intensities should have nested layers."""
     reflectivity = np.full((360, 500), np.nan)
-    # Outer ring: light rain (25 dBZ)
+    # Outer ring: light precipitation (25 dBZ)
     reflectivity[80:100, 190:210] = 25.0
-    # Inner ring: moderate rain (35 dBZ)
+    # Inner ring: moderate precipitation (35 dBZ)
     reflectivity[85:95, 195:205] = 35.0
-    # Core: heavy rain (48 dBZ)
+    # Core: heavy precipitation (48 dBZ)
     reflectivity[88:92, 198:202] = 48.0
     azimuths = np.linspace(0, 359, 360)
     ranges_m = np.linspace(2000, 250000, 500)
@@ -132,9 +132,9 @@ def test_detect_objects_nested_layers():
     obj = objects[0]
     assert obj.peak_dbz == 48.0
     layer_labels = [layer.label for layer in obj.layers]
-    assert "light rain" in layer_labels
-    assert "moderate rain" in layer_labels
-    assert "heavy rain" in layer_labels
+    assert "light precipitation" in layer_labels
+    assert "moderate precipitation" in layer_labels
+    assert "heavy precipitation" in layer_labels
 
 
 def test_detect_objects_filters_small_objects():
@@ -183,7 +183,7 @@ def test_detect_objects_keeps_small_intense_objects():
         radar_lon=-97.0,
     )
     assert len(objects) == 1
-    assert objects[0].peak_label == "intense rain"
+    assert objects[0].peak_label == "intense precipitation"
 
 
 def test_detect_objects_with_grid_returns_result():
@@ -246,8 +246,8 @@ def test_detect_objects_splits_broad_blob_with_multiple_strong_cores():
     assert len(result.objects) == 2
     assert len(result.object_masks) == 2
     sorted_objects = sorted(result.objects, key=lambda obj: obj.centroid_lon)
-    assert sorted_objects[0].peak_label == "intense rain"
-    assert sorted_objects[1].peak_label == "intense rain"
+    assert sorted_objects[0].peak_label == "intense precipitation"
+    assert sorted_objects[1].peak_label == "intense precipitation"
 
 
 def test_detect_objects_does_not_split_single_core_blob():
@@ -408,3 +408,19 @@ def test_compute_object_properties_centroid_matches_pyart_georeferencing(radar):
     # displacement this whole project is correcting.
     assert obj.centroid_lat == pytest.approx(expected_lat, abs=1e-3)
     assert obj.centroid_lon == pytest.approx(expected_lon, abs=1e-3)
+
+
+def test_intensity_labels_do_not_assert_precipitation_phase():
+    """ARW cannot distinguish rain from snow without melting-layer height, so
+    it must not claim either."""
+    for dbz in (25.0, 35.0, 45.0, 55.0, 65.0):
+        assert "rain" not in classify_intensity(dbz)
+
+
+def test_intensity_thresholds_are_unchanged():
+    assert classify_intensity(25.0) == "light precipitation"
+    assert classify_intensity(35.0) == "moderate precipitation"
+    assert classify_intensity(45.0) == "heavy precipitation"
+    assert classify_intensity(55.0) == "intense precipitation"
+    assert classify_intensity(65.0) == "severe core"
+    assert classify_intensity(10.0) == "drizzle"

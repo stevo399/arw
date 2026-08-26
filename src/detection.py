@@ -13,10 +13,10 @@ SEGMENTATION_HIERARCHY_THRESHOLDS = (20.0, 30.0, 40.0, 50.0, 60.0)
 MIN_SEED_PIXELS = 6
 
 INTENSITY_THRESHOLDS = [
-    (20, 30, "light rain"),
-    (30, 40, "moderate rain"),
-    (40, 50, "heavy rain"),
-    (50, 60, "intense rain"),
+    (20, 30, "light precipitation"),
+    (30, 40, "moderate precipitation"),
+    (40, 50, "heavy precipitation"),
+    (50, 60, "intense precipitation"),
     (60, float("inf"), "severe core"),
 ]
 

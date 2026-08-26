@@ -28,7 +28,7 @@ def _make_buffered_scan(site_id: str, timestamp: datetime, num_objects: int = 1)
             distance_km=40.0 + i * 10,
             bearing_deg=270.0,
             peak_dbz=45.0,
-            peak_label="heavy rain",
+            peak_label="heavy precipitation",
             area_km2=100.0,
             layers=[],
         )

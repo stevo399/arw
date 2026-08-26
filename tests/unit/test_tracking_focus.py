@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+﻿from datetime import datetime, timedelta
 
 from src.detection import DetectedObject
 from src.motion import MotionVector
@@ -31,7 +31,7 @@ def test_update_primary_focus_prefers_nearer_relevant_track():
     tracker = StormTracker()
     distant = tracker._create_track(
         datetime(2026, 4, 8, 18, 0),
-        _make_object(1, 250.0, 90.0, 45.0, "heavy rain", 140.0),
+        _make_object(1, 250.0, 90.0, 45.0, "heavy precipitation", 140.0),
     )
     nearer = tracker._create_track(
         datetime(2026, 4, 8, 18, 0),
@@ -54,11 +54,11 @@ def test_update_primary_focus_keeps_existing_focus_without_clear_winner():
     tracker = StormTracker()
     current_focus = tracker._create_track(
         datetime(2026, 4, 8, 18, 0),
-        _make_object(1, 60.0, 0.0, 52.0, "intense rain", 220.0),
+        _make_object(1, 60.0, 0.0, 52.0, "intense precipitation", 220.0),
     )
     challenger = tracker._create_track(
         datetime(2026, 4, 8, 18, 0),
-        _make_object(2, 55.0, 10.0, 53.0, "intense rain", 215.0),
+        _make_object(2, 55.0, 10.0, 53.0, "intense precipitation", 215.0),
     )
     current_focus.identity_confidence = 0.9
     challenger.identity_confidence = 0.9
@@ -77,7 +77,7 @@ def test_build_focus_continuity_penalizes_repeated_recent_heading_reversals():
     tracker = StormTracker()
     track = tracker._create_track(
         datetime(2026, 4, 8, 18, 0),
-        _make_object(1, 40.0, 90.0, 55.0, "intense rain", 180.0),
+        _make_object(1, 40.0, 90.0, 55.0, "intense precipitation", 180.0),
     )
     positions = [
         (35.00, -97.00),
@@ -96,7 +96,7 @@ def test_build_focus_continuity_penalizes_repeated_recent_heading_reversals():
             distance_km=40.0,
             bearing_deg=90.0,
             peak_dbz=55.0,
-            peak_label="intense rain",
+            peak_label="intense precipitation",
             area_km2=180.0,
             layers=[],
         )
@@ -122,7 +122,7 @@ def test_build_focus_continuity_ignores_heading_flip_penalty_for_stationaryish_m
     tracker = StormTracker()
     track = tracker._create_track(
         datetime(2026, 4, 8, 18, 0),
-        _make_object(1, 40.0, 90.0, 55.0, "intense rain", 180.0),
+        _make_object(1, 40.0, 90.0, 55.0, "intense precipitation", 180.0),
     )
     positions = [
         (35.00, -97.00),
@@ -141,7 +141,7 @@ def test_build_focus_continuity_ignores_heading_flip_penalty_for_stationaryish_m
             distance_km=40.0,
             bearing_deg=90.0,
             peak_dbz=55.0,
-            peak_label="intense rain",
+            peak_label="intense precipitation",
             area_km2=180.0,
             layers=[],
         )
@@ -167,7 +167,7 @@ def test_build_focus_continuity_penalizes_low_motion_confidence_under_high_struc
     tracker = StormTracker()
     track = tracker._create_track(
         datetime(2026, 4, 8, 18, 0),
-        _make_object(1, 40.0, 90.0, 55.0, "intense rain", 180.0),
+        _make_object(1, 40.0, 90.0, 55.0, "intense precipitation", 180.0),
     )
     track.identity_confidence = 0.85
     track.identity_diagnostics = IdentityConfidence(label="high", score=0.85)
@@ -190,7 +190,7 @@ def test_build_focus_continuity_records_crowded_challenger_pressure_diagnostics(
     tracker = StormTracker()
     track = tracker._create_track(
         datetime(2026, 4, 8, 18, 0),
-        _make_object(1, 40.0, 90.0, 55.0, "intense rain", 180.0),
+        _make_object(1, 40.0, 90.0, 55.0, "intense precipitation", 180.0),
     )
     track.identity_confidence = 0.85
     track.identity_diagnostics = IdentityConfidence(label="high", score=0.85)
@@ -221,7 +221,7 @@ def test_build_focus_continuity_penalizes_reported_motion_reversal_under_structu
     tracker = StormTracker()
     track = tracker._create_track(
         datetime(2026, 4, 8, 18, 0),
-        _make_object(1, 40.0, 90.0, 55.0, "intense rain", 180.0),
+        _make_object(1, 40.0, 90.0, 55.0, "intense precipitation", 180.0),
     )
     track.identity_confidence = 0.85
     track.identity_diagnostics = IdentityConfidence(label="high", score=0.85)
@@ -274,7 +274,7 @@ def test_build_focus_continuity_relaxes_raw_heading_flip_penalty_for_clear_focus
     tracker = StormTracker()
     track = tracker._create_track(
         datetime(2026, 4, 8, 18, 0),
-        _make_object(1, 40.0, 90.0, 55.0, "intense rain", 180.0),
+        _make_object(1, 40.0, 90.0, 55.0, "intense precipitation", 180.0),
     )
     positions = [
         (35.00, -97.00),
@@ -293,7 +293,7 @@ def test_build_focus_continuity_relaxes_raw_heading_flip_penalty_for_clear_focus
             distance_km=40.0,
             bearing_deg=90.0,
             peak_dbz=55.0,
-            peak_label="intense rain",
+            peak_label="intense precipitation",
             area_km2=180.0,
             layers=[],
         )
@@ -353,7 +353,7 @@ def test_build_focus_continuity_keeps_reported_reversal_penalty_even_with_clear_
     tracker = StormTracker()
     track = tracker._create_track(
         datetime(2026, 4, 8, 18, 0),
-        _make_object(1, 40.0, 90.0, 55.0, "intense rain", 180.0),
+        _make_object(1, 40.0, 90.0, 55.0, "intense precipitation", 180.0),
     )
     track.identity_confidence = 0.85
     track.identity_diagnostics = IdentityConfidence(label="high", score=0.85)
@@ -409,7 +409,7 @@ def test_build_focus_continuity_treats_one_direction_turn_sequence_as_coherent()
     tracker = StormTracker()
     track = tracker._create_track(
         datetime(2026, 4, 8, 18, 0),
-        _make_object(1, 40.0, 90.0, 55.0, "intense rain", 180.0),
+        _make_object(1, 40.0, 90.0, 55.0, "intense precipitation", 180.0),
     )
     track.identity_confidence = 0.85
     track.identity_diagnostics = IdentityConfidence(label="high", score=0.85)
@@ -465,3 +465,4 @@ def test_build_focus_continuity_treats_one_direction_turn_sequence_as_coherent()
     assert continuity.score == 0.85
     assert continuity.label == "high"
     assert continuity.reason == "stable focus winner despite structural pressure"
+

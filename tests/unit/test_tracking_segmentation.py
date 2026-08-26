@@ -1,4 +1,4 @@
-import numpy as np
+﻿import numpy as np
 
 from src.tracking.segmentation import (
     SegmentationResult,
@@ -26,7 +26,7 @@ def _make_detection_result() -> DetectionResult:
             distance_km=25.0,
             bearing_deg=90.0,
             peak_dbz=35.0,
-            peak_label="moderate rain",
+            peak_label="moderate precipitation",
             area_km2=10.0,
             layers=[],
         ),
@@ -37,7 +37,7 @@ def _make_detection_result() -> DetectionResult:
             distance_km=50.0,
             bearing_deg=180.0,
             peak_dbz=55.0,
-            peak_label="intense rain",
+            peak_label="intense precipitation",
             area_km2=20.0,
             layers=[],
         ),
@@ -112,3 +112,4 @@ def test_segment_storm_objects_exposes_multilevel_hierarchy_metadata():
     obj = result.objects[0]
     assert obj.threshold_level == 50.0
     assert obj.threshold_path == (20.0, 30.0, 40.0, 50.0)
+

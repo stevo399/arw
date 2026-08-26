@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 from src.tracking.events import normalize_merge_event, normalize_split_event
 from src.tracking.types import AssociationScore, MotionConfidence, Track
@@ -13,7 +13,7 @@ def _make_object() -> DetectedObject:
         distance_km=40.0,
         bearing_deg=270.0,
         peak_dbz=45.0,
-        peak_label="heavy rain",
+        peak_label="heavy precipitation",
         area_km2=100.0,
         layers=[],
     )
@@ -74,3 +74,4 @@ def test_normalize_split_event_dedupes_and_removes_parent():
 def test_normalize_merge_event_returns_none_without_children():
     now = datetime(2026, 4, 10, 18, 0)
     assert normalize_merge_event(now, surviving_track_id=5, merged_track_ids=[5, 5]) is None
+

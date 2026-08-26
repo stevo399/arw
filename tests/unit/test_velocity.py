@@ -1,4 +1,4 @@
-import numpy as np
+﻿import numpy as np
 from src.parser import VelocitySweep, VelocityData
 from src.velocity import VelocityRegion, detect_velocity_regions, RotationSignature, detect_rotation_signatures
 
@@ -52,7 +52,7 @@ def test_detect_velocity_regions_ignores_weak_velocity():
 
 def test_detect_velocity_regions_filters_small_regions():
     grid = np.full((360, 500), np.nan)
-    grid[50, 100] = -20.0  # single pixel — too small
+    grid[50, 100] = -20.0  # single pixel â€” too small
     vel_data = _make_velocity_data([_make_sweep(grid)])
     regions = detect_velocity_regions(vel_data)
     assert len(regions) == 0
@@ -90,7 +90,7 @@ def test_detect_velocity_regions_returns_empty_for_all_nan():
 
 def test_detect_rotation_finds_shear_couplet():
     grid = np.full((360, 500), np.nan)
-    # inbound block adjacent to outbound block — classic couplet
+    # inbound block adjacent to outbound block â€” classic couplet
     grid[50:60, 150:160] = -20.0  # inbound
     grid[60:70, 150:160] = 20.0   # outbound
     vel_data = _make_velocity_data([_make_sweep(grid)])
@@ -102,7 +102,7 @@ def test_detect_rotation_finds_shear_couplet():
 def test_detect_rotation_classifies_strength_weak():
     grid = np.full((360, 500), np.nan)
     grid[50:60, 150:160] = -10.0
-    grid[60:70, 150:160] = 10.0   # 20 m/s shear — weak
+    grid[60:70, 150:160] = 10.0   # 20 m/s shear â€” weak
     vel_data = _make_velocity_data([_make_sweep(grid)])
     signatures = detect_rotation_signatures(vel_data)
     assert len(signatures) >= 1
@@ -112,7 +112,7 @@ def test_detect_rotation_classifies_strength_weak():
 def test_detect_rotation_classifies_strength_moderate():
     grid = np.full((360, 500), np.nan)
     grid[50:60, 150:160] = -15.0
-    grid[60:70, 150:160] = 15.0   # 30 m/s shear — moderate
+    grid[60:70, 150:160] = 15.0   # 30 m/s shear â€” moderate
     vel_data = _make_velocity_data([_make_sweep(grid)])
     signatures = detect_rotation_signatures(vel_data)
     assert len(signatures) >= 1
@@ -122,7 +122,7 @@ def test_detect_rotation_classifies_strength_moderate():
 def test_detect_rotation_classifies_strength_strong():
     grid = np.full((360, 500), np.nan)
     grid[50:60, 150:160] = -20.0
-    grid[60:70, 150:160] = 20.0   # 40 m/s shear — strong
+    grid[60:70, 150:160] = 20.0   # 40 m/s shear â€” strong
     vel_data = _make_velocity_data([_make_sweep(grid)])
     signatures = detect_rotation_signatures(vel_data)
     assert len(signatures) >= 1
@@ -132,7 +132,7 @@ def test_detect_rotation_classifies_strength_strong():
 def test_detect_rotation_ignores_weak_shear():
     grid = np.full((360, 500), np.nan)
     grid[50:60, 150:160] = -5.0
-    grid[60:70, 150:160] = 5.0    # 10 m/s — below threshold
+    grid[60:70, 150:160] = 5.0    # 10 m/s â€” below threshold
     vel_data = _make_velocity_data([_make_sweep(grid)])
     signatures = detect_rotation_signatures(vel_data)
     assert len(signatures) == 0
@@ -180,7 +180,7 @@ def _make_object(object_id, lat, lon, distance_km, bearing_deg) -> DetectedObjec
         distance_km=distance_km,
         bearing_deg=bearing_deg,
         peak_dbz=55.0,
-        peak_label="intense rain",
+        peak_label="intense precipitation",
         area_km2=50.0,
     )
 
@@ -375,3 +375,4 @@ def test_sweep_count_never_exceeds_three_sweeps_on_real_data():
     if not signatures:
         pytest.skip("reference volume has no rotation signatures above threshold")
     assert max(s.sweep_count for s in signatures) <= 3
+

@@ -1,4 +1,4 @@
-# tests/unit/test_tracker.py
+﻿# tests/unit/test_tracker.py
 from datetime import datetime, timedelta
 import numpy as np
 from src.tracker import StormTracker, Track
@@ -16,7 +16,7 @@ def _make_object(obj_id: int, lat: float, lon: float, peak_dbz: float = 45.0) ->
         distance_km=40.0,
         bearing_deg=270.0,
         peak_dbz=peak_dbz,
-        peak_label="heavy rain",
+        peak_label="heavy precipitation",
         area_km2=100.0,
         layers=[],
     )
@@ -208,7 +208,7 @@ def test_tracker_resets_on_site_change():
     tracker.update(ktlx_scan)
     assert len(tracker.active_tracks) == 1
 
-    # Now switch to a different site — previous tracks should be gone
+    # Now switch to a different site â€” previous tracks should be gone
     kfws_scan = _make_scan("KFWS", t + timedelta(minutes=5), [_make_object(1, 32.5, -97.3)])
     tracker.update(kfws_scan)
     # Only the KFWS track should be active; KTLX track should not exist
@@ -270,7 +270,7 @@ def test_tracker_merge_event_excludes_surviving_and_dedupes():
 
 def test_tracker_leftover_after_merge_becomes_new_track():
     """If a new object 1:1-matches a previous object whose track was already
-    consumed by a merge, the leftover must become a new track — not reuse
+    consumed by a merge, the leftover must become a new track â€” not reuse
     the merged survivor."""
     tracker = StormTracker()
     t1 = datetime(2026, 4, 8, 18, 30)
@@ -322,7 +322,7 @@ def test_tracker_two_merges_sharing_prev_do_not_duplicate_track_mapping():
     """If two new objects both try to merge using the same previous track as
     their strongest overlap, the tracker must not end up with both new objects
     mapped to the same surviving track. That duplicate mapping would cause
-    phantom 'track N merged into track N' events on the next scan — the
+    phantom 'track N merged into track N' events on the next scan â€” the
     symptom observed in live KEYX data."""
     tracker = StormTracker()
     t1 = datetime(2026, 4, 8, 18, 30)
@@ -350,12 +350,12 @@ def test_tracker_two_merges_sharing_prev_do_not_duplicate_track_mapping():
     obj_y = _make_object(2, 35.5, -97.31, peak_dbz=51.0)
     mask_x = np.zeros((360, 500), dtype=bool)
     mask_x[85:95, 195:212] = True
-    # A∩X: cols 195-209 = 15 wide  => overlap(A,X)=150/200=0.75
-    # B∩X: cols 210-211 = 2 wide   => overlap(B,X)=20/40=0.5
+    # Aâˆ©X: cols 195-209 = 15 wide  => overlap(A,X)=150/200=0.75
+    # Bâˆ©X: cols 210-211 = 2 wide   => overlap(B,X)=20/40=0.5
     mask_y = np.zeros((360, 500), dtype=bool)
     mask_y[85:95, 178:199] = True
-    # A∩Y: cols 190-198 = 9 wide   => overlap(A,Y)=90/200=0.45
-    # C∩Y: cols 178-179 = 2 wide   => overlap(C,Y)=20/40=0.5
+    # Aâˆ©Y: cols 190-198 = 9 wide   => overlap(A,Y)=90/200=0.45
+    # Câˆ©Y: cols 178-179 = 2 wide   => overlap(C,Y)=20/40=0.5
     # ^ A still outranks C in Y's match list because 0.45>0 beats no-match,
     #   and importantly Y has A in its match_candidates list.
     scan2 = _make_scan("KTLX", t2, [obj_x, obj_y],
@@ -481,3 +481,4 @@ def test_tracker_lineage_persists_after_followup_scan():
     child = tracker.get_track(parent.child_track_ids[0])
     assert child is not None
     assert parent.track_id in child.parent_track_ids
+
