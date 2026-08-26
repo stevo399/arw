@@ -58,7 +58,19 @@ def test_full_pipeline_sites_to_summary():
         resp = client.get("/objects/KTLX")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["object_count"] == 2
+    # QC is now wired into the pipeline (Task 13). This fixture has no
+    # rhohv/zdr/velocity, so the classifier falls back to reflectivity and
+    # texture alone. Storm 1 peaks at 50 dBZ, at/above the hard protection
+    # floor (PROTECTED_MIN_DBZ = 50.0 in src/qc/protection.py), so protection
+    # rule 1 plus rule 3 (whole connected component) protects it entirely and
+    # it survives as one object. Storm 2 peaks at only 42 dBZ, below that
+    # floor, and has no rotation signature to protect it either -- its
+    # one-gate-thick boundary ring between the 30 dBZ shell and 42 dBZ core
+    # (a sharp step change) scores highest for "biological" on texture, and
+    # gets rejected. That ring completely encircles the core, splitting storm
+    # 2 into two disconnected components: an isolated 42 dBZ core and the
+    # surrounding shell fragment. Total objects: 1 (storm 1) + 2 (storm 2) = 3.
+    assert data["object_count"] == 3
     assert data["objects"][0]["peak_dbz"] >= data["objects"][1]["peak_dbz"]
     strongest = data["objects"][0]
     layer_labels = [l["label"] for l in strongest["layers"]]
@@ -74,7 +86,7 @@ def test_full_pipeline_sites_to_summary():
         resp = client.get("/summary/KTLX")
     assert resp.status_code == 200
     summary = resp.json()
-    assert "2 rain objects" in summary["text"]
+    assert "3 rain objects" in summary["text"]
     assert "intense rain" in summary["text"]
     assert "Oklahoma City" in summary["text"]
 

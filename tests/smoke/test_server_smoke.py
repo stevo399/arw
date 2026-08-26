@@ -232,6 +232,51 @@ def test_motion_endpoint_missing_track_returns_404():
     assert resp.status_code == 404
 
 
+def test_ingest_detects_rotation_before_quality_control():
+    """Rotation signatures must be computed before quality control runs, and
+    passed into it -- protection rule 2 can only keep a debris gate near a
+    rotation signature if it knows where that signature is. If the pipeline
+    called preprocess_sweep before detect_rotation_signatures (or without
+    forwarding the result), this test would still pass with an empty/default
+    rotation list -- so it asserts the exact signatures object was forwarded,
+    not just that something non-empty exists.
+    """
+    from src.preprocess import ScanQuality
+    from src.qc.report import RejectedEcho
+
+    mock_ref = _make_reflectivity_data(np.nan)
+    sentinel_rotation = [object()]
+    mock_velocity_sweep = MagicMock()
+    mock_velocity_sweep.velocity = np.zeros((2, 2))
+    mock_vel_data = MagicMock()
+    mock_vel_data.sweeps = [mock_velocity_sweep]
+
+    fake_quality = ScanQuality(
+        score=1.0, finite_fraction=1.0, removed_speckle_pixels=0,
+        removed_speckle_fraction=0.0, flags=[],
+    )
+    fake_rejected = RejectedEcho(mask=np.zeros((360, 500), dtype=bool), reasons=np.full((360, 500), "", dtype=object))
+
+    with patch("src.server.fetch_scan", return_value="/fake/path"), \
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_sweep_data", return_value=mock_ref), \
+         patch("src.server.extract_velocity", return_value=mock_vel_data), \
+         patch("src.server.detect_rotation_signatures", return_value=sentinel_rotation) as mock_detect, \
+         patch(
+             "src.server.preprocess_sweep",
+             return_value=(mock_ref, fake_quality, fake_rejected),
+         ) as mock_preprocess:
+        resp = client.get("/objects/KTLX")
+
+    assert resp.status_code == 200
+    mock_detect.assert_called_once_with(mock_vel_data)
+    # preprocess_sweep must receive the rotation signatures detect_rotation_signatures
+    # produced -- not an empty list, and not something computed independently.
+    call_args = mock_preprocess.call_args
+    passed_rotations = call_args.args[1] if len(call_args.args) > 1 else call_args.kwargs["rotation_signatures"]
+    assert passed_rotations is sentinel_rotation
+
+
 def test_velocity_endpoint_returns_200():
     mock_ref = _make_reflectivity_data(np.nan)
     with patch("src.server.fetch_scan", return_value="/fake/path"), \

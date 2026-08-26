@@ -6,6 +6,7 @@ import numpy as np
 from src.parser import SweepData, VelocityData
 from src.detection import DetectedObject
 from src.preprocess import ScanQuality
+from src.qc.report import RejectedEcho
 from src.velocity import VelocityRegion, RotationSignature
 
 
@@ -22,6 +23,7 @@ class BufferedScan:
     velocity_data: VelocityData | None = None
     velocity_regions: list[VelocityRegion] = field(default_factory=list)
     rotation_signatures: list[RotationSignature] = field(default_factory=list)
+    rejected_echo: RejectedEcho | None = None
 
 
 class ReplayBuffer:

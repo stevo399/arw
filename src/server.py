@@ -16,9 +16,9 @@ from src.models import (
 from src.sites import geocode_city_state, geocode_zipcode, rank_sites, NEXRAD_SITES
 from src.ingest import fetch_scan
 from src.parser import parse_radar_file, extract_sweep_data, extract_velocity
-from src.velocity import analyze_velocity
+from src.velocity import analyze_velocity, detect_rotation_signatures
 from src.detection import detect_objects_with_grid
-from src.preprocess import preprocess_reflectivity_data
+from src.preprocess import preprocess_sweep
 from src.summary import generate_summary
 from src.map_layer import (
     build_storm_audiom_geojson,
@@ -118,12 +118,22 @@ def _resolve_map_location(
 
 
 def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
-    """Fetch a scan, detect objects, and add to buffer + tracker."""
+    """Fetch a scan, quality control it, detect objects, and buffer the result."""
     filepath = fetch_scan(site_id.upper(), dt)
     radar = parse_radar_file(filepath)
-    raw_ref_data = extract_sweep_data(radar)
-    ref_data, scan_quality = preprocess_reflectivity_data(raw_ref_data)
+    raw_sweep = extract_sweep_data(radar)
     vel_data = extract_velocity(radar)
+
+    # Rotation is detected before quality control so protection rule 2 can use
+    # it: a debris signature is only distinguishable from clutter by sitting on
+    # top of a velocity couplet. QC must never run before this.
+    preliminary_rotations = detect_rotation_signatures(vel_data) if vel_data else []
+    lowest_velocity = vel_data.sweeps[0].velocity if vel_data and vel_data.sweeps else None
+
+    ref_data, scan_quality, rejected_echo = preprocess_sweep(
+        raw_sweep, preliminary_rotations, velocity=lowest_velocity
+    )
+
     result = detect_objects_with_grid(
         reflectivity=ref_data.reflectivity,
         azimuths=ref_data.azimuths,
@@ -134,7 +144,11 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
         elevations=ref_data.elevations,
     )
     regions, rotations, annotated_objects = analyze_velocity(vel_data, result.objects)
-    scan_timestamp = datetime.fromisoformat(ref_data.timestamp) if isinstance(ref_data.timestamp, str) else ref_data.timestamp
+    scan_timestamp = (
+        datetime.fromisoformat(ref_data.timestamp)
+        if isinstance(ref_data.timestamp, str)
+        else ref_data.timestamp
+    )
     buffered = BufferedScan(
         timestamp=scan_timestamp,
         site_id=site_id.upper(),
@@ -146,6 +160,7 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
         velocity_data=vel_data,
         velocity_regions=regions,
         rotation_signatures=rotations,
+        rejected_echo=rejected_echo,
     )
     _buffer.add_scan(buffered)
     _tracker.update(buffered)

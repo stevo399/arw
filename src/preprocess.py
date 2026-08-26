@@ -1,4 +1,4 @@
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -33,6 +33,10 @@ class ScanQuality:
     removed_speckle_pixels: int
     removed_speckle_fraction: float
     flags: list[str]
+    class_fractions: dict[str, float] = field(default_factory=dict)
+    rejected_fraction: float = 0.0
+    mean_confidence: float = 0.0
+    degraded_modes: list[str] = field(default_factory=list)
 
 
 def _remove_weak_speckle(reflectivity: np.ndarray) -> tuple[np.ndarray, int]:
@@ -102,3 +106,33 @@ def preprocess_reflectivity_data(reflectivity_data: SweepData) -> tuple[SweepDat
                 updates[field_name] = _blank_at_mask(value, removed_mask)
 
     return replace(reflectivity_data, **updates), quality
+
+
+def preprocess_sweep(sweep: SweepData, rotation_signatures, velocity=None):
+    """Quality control, then speckle removal, then scan quality assessment.
+
+    Order matters. Quality control runs first so its protection rules can save
+    small intense cores that speckle removal would otherwise delete -- running
+    speckle removal first would strip a compact hail core down to nothing
+    before QC's protection rules ever saw it.
+    """
+    from src.qc.apply import apply_quality_control
+
+    original_reflectivity = sweep.reflectivity
+    qc_sweep, rejected, qc_report = apply_quality_control(
+        sweep, rotation_signatures, velocity=velocity
+    )
+
+    despeckled, removed_speckle_pixels = _remove_weak_speckle(qc_sweep.reflectivity)
+
+    quality = assess_scan_quality(
+        original_reflectivity=original_reflectivity,
+        processed_reflectivity=despeckled,
+        removed_speckle_pixels=removed_speckle_pixels,
+    )
+    quality.class_fractions = qc_report.class_fractions
+    quality.rejected_fraction = qc_report.rejected_fraction
+    quality.mean_confidence = qc_report.mean_confidence
+    quality.degraded_modes = qc_report.degraded_modes
+
+    return replace(qc_sweep, reflectivity=despeckled), quality, rejected
