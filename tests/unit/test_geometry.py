@@ -6,7 +6,14 @@ import pytest
 from scipy.ndimage import label
 
 from src.detection import polar_to_latlon
-from src.geometry import gate_coordinates, gate_areas_km2, ground_range_m, label_periodic_azimuth
+from src.geometry import (
+    align_field_by_azimuth,
+    gate_coordinates,
+    gate_areas_km2,
+    ground_range_m,
+    label_periodic_azimuth,
+)
+from src.parser import extract_sweep_data, extract_velocity
 
 REFERENCE_VOLUME = "cache/KEMX/KEMX20260712_022646_V06"
 
@@ -222,3 +229,80 @@ def test_label_periodic_azimuth_does_not_wrap_the_range_axis():
     mask[-1, 39] = True
     _labeled, count = label_periodic_azimuth(mask, structure=np.ones((3, 3), dtype=int))
     assert count == 2
+
+
+def test_align_field_by_azimuth_corrects_split_cut_offset():
+    """Split-cut VCPs scan reflectivity and velocity on separate antenna
+    revolutions, so the same array index names a different compass bearing
+    in each. Pairing by raw index (what src/server.py did before this fix)
+    silently misattributes the data. This proves both halves: the band lands
+    at the correct rays with alignment, and at the wrong rays without it.
+    """
+    n = 360
+    target_azimuths = np.arange(n, dtype=float)  # e.g. the reflectivity/surveillance cut
+    offset_deg = 20.0
+    # e.g. the velocity/Doppler cut: same ray count, started 20 degrees later
+    source_azimuths = (target_azimuths + offset_deg) % 360.0
+
+    source_field = np.zeros(n)
+    source_field[100:105] = 99.0  # a distinct band at source rays 100-104 (azimuth 120-124)
+
+    aligned = align_field_by_azimuth(source_field, source_azimuths, target_azimuths)
+
+    # Correct physical location: azimuth 120-124 is target rays 120-124.
+    assert np.array_equal(aligned[120:125], np.full(5, 99.0))
+    assert not np.any(aligned[100:105] == 99.0)
+
+    # Prove the pre-fix bug directly: pairing the same two arrays by raw
+    # index (no alignment at all) puts the band at the wrong rays -- the
+    # source's own indices, 20 degrees off from where it physically is.
+    unaligned = source_field
+    assert np.array_equal(unaligned[100:105], np.full(5, 99.0))
+    assert not np.any(unaligned[120:125] == 99.0)
+
+
+REFLECTIVITY_VELOCITY_VOLUMES = [
+    # (path, minimum same-index offset the defect produces, maximum residual
+    # after alignment). Minimums are set safely below the values measured
+    # directly against these volumes (10.99 deg and 21.04 deg) so the test
+    # keeps demonstrating the defect even if a future re-extraction shifts
+    # the azimuth sampling slightly; the residual ceiling is half a ray
+    # (0.5 deg for a 720-ray sweep).
+    ("cache/KTLX/KTLX20260410_000100_V06", 5.0, 0.5),
+    ("cache/KEMX/KEMX20260712_022646_V06", 5.0, 0.5),
+]
+
+
+@pytest.mark.parametrize("path,min_offset_deg,max_residual_deg", REFLECTIVITY_VELOCITY_VOLUMES)
+def test_align_field_by_azimuth_fixes_real_split_cut_volumes(path, min_offset_deg, max_residual_deg):
+    """Live regression for the classify_gates velocity-misattribution defect.
+
+    Also the "live assertion" that the reflectivity and velocity cuts share
+    ranges_m: alignment only remaps the azimuth axis, so if a future VCP ever
+    produces cuts with different ranges_m, this must fail loudly rather than
+    let alignment silently misattribute range too.
+    """
+    radar = pyart.io.read_nexrad_archive(path)
+    ref = extract_sweep_data(radar)
+    vel = extract_velocity(radar, max_sweeps=3)
+    velocity_sweep = vel.sweeps[0]
+
+    assert np.array_equal(ref.ranges_m, velocity_sweep.ranges_m), (
+        f"{path}: reflectivity and velocity ranges_m differ -- azimuth-only "
+        "alignment is unsafe for this volume"
+    )
+
+    same_index_offset = (velocity_sweep.azimuths - ref.azimuths + 180.0) % 360.0 - 180.0
+    assert np.max(np.abs(same_index_offset)) > min_offset_deg, (
+        f"{path}: expected a large same-index azimuth offset demonstrating "
+        "the split-cut defect this test guards against"
+    )
+
+    aligned = align_field_by_azimuth(velocity_sweep.velocity, velocity_sweep.azimuths, ref.azimuths)
+    assert aligned.shape == ref.reflectivity.shape
+
+    source = velocity_sweep.azimuths[None, :]
+    target = ref.azimuths[:, None]
+    nearest_offsets = (source - target + 180.0) % 360.0 - 180.0
+    residual_deg = np.min(np.abs(nearest_offsets), axis=1)
+    assert np.max(residual_deg) < max_residual_deg

@@ -3,6 +3,7 @@ from datetime import datetime, date as date_type
 import math
 import os
 
+import numpy as np
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -15,10 +16,11 @@ from src.models import (
 )
 from src.sites import geocode_city_state, geocode_zipcode, rank_sites, NEXRAD_SITES
 from src.ingest import fetch_scan
-from src.parser import parse_radar_file, extract_sweep_data, extract_velocity
+from src.parser import parse_radar_file, extract_sweep_data, extract_velocity, SweepData, VelocityData
 from src.velocity import analyze_velocity, detect_rotation_signatures
 from src.detection import detect_objects_with_grid
 from src.preprocess import preprocess_sweep
+from src.geometry import align_field_by_azimuth
 from src.summary import generate_summary
 from src.map_layer import (
     build_storm_audiom_geojson,
@@ -117,6 +119,36 @@ def _resolve_map_location(
     )
 
 
+def _velocity_aligned_to_reflectivity(
+    raw_sweep: SweepData, vel_data: VelocityData | None
+) -> np.ndarray | None:
+    """Remap the lowest velocity sweep onto the reflectivity sweep's azimuths.
+
+    Split-cut VCPs scan reflectivity (surveillance cut) and velocity (Doppler
+    cut) on separate antenna revolutions, so the same array index refers to a
+    different compass bearing in each sweep. Both arrays happen to share a
+    shape, so pairing them by raw index never raises -- it silently compares
+    gates that can be tens of kilometres apart at longer range. Only the
+    azimuth axis differs between the two cuts; range gates are identical, and
+    that assumption is checked here rather than trusted: if a VCP ever
+    produces cuts with different ranges_m, a wrong discriminator is worse than
+    an absent one (an absent variable is correctly omitted from
+    classification scoring, per src/qc/classifier.py), so this returns None
+    instead of aligning across mismatched range axes.
+    """
+    if vel_data is None or not vel_data.sweeps:
+        return None
+    velocity_sweep = vel_data.sweeps[0]
+    if not np.array_equal(
+        np.asarray(velocity_sweep.ranges_m, dtype=float),
+        np.asarray(raw_sweep.ranges_m, dtype=float),
+    ):
+        return None
+    return align_field_by_azimuth(
+        velocity_sweep.velocity, velocity_sweep.azimuths, raw_sweep.azimuths
+    )
+
+
 def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
     """Fetch a scan, quality control it, detect objects, and buffer the result."""
     filepath = fetch_scan(site_id.upper(), dt)
@@ -128,7 +160,10 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
     # it: a debris signature is only distinguishable from clutter by sitting on
     # top of a velocity couplet. QC must never run before this.
     preliminary_rotations = detect_rotation_signatures(vel_data) if vel_data else []
-    lowest_velocity = vel_data.sweeps[0].velocity if vel_data and vel_data.sweeps else None
+    # The Doppler cut's rays do not share the surveillance cut's azimuth
+    # sampling -- align by nearest azimuth before this reaches classify_gates,
+    # which pairs abs_velocity with reflectivity elementwise by index.
+    lowest_velocity = _velocity_aligned_to_reflectivity(raw_sweep, vel_data)
 
     ref_data, scan_quality, rejected_echo = preprocess_sweep(
         raw_sweep, preliminary_rotations, velocity=lowest_velocity

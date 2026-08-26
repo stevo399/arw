@@ -176,6 +176,26 @@ def label_periodic_azimuth(
     return remap[labeled], int(len(surviving))
 
 
+def align_field_by_azimuth(
+    field: np.ndarray,
+    source_azimuths: np.ndarray,
+    target_azimuths: np.ndarray,
+) -> np.ndarray:
+    """Reorder a field's rays to match another sweep's azimuth sampling.
+
+    Split-cut VCPs scan reflectivity and velocity on separate antenna
+    revolutions, so the same array index refers to a different compass bearing
+    in each. Pairing them by index silently compares gates tens of kilometres
+    apart. Range gates are identical between the cuts, so only the ray axis
+    needs remapping.
+    """
+    source_azimuths = np.asarray(source_azimuths, dtype=float)
+    target_azimuths = np.asarray(target_azimuths, dtype=float)
+    offsets = (source_azimuths[None, :] - target_azimuths[:, None] + 180.0) % 360.0 - 180.0
+    nearest = np.argmin(np.abs(offsets), axis=1)
+    return np.asarray(field)[nearest]
+
+
 def gate_areas_km2(
     azimuths: np.ndarray,
     ranges_m: np.ndarray,

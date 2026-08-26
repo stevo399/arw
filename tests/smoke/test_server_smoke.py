@@ -232,6 +232,74 @@ def test_motion_endpoint_missing_track_returns_404():
     assert resp.status_code == 404
 
 
+def _make_velocity_data(velocity_grid, azimuths, ranges_m):
+    from src.parser import VelocityData, VelocitySweep
+
+    n_az = velocity_grid.shape[0]
+    return VelocityData(
+        sweeps=[
+            VelocitySweep(
+                velocity=velocity_grid,
+                azimuths=azimuths,
+                ranges_m=ranges_m,
+                elevation_angle=0.5,
+                nyquist_velocity=26.2,
+                elevations=np.full(n_az, 0.5),
+            )
+        ],
+        radar_lat=35.3331,
+        radar_lon=-97.2778,
+    )
+
+
+def test_velocity_aligned_to_reflectivity_returns_none_without_velocity():
+    from src.server import _velocity_aligned_to_reflectivity
+
+    raw_sweep = _make_reflectivity_data(np.nan)
+    assert _velocity_aligned_to_reflectivity(raw_sweep, None) is None
+
+
+def test_velocity_aligned_to_reflectivity_returns_none_on_range_mismatch():
+    """A wrong discriminator is worse than an absent one. If the Doppler and
+    surveillance cuts ever disagree on ranges_m, azimuth-only alignment would
+    silently misattribute range gates too -- this must refuse, not guess."""
+    from src.server import _velocity_aligned_to_reflectivity
+
+    raw_sweep = _make_reflectivity_data(np.nan)
+    mismatched_ranges = raw_sweep.ranges_m + 1.0  # differs from raw_sweep.ranges_m
+    vel_data = _make_velocity_data(
+        velocity_grid=np.zeros((360, 500)),
+        azimuths=raw_sweep.azimuths.copy(),
+        ranges_m=mismatched_ranges,
+    )
+    assert _velocity_aligned_to_reflectivity(raw_sweep, vel_data) is None
+
+
+def test_velocity_aligned_to_reflectivity_remaps_by_azimuth():
+    """The velocity sweep's rays must be reordered onto the reflectivity
+    sweep's azimuth sampling, not passed through by raw index."""
+    from src.server import _velocity_aligned_to_reflectivity
+
+    raw_sweep = _make_reflectivity_data(np.nan)  # azimuths = linspace(0, 359, 360)
+    velocity_azimuths = (raw_sweep.azimuths + 20.0) % 360.0  # Doppler cut, offset start
+    velocity_grid = np.zeros((360, 500))
+    velocity_grid[100, :] = 42.0  # distinct band at Doppler ray 100 (azimuth ~120)
+
+    vel_data = _make_velocity_data(
+        velocity_grid=velocity_grid,
+        azimuths=velocity_azimuths,
+        ranges_m=raw_sweep.ranges_m.copy(),
+    )
+
+    aligned = _velocity_aligned_to_reflectivity(raw_sweep, vel_data)
+    assert aligned is not None
+    assert aligned.shape == raw_sweep.reflectivity.shape
+    # The band must land near reflectivity ray 120 (azimuth ~120), not at
+    # ray 100 where it sat in the raw, unaligned Doppler array.
+    assert np.all(aligned[120, :] == 42.0)
+    assert not np.any(aligned[100, :] == 42.0)
+
+
 def test_ingest_detects_rotation_before_quality_control():
     """Rotation signatures must be computed before quality control runs, and
     passed into it -- protection rule 2 can only keep a debris gate near a
@@ -246,10 +314,15 @@ def test_ingest_detects_rotation_before_quality_control():
 
     mock_ref = _make_reflectivity_data(np.nan)
     sentinel_rotation = [object()]
-    mock_velocity_sweep = MagicMock()
-    mock_velocity_sweep.velocity = np.zeros((2, 2))
-    mock_vel_data = MagicMock()
-    mock_vel_data.sweeps = [mock_velocity_sweep]
+    # A real VelocityData/VelocitySweep, not a bare MagicMock: with
+    # _velocity_aligned_to_reflectivity and analyze_velocity both now running
+    # for real against it (only preprocess_sweep is mocked below), it needs
+    # genuine ranges_m/azimuths/elevation_angle, not unset MagicMock attributes.
+    mock_vel_data = _make_velocity_data(
+        velocity_grid=np.full(mock_ref.reflectivity.shape, np.nan),
+        azimuths=mock_ref.azimuths.copy(),
+        ranges_m=mock_ref.ranges_m.copy(),
+    )
 
     fake_quality = ScanQuality(
         score=1.0, finite_fraction=1.0, removed_speckle_pixels=0,
