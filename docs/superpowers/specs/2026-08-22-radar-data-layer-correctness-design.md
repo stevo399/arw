@@ -198,6 +198,24 @@ scan — they are a pure function of site, elevation, azimuths and ranges.
 - `src/parser.py` — `ReflectivityData` becomes `SweepData` (§6)
 - `src/preprocess.py` — speckle removal moves after classification; becomes a
   thin orchestrator
+
+**Correction to the speckle ordering rationale, 2026-08-25.** The plan derived
+from this spec justified running quality control before speckle removal on the
+grounds that speckle-first "would delete small hail cores". That is false.
+`_remove_weak_speckle` already preserves any component whose peak reaches
+`MIN_SPECKLE_PEAK_DBZ_TO_KEEP` (35 dBZ), so hail cores at 50+ dBZ were never at
+risk from it. The ordering is still correct — running speckle removal on the
+cleaned field means it acts on weather speckle rather than clutter speckle — but
+not for the reason originally given.
+
+The ordering has one measured consequence in the opposite direction: QC-first can
+strip the surroundings of a moderate 20–35 dBZ gate, leaving a one-gate island
+that speckle removal then deletes, where speckle-first would have kept it inside
+a larger component. This is accepted. A gate whose entire neighbourhood
+classified as non-meteorological is itself likely non-meteorological, and the
+difference cannot reach the output in any case: one gate spans 0.05–0.44 km²
+depending on range, while `MIN_OBJECT_AREA_KM2` is 4.0 — 19 to 74 contiguous
+gates are required before any object forms.
 - `src/sites.py` — beam height delegates to `geometry.py`
 - `src/detection.py` — coordinate and area helpers delegate to `geometry.py`;
   intensity labels become phase-neutral
