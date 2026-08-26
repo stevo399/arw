@@ -217,3 +217,67 @@ def test_build_storm_centroid_geojson_returns_point_features():
     assert feature["properties"]["object_id"] == 1
     assert geojson["metadata"]["sourceName"] == "arw-storm-centroids"
 
+
+def test_intensity_rule_type_stability():
+    """Verify all ruleType values are stable external contracts with Audiom.
+
+    These identifiers (radar_light_rain, etc.) must never be renamed, as they
+    are consumed by Audiom's accessible-mapping tool for user styling
+    configuration. Renaming them silently breaks existing user styling without
+    any error or warning. This test protects against silent breakage by asserting
+    the complete mapping.
+    """
+    from src.map_layer import _intensity_rule_type
+    from src.detection import INTENSITY_THRESHOLDS
+
+    # Build expected mapping from INTENSITY_THRESHOLDS
+    expected = {
+        "light precipitation": "radar_light_rain",
+        "moderate precipitation": "radar_moderate_rain",
+        "heavy precipitation": "radar_heavy_rain",
+        "intense precipitation": "radar_intense_rain",
+        "severe core": "radar_severe_core",
+    }
+
+    # Verify each label maps to the expected ruleType
+    for label, expected_rule_type in expected.items():
+        actual_rule_type = _intensity_rule_type(label)
+        assert actual_rule_type == expected_rule_type, (
+            f"ruleType for '{label}' changed from '{expected_rule_type}' to '{actual_rule_type}'. "
+            f"This breaks Audiom user styling."
+        )
+
+
+def test_intensity_fill_color_complete_coverage():
+    """Verify _intensity_fill_color returns a color for each intensity label.
+
+    A missing label mapping that falls through to the default color silently
+    changes every polygon's appearance. This test ensures each label has an
+    explicit color mapping.
+    """
+    from src.map_layer import _intensity_fill_color
+    from src.detection import INTENSITY_THRESHOLDS
+
+    # Extract labels from INTENSITY_THRESHOLDS
+    labels = [label for _, _, label in INTENSITY_THRESHOLDS]
+
+    # Define expected colors
+    expected_colors = {
+        "light precipitation": "#2ca25f",
+        "moderate precipitation": "#ffff66",
+        "heavy precipitation": "#ffcc33",
+        "intense precipitation": "#ff6600",
+        "severe core": "#cc00cc",
+    }
+
+    # Verify each label has a color (not the default)
+    default_color = "#56b4e9"
+    for label in labels:
+        actual_color = _intensity_fill_color(label)
+        assert actual_color == expected_colors[label], (
+            f"Color for '{label}' is '{actual_color}', expected '{expected_colors[label]}'"
+        )
+        assert actual_color != default_color, (
+            f"'{label}' fell through to default color '{default_color}'. "
+            f"This silently changes polygon appearance."
+        )

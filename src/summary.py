@@ -156,7 +156,7 @@ def generate_summary(
     tracks=None,
     events: list[dict] | None = None,
 ) -> str:
-    """Generate a speech-ready text summary of detected rain objects.
+    """Generate a speech-ready text summary of detected precipitation objects.
 
     Args:
         site_id: Radar site ID.
@@ -170,7 +170,7 @@ def generate_summary(
         return f"{site_name}: No significant precipitation detected."
 
     count = len(objects)
-    obj_word = "rain object" if count == 1 else "rain objects"
+    obj_word = "precipitation object" if count == 1 else "precipitation objects"
     strongest = _pick_summary_object(objects, tracks)
     distance_mi = km_to_miles(strongest.distance_km)
     bearing = degrees_to_bearing(strongest.bearing_deg)

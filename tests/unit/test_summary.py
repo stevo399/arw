@@ -57,7 +57,7 @@ def test_generate_summary_single_object_no_tracks():
         objects=[obj],
     )
     assert "Oklahoma City" in text
-    assert "1 rain object" in text
+    assert "1 precipitation object" in text
     assert "heavy precipitation" in text
     assert "25 miles" in text
     assert "W" in text
@@ -207,7 +207,7 @@ def test_generate_summary_multiple_objects():
         timestamp="2026-04-08T18:30:00Z",
         objects=[obj1, obj2],
     )
-    assert "2 rain objects" in text
+    assert "2 precipitation objects" in text
     assert "intense precipitation" in text
 
 

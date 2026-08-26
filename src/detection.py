@@ -391,7 +391,7 @@ def detect_objects_with_grid(
     elevation_deg: float = 0.5,
     elevations: np.ndarray | None = None,
 ) -> DetectionResult:
-    """Detect rain objects and return labeled grid + masks for tracking.
+    """Detect precipitation objects and return labeled grid + masks for tracking.
 
     Same as detect_objects but also returns the scipy labeled grid and
     per-object boolean masks needed for overlap-based tracking.
@@ -449,7 +449,7 @@ def detect_objects(
     elevation_deg: float = 0.5,
     elevations: np.ndarray | None = None,
 ) -> list[DetectedObject]:
-    """Detect rain objects from reflectivity data.
+    """Detect precipitation objects from reflectivity data.
     Returns list of DetectedObject sorted by peak_dbz descending.
     """
     result = detect_objects_with_grid(

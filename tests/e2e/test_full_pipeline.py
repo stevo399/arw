@@ -86,7 +86,7 @@ def test_full_pipeline_sites_to_summary():
         resp = client.get("/summary/KTLX")
     assert resp.status_code == 200
     summary = resp.json()
-    assert "3 rain objects" in summary["text"]
+    assert "3 precipitation objects" in summary["text"]
     assert "intense precipitation" in summary["text"]
     assert "Oklahoma City" in summary["text"]
 
