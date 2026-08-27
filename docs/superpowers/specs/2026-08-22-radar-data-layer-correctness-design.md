@@ -548,3 +548,60 @@ The spec is complete when:
 7. `devspec/06` corrected.
 8. PROGRESS.md updated, including correction of the Phase 3 multi-sweep
    confirmation claim.
+
+---
+
+## Amendment, 2026-08-26: quality control flags, it does not delete
+
+**This supersedes §10's "Classification, not deletion" where the two conflict.**
+§10 already separated classification from removal and retained a rejected-echo
+layer. This amendment goes further: **nothing is removed from the reflectivity
+field at all.**
+
+### Why
+
+Proof 4 (Task 17) measured the classifier against the Newcastle–Moore EF5
+tornado of 2013-05-20, using the confirmed SPC damage path. Within 10 km of that
+path, on 4,596 gates carrying echo peaking at 54.5 dBZ:
+
+| Class | Gates | Share |
+|---|---|---|
+| precipitation | 2,599 | 56.5% |
+| biological | 662 | 14.4% |
+| ground clutter | 597 | 13.0% |
+| debris | 525 | 11.4% |
+| hail | 213 | 4.6% |
+
+**1,259 gates (27.4%) were condemned as ground clutter or biological.** Every one
+survived only because protection rescued it — a 100% protection margin.
+
+That produced a dangerous coupling: the classifier wrongly condemns real tornado
+debris, and an over-sensitive shear detector over-protects everything, masking
+it. The two defects cancelled. Fixing either alone would have converted a hidden
+defect into an active, silent, life-safety failure.
+
+### What the reference applications do
+
+RadarScope, RadarOmega and GRLevel3 render every gate faithfully and never
+remove echo. They carry no "should this be deleted?" decision, so they cannot
+get it wrong. Their interpretation arrives as NWS Level III overlays computed
+elsewhere. NOAA does filter — in MRMS — but on a mature multi-radar system with
+far more input than a single sweep.
+
+ARW must summarise, because it cannot speak 1.3 million gates. But summarising
+does not require deleting.
+
+### The rule
+
+Quality control classifies every gate and attaches the label. It removes
+nothing. Detection operates on the full field. Objects carry their class
+composition, and the speech layer conveys uncertainty in words rather than by
+silent omission.
+
+This eliminates the silent-deletion failure mode outright, and decouples the two
+defects: the classifier's accuracy becomes a quality problem rather than a
+safety one, and rotation sensitivity can then be corrected independently.
+
+The two strict xfails measuring classifier quality remain, and remain strict.
+They are no longer safety gates — they are the measure of how much the
+classifier still gets wrong.
