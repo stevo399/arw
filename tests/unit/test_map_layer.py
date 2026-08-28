@@ -64,6 +64,7 @@ def test_build_storm_geojson_returns_polygon_features():
     assert feature["properties"]["passable"] is True
     assert "Peak reflectivity 50.0 dBZ." in feature["properties"]["description"]
     assert feature["properties"]["fill"] == "#e69f00"
+    assert feature["properties"]["class_fractions"] == {}
     assert geojson["metadata"]["mapType"] == "heatmap"
     assert geojson["metadata"]["suggestedMapType"] == "heatmap"
     assert geojson["metadata"]["currentStat"] == "heat_value"
@@ -216,6 +217,57 @@ def test_build_storm_centroid_geojson_returns_point_features():
     }
     assert feature["properties"]["object_id"] == 1
     assert geojson["metadata"]["sourceName"] == "arw-storm-centroids"
+
+
+def test_storm_feature_carries_class_composition():
+    """Audiom and the speech layer must be able to tell a mostly-clutter
+    object apart from a mostly-precipitation one by reading the GeoJSON
+    feature alone (2026-08-26 amendment: QC no longer deletes echo, so this
+    is the only place that information survives to the output)."""
+    reflectivity = np.full((12, 12), np.nan)
+    reflectivity[4:8, 5:9] = 50.0
+    mask = ~np.isnan(reflectivity)
+    class_fractions = {"precipitation": 0.2, "ground_clutter": 0.8, "biological": 0.0}
+    scan = BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0),
+        site_id="KTLX",
+        reflectivity_data=SweepData(
+            reflectivity=reflectivity,
+            azimuths=np.linspace(80, 100, 12),
+            ranges_m=np.linspace(20000, 40000, 12),
+            radar_lat=35.3331,
+            radar_lon=-97.2778,
+            elevation_angle=0.5,
+            elevations=np.full(12, 0.5),
+            elevation_angles=[0.5],
+            radar_alt_m=390.0,
+            timestamp="2026-04-10T20:00:00Z",
+        ),
+        detected_objects=[
+            DetectedObject(
+                object_id=1,
+                centroid_lat=35.2,
+                centroid_lon=-96.9,
+                distance_km=30.0,
+                bearing_deg=90.0,
+                peak_dbz=50.0,
+                peak_label="intense precipitation",
+                area_km2=24.0,
+                layers=[IntensityLayerData("intense precipitation", 50, 60, 24.0)],
+                class_fractions=class_fractions,
+            )
+        ],
+        labeled_grid=mask.astype(int),
+        object_masks={1: mask},
+    )
+
+    geojson = build_storm_geojson(scan)
+    feature = geojson["features"][0]
+    assert feature["properties"]["class_fractions"] == class_fractions
+    # Mutating the returned property dict must not alias the object's own
+    # field.
+    feature["properties"]["class_fractions"]["precipitation"] = 999.0
+    assert scan.detected_objects[0].class_fractions["precipitation"] == 0.2
 
 
 def test_intensity_rule_type_stability():

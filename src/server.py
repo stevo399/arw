@@ -165,7 +165,7 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
     # which pairs abs_velocity with reflectivity elementwise by index.
     lowest_velocity = _velocity_aligned_to_reflectivity(raw_sweep, vel_data)
 
-    ref_data, scan_quality, rejected_echo = preprocess_sweep(
+    ref_data, scan_quality, echo_advisory = preprocess_sweep(
         raw_sweep, preliminary_rotations, velocity=lowest_velocity
     )
 
@@ -177,6 +177,7 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
         radar_lon=ref_data.radar_lon,
         elevation_deg=ref_data.elevation_angle,
         elevations=ref_data.elevations,
+        gate_classification=ref_data.gate_classification,
     )
     regions, rotations, annotated_objects = analyze_velocity(vel_data, result.objects)
     scan_timestamp = (
@@ -195,7 +196,7 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
         velocity_data=vel_data,
         velocity_regions=regions,
         rotation_signatures=rotations,
-        rejected_echo=rejected_echo,
+        echo_advisory=echo_advisory,
     )
     _buffer.add_scan(buffered)
     _tracker.update(buffered)
@@ -341,6 +342,7 @@ def get_objects(site_id: str, datetime: str | None = Query(None)):
             max_inbound_ms=getattr(obj, 'max_inbound_ms', None),
             max_outbound_ms=getattr(obj, 'max_outbound_ms', None),
             rotation_strength=obj.rotation.strength if getattr(obj, 'rotation', None) is not None else None,
+            class_fractions=getattr(obj, 'class_fractions', {}) or {},
         )
         for obj in buffered.detected_objects
     ]

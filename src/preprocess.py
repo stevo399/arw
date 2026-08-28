@@ -34,7 +34,10 @@ class ScanQuality:
     removed_speckle_fraction: float
     flags: list[str]
     class_fractions: dict[str, float] = field(default_factory=dict)
-    rejected_fraction: float = 0.0
+    # Advisory only -- fraction of gates quality control WOULD flag as
+    # non-meteorological, not a fraction actually removed. See the
+    # 2026-08-26 amendment note in src/qc/report.py.
+    advisory_fraction: float = 0.0
     mean_confidence: float = 0.0
     degraded_modes: list[str] = field(default_factory=list)
 
@@ -109,17 +112,24 @@ def preprocess_reflectivity_data(reflectivity_data: SweepData) -> tuple[SweepDat
 
 
 def preprocess_sweep(sweep: SweepData, rotation_signatures, velocity=None):
-    """Quality control, then speckle removal, then scan quality assessment.
+    """Quality control (classify only), then speckle removal, then scan
+    quality assessment.
 
-    Order matters. Quality control runs first so its protection rules can save
-    small intense cores that speckle removal would otherwise delete -- running
-    speckle removal first would strip a compact hail core down to nothing
-    before QC's protection rules ever saw it.
+    Amendment, 2026-08-26 ("quality control flags, it does not delete"):
+    `apply_quality_control` no longer removes any echo, so its position ahead
+    of speckle removal no longer protects anything from being deleted before
+    QC can save it -- `qc_sweep.reflectivity` is byte-for-byte the input
+    reflectivity. Speckle removal is therefore the only step in this function
+    that can ever modify reflectivity, and it always sees the full,
+    unfiltered field regardless of ordering. QC still has to run first only
+    because `gate_classification` must be attached before the co-registered
+    speckle blanking in `_remove_weak_speckle`/the update loop below can
+    blank it consistently alongside the other fields.
     """
     from src.qc.apply import apply_quality_control
 
     original_reflectivity = sweep.reflectivity
-    qc_sweep, rejected, qc_report = apply_quality_control(
+    qc_sweep, advisory, qc_report = apply_quality_control(
         sweep, rotation_signatures, velocity=velocity
     )
 
@@ -131,8 +141,8 @@ def preprocess_sweep(sweep: SweepData, rotation_signatures, velocity=None):
         removed_speckle_pixels=removed_speckle_pixels,
     )
     quality.class_fractions = qc_report.class_fractions
-    quality.rejected_fraction = qc_report.rejected_fraction
+    quality.advisory_fraction = qc_report.advisory_fraction
     quality.mean_confidence = qc_report.mean_confidence
     quality.degraded_modes = qc_report.degraded_modes
 
-    return replace(qc_sweep, reflectivity=despeckled), quality, rejected
+    return replace(qc_sweep, reflectivity=despeckled), quality, advisory

@@ -6,7 +6,7 @@ import numpy as np
 from src.parser import SweepData, VelocityData
 from src.detection import DetectedObject
 from src.preprocess import ScanQuality
-from src.qc.report import RejectedEcho
+from src.qc.report import EchoAdvisory
 from src.velocity import VelocityRegion, RotationSignature
 
 
@@ -23,7 +23,10 @@ class BufferedScan:
     velocity_data: VelocityData | None = None
     velocity_regions: list[VelocityRegion] = field(default_factory=list)
     rotation_signatures: list[RotationSignature] = field(default_factory=list)
-    rejected_echo: RejectedEcho | None = None
+    # Advisory only (2026-08-26 amendment): gates quality control would have
+    # flagged, retained for inspection -- never actually removed from
+    # reflectivity_data.
+    echo_advisory: EchoAdvisory | None = None
 
 
 class ReplayBuffer:

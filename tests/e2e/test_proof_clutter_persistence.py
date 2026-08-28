@@ -108,6 +108,17 @@ Round-2 response, all within this test file/report -- no src/ changes:
     day those parameters are properly sourced/validated and actually start
     separating the classes.
 
+Amendment, 2026-08-26 ("quality control flags, it does not delete"):
+`apply_quality_control` no longer removes any echo from the reflectivity
+field it returns. Every use of "reject"/"rejected" in this file (including
+`rejected.mask`, `ScanMeasurement.rejected_ge20`/`rejected_frac_ge20`, and
+test (C) below) refers to the ADVISORY signal only -- the same
+candidate-minus-protected computation as before, still meaningful for
+measuring classifier and protection behavior, but no longer a record of
+anything actually deleted from the field detection or the user sees. See
+`src/qc/apply.py` and `src/qc/report.py` for the renamed production API
+(`EchoAdvisory`, `QualityReport.advisory_fraction`).
+
 Round-0-vs-round-1 alignment continuity (finding 2 from round 2): round 0's
 numbers were computed on MISALIGNED velocity (the brief's literal code paired
 reflectivity and Doppler-cut arrays by raw index); round 1 fixed the
@@ -503,22 +514,34 @@ def test_polarimetric_texture_alone_separate_biological_from_clutter(measurement
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "(C) EFFECTIVENESS, documented known defect. Measured: pooled across "
-        "the six clear-air KIWA scans of 2026-07-12, apply_quality_control "
-        "rejects only ~0.39% of gates >= 20 dBZ (per-scan range 0.11%-0.80%), "
-        "even though the classifier labels roughly 59-62% of that same "
-        "population ground_clutter or biological in every scan. Cause: "
-        "121-132 spurious rotation signatures per clear-air scan (755 total "
-        "across the six scans) seed protection rule 2 (rotation collocation "
-        "in src/qc/protection.py), which rule 3 (connected-component "
-        "expansion) then spreads across whole connected regions of the "
-        "clutter/biological field -- overriding nearly all of the "
-        "classifier's judgement before it reaches the rejected-echo output. "
-        "This is a known defect in the pre-existing shear detector "
-        "(src/velocity.py detect_rotation_signatures / "
-        "_detect_shear_single_sweep), not in the classifier or in QC's "
-        "reject logic. strict=True: this test will fail loudly -- signaling "
-        "the defect is fixed -- the day rejected_frac_ge20 actually exceeds "
+        "(C) EFFECTIVENESS, documented known defect. Redocumented under the "
+        "2026-08-26 amendment ('quality control flags, it does not delete'): "
+        "apply_quality_control no longer removes any echo from the "
+        "reflectivity field, so 'rejects' below is now purely an ADVISORY "
+        "measurement -- the fraction of gates that WOULD be excluded by a "
+        "classifier-driven filter if one were applied downstream, computed "
+        "exactly as before (classifier candidate minus protected_mask). "
+        "Nothing about the underlying computation changed, only what it is "
+        "used for: it no longer gates deletion, it measures how much of the "
+        "flaggable signal protection is currently absorbing. Measured: "
+        "pooled across the six clear-air KIWA scans of 2026-07-12, the "
+        "advisory mask flags only ~0.39% of gates >= 20 dBZ (per-scan range "
+        "0.11%-0.80%), even though the classifier labels roughly 59-62% of "
+        "that same population ground_clutter or biological in every scan. "
+        "Cause: 121-132 spurious rotation signatures per clear-air scan (755 "
+        "total across the six scans) seed protection rule 2 (rotation "
+        "collocation in src/qc/protection.py), which rule 3 "
+        "(connected-component expansion) then spreads across whole "
+        "connected regions of the clutter/biological field -- overriding "
+        "nearly all of the classifier's judgement before it reaches the "
+        "advisory output. This is a known defect in the pre-existing shear "
+        "detector (src/velocity.py detect_rotation_signatures / "
+        "_detect_shear_single_sweep), not in the classifier or in the "
+        "advisory logic. Now that flagging carries no deletion risk, fixing "
+        "the shear detector is safe to do independently of classifier "
+        "accuracy -- exactly the decoupling the amendment intended. "
+        "strict=True: this test will fail loudly -- signaling the defect is "
+        "fixed -- the day rejected_frac_ge20 actually exceeds "
         f"{MIN_GE20_REJECTED_FRACTION:.0%}."
     ),
 )
@@ -563,7 +586,7 @@ def test_measure_qc_effectiveness_gap(measurements):
         classified_frac = (
             float(np.count_nonzero(m.nonmet_mask)) / n_valid if n_valid else 0.0
         )
-        rejected_frac = m.report.rejected_fraction
+        rejected_frac = m.report.advisory_fraction
         classified_frac_ge20 = (
             float(m.n_nonmet_ge20) / m.n_ge20 if m.n_ge20 else 0.0
         )

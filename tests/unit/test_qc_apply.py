@@ -31,15 +31,28 @@ def _sweep(**overrides) -> SweepData:
 
 
 def test_clean_precipitation_survives_quality_control():
-    filtered, rejected, report = apply_quality_control(_sweep(), [])
+    filtered, advisory, report = apply_quality_control(_sweep(), [])
     assert np.isfinite(filtered.reflectivity).all()
-    assert not rejected.mask.any()
-    assert report.rejected_fraction == 0.0
+    assert not advisory.mask.any()
+    assert report.advisory_fraction == 0.0
 
 
-def test_clutter_is_removed_from_the_filtered_field():
+def test_reflectivity_is_never_modified_by_quality_control():
+    """2026-08-26 amendment: quality control classifies but never deletes.
+
+    Formerly `test_clutter_is_removed_from_the_filtered_field`, which
+    asserted the opposite of the current contract (that flagged gates became
+    NaN in the filtered field). That behavior no longer exists by design --
+    Proof 4 found protection was the only thing standing between the
+    classifier and silently deleting real tornado debris, so nothing is
+    removed from reflectivity any more, ever. This test asserts the new
+    invariant directly: `apply_quality_control`'s output reflectivity is
+    byte-for-byte identical to the input, even on a field with heavy,
+    confidently-classified clutter.
+    """
     rng = np.random.default_rng(3)
     shape = (36, 40)
+    original_reflectivity = np.clip(rng.normal(35.0, 12.0, shape), None, 45.0)
     sweep = _sweep(
         # Clipped below PROTECTED_MIN_DBZ (50.0): this fixture has no NaN
         # gaps anywhere, so protected_mask's connected-component rule 3
@@ -47,57 +60,70 @@ def test_clutter_is_removed_from_the_filtered_field():
         # sample above 50 dBZ (near-certain across 1440 draws) would
         # therefore protect the entire grid rather than just clutter-like
         # gates, defeating the point of this test. See task-12-report.md.
-        reflectivity=np.clip(rng.normal(35.0, 12.0, shape), None, 45.0),
+        reflectivity=original_reflectivity.copy(),
         rhohv=np.full(shape, 0.6),
         zdr=rng.normal(0.0, 3.0, shape),
     )
-    filtered, rejected, report = apply_quality_control(
+    filtered, advisory, report = apply_quality_control(
         sweep, [], velocity=np.zeros(shape)
     )
-    assert rejected.mask.any()
-    assert report.rejected_fraction > 0.0
-    assert np.isnan(filtered.reflectivity[rejected.mask]).all()
+    # The advisory mechanism still works -- gates are still classified and
+    # would still be flagged -- but nothing is actually removed.
+    assert advisory.mask.any()
+    assert report.advisory_fraction > 0.0
+    assert np.array_equal(filtered.reflectivity, original_reflectivity)
+    assert np.isfinite(filtered.reflectivity).all()
 
 
-def test_rejected_gates_retain_reasons():
+def test_flagged_gates_retain_reasons():
     rng = np.random.default_rng(4)
     shape = (36, 40)
     sweep = _sweep(
-        # See clipping note in test_clutter_is_removed_from_the_filtered_field.
+        # See clipping note in test_reflectivity_is_never_modified_by_quality_control.
         reflectivity=np.clip(rng.normal(35.0, 12.0, shape), None, 45.0),
         rhohv=np.full(shape, 0.6),
         zdr=rng.normal(0.0, 3.0, shape),
     )
-    _filtered, rejected, _report = apply_quality_control(
+    _filtered, advisory, _report = apply_quality_control(
         sweep, [], velocity=np.zeros(shape)
     )
-    reasons = set(rejected.reasons[rejected.mask].tolist())
+    reasons = set(advisory.reasons[advisory.mask].tolist())
     assert reasons
     assert GateClass.PRECIPITATION not in reasons
 
 
-def test_protected_gates_are_never_rejected():
+def test_protected_gates_are_never_flagged():
+    """Protection no longer prevents deletion (nothing is ever deleted), but
+    it still exempts gates from the advisory `flagged` mask -- this is what
+    the clutter-persistence and severe-case proofs rely on to compute a
+    meaningful advisory signal. The finite-reflectivity assertion is now a
+    trivial invariant (true for every gate regardless of protection, per
+    test_reflectivity_is_never_modified_by_quality_control) and is kept only
+    to document that fact explicitly at the protected gate too.
+    """
     shape = (36, 40)
     reflectivity = np.full(shape, 20.0)
     reflectivity[10, 10] = 62.0
     sweep = _sweep(reflectivity=reflectivity, rhohv=np.full(shape, 0.5))
-    filtered, rejected, _report = apply_quality_control(
+    filtered, advisory, _report = apply_quality_control(
         sweep, [], velocity=np.zeros(shape)
     )
-    assert not rejected.mask[10, 10]
+    assert not advisory.mask[10, 10]
     assert np.isfinite(filtered.reflectivity[10, 10])
 
 
-def test_hail_gate_is_never_rejected():
+def test_hail_gate_is_never_flagged():
     """Mutation-gap test: with NON_METEOROLOGICAL_CLASSES = (ground_clutter,
     biological) this must hold. If hail were ever added to that tuple, this
     is the only test in the suite that would catch it -- none of the other
     fixtures produce a classifier-confirmed hail gate that is not already
     shielded by protected_mask's own >=50 dBZ rule, so they cannot
     distinguish "hail is protected via rule 1" from "hail is simply never a
-    rejection candidate." This gate sits at 49 dBZ, deliberately below
+    flagging candidate." This gate sits at 49 dBZ, deliberately below
     PROTECTED_MIN_DBZ (50.0), so protected_mask contributes nothing here and
-    only NON_METEOROLOGICAL_CLASSES decides the outcome.
+    only NON_METEOROLOGICAL_CLASSES decides the outcome. (Since the
+    2026-08-26 amendment, no gate of any class is ever actually removed --
+    this test is about the advisory mask, not deletion.)
     """
     shape = (36, 40)
     reflectivity = np.full(shape, 20.0)
@@ -108,26 +134,28 @@ def test_hail_gate_is_never_rejected():
     rhohv[4:8, 4:8] = 0.9
     sweep = _sweep(reflectivity=reflectivity, zdr=zdr, rhohv=rhohv)
 
-    filtered, rejected, _report = apply_quality_control(
+    filtered, advisory, _report = apply_quality_control(
         sweep, [], velocity=np.zeros(shape)
     )
 
     from src.qc.classifier import CLASS_CODES
 
     assert filtered.gate_classification[5, 5] == CLASS_CODES[GateClass.HAIL]
-    assert not rejected.mask[5, 5]
+    assert not advisory.mask[5, 5]
     assert np.isfinite(filtered.reflectivity[5, 5])
 
 
-def test_debris_gate_is_never_rejected():
-    """Mirrors test_hail_gate_is_never_rejected. Debris is the tornado
-    signature -- the single most important class that must never be deleted
-    by quality control. A grid search over classify_gates confirmed a 4x4
-    block at reflectivity 49.0 dBZ / zdr 0.0 / rhohv 0.7 is classified
+def test_debris_gate_is_never_flagged():
+    """Mirrors test_hail_gate_is_never_flagged. Debris is the tornado
+    signature -- the single most important class that must never be
+    condemned by quality control. A grid search over classify_gates confirmed
+    a 4x4 block at reflectivity 49.0 dBZ / zdr 0.0 / rhohv 0.7 is classified
     'debris' with confidence 0.85, and is NOT protected (max reflectivity in
     the whole fixture is 49 dBZ, deliberately below PROTECTED_MIN_DBZ =
     50.0, and there is no rotation signature), so protected_mask contributes
     nothing here and only NON_METEOROLOGICAL_CLASSES decides the outcome.
+    (Since the 2026-08-26 amendment, no gate of any class is ever actually
+    removed -- this test is about the advisory mask, not deletion.)
     """
     shape = (36, 40)
     reflectivity = np.full(shape, 20.0)
@@ -138,14 +166,14 @@ def test_debris_gate_is_never_rejected():
     rhohv[4:8, 4:8] = 0.7
     sweep = _sweep(reflectivity=reflectivity, zdr=zdr, rhohv=rhohv)
 
-    filtered, rejected, _report = apply_quality_control(
+    filtered, advisory, _report = apply_quality_control(
         sweep, [], velocity=np.zeros(shape)
     )
 
     from src.qc.classifier import CLASS_CODES
 
     assert filtered.gate_classification[5, 5] == CLASS_CODES[GateClass.DEBRIS]
-    assert not rejected.mask[5, 5]
+    assert not advisory.mask[5, 5]
     assert np.isfinite(filtered.reflectivity[5, 5])
 
 

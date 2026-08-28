@@ -193,6 +193,11 @@ def storm_object_to_feature(scan: BufferedScan, obj: DetectedObject) -> dict[str
         "max_inbound_ms": getattr(obj, "max_inbound_ms", None),
         "max_outbound_ms": getattr(obj, "max_outbound_ms", None),
         "layers": [layer.__dict__ for layer in obj.layers],
+        # QC class composition (precipitation/ground_clutter/biological/hail/
+        # debris/unknown fractions). Quality control no longer deletes echo
+        # (2026-08-26 amendment), so this is how Audiom and the speech layer
+        # tell a mostly-clutter polygon apart from a mostly-precipitation one.
+        "class_fractions": dict(getattr(obj, "class_fractions", None) or {}),
     }
     return {
         "type": "Feature",

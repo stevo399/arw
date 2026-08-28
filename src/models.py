@@ -39,6 +39,11 @@ class RainObject(BaseModel):
     max_inbound_ms: float | None = None
     max_outbound_ms: float | None = None
     rotation_strength: str | None = None
+    # Fraction of this object's gates in each QC class (precipitation,
+    # ground_clutter, biological, hail, debris, unknown). Quality control no
+    # longer deletes echo (2026-08-26 amendment), so this is how a consumer
+    # tells a mostly-clutter object apart from a mostly-precipitation one.
+    class_fractions: dict[str, float] = Field(default_factory=dict)
 
 
 class VelocityRegionModel(BaseModel):

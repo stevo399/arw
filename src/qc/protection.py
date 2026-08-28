@@ -7,6 +7,13 @@ anything plausibly severe survives quality control.
 
 Erring toward over-reporting is deliberate: a false storm is recoverable, a
 deleted tornado is not.
+
+Amendment, 2026-08-26: `apply_quality_control` no longer deletes any echo at
+all, protected or not, so "discard"/"never discard" below now describes
+exemption from the ADVISORY flag `apply_quality_control` computes, not actual
+removal. `protected_mask` itself is unchanged -- it remains the input that
+decides which classifier-flagged gates are excluded from that advisory
+signal.
 """
 
 import numpy as np

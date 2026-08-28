@@ -310,7 +310,7 @@ def test_ingest_detects_rotation_before_quality_control():
     not just that something non-empty exists.
     """
     from src.preprocess import ScanQuality
-    from src.qc.report import RejectedEcho
+    from src.qc.report import EchoAdvisory
 
     mock_ref = _make_reflectivity_data(np.nan)
     sentinel_rotation = [object()]
@@ -328,7 +328,7 @@ def test_ingest_detects_rotation_before_quality_control():
         score=1.0, finite_fraction=1.0, removed_speckle_pixels=0,
         removed_speckle_fraction=0.0, flags=[],
     )
-    fake_rejected = RejectedEcho(mask=np.zeros((360, 500), dtype=bool), reasons=np.full((360, 500), "", dtype=object))
+    fake_advisory = EchoAdvisory(mask=np.zeros((360, 500), dtype=bool), reasons=np.full((360, 500), "", dtype=object))
 
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
@@ -337,7 +337,7 @@ def test_ingest_detects_rotation_before_quality_control():
          patch("src.server.detect_rotation_signatures", return_value=sentinel_rotation) as mock_detect, \
          patch(
              "src.server.preprocess_sweep",
-             return_value=(mock_ref, fake_quality, fake_rejected),
+             return_value=(mock_ref, fake_quality, fake_advisory),
          ) as mock_preprocess:
         resp = client.get("/objects/KTLX")
 

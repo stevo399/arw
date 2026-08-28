@@ -48,6 +48,14 @@ class DetectedObject:
     max_inbound_ms: float | None = None
     max_outbound_ms: float | None = None
     rotation: "RotationSignature | None" = None
+    # Fraction of this object's gates in each QC class (precipitation,
+    # ground_clutter, biological, hail, debris, unknown). Since the
+    # 2026-08-26 amendment, quality control no longer deletes echo, so an
+    # object can be made mostly of clutter or biological gates and still
+    # form -- this is how a consumer tells that object apart from one that is
+    # mostly precipitation. Empty when gate_classification was not supplied
+    # to compute_object_properties (e.g. legacy/synthetic callers).
+    class_fractions: dict[str, float] = field(default_factory=dict)
 
 
 def classify_intensity(dbz: float) -> str:
@@ -107,6 +115,29 @@ def _range_bin_areas_km2(
     return gate_areas_km2(azimuths, ranges_m, elevation_deg)
 
 
+def _object_class_fractions(
+    obj_mask: np.ndarray, gate_classification: np.ndarray | None
+) -> dict[str, float]:
+    """Fraction of an object's gates in each QC class.
+
+    Returns {} when gate_classification is not available, so a consumer can
+    tell "no classification data" apart from an (impossible) all-zero
+    fraction map, rather than silently reporting misleading zeros.
+    """
+    if gate_classification is None:
+        return {}
+    from src.qc.classifier import CODE_TO_CLASS
+
+    codes = np.asarray(gate_classification)[obj_mask]
+    total = float(codes.size)
+    if total == 0:
+        return {}
+    return {
+        name: float(np.count_nonzero(codes == code)) / total
+        for code, name in CODE_TO_CLASS.items()
+    }
+
+
 def compute_object_properties(
     obj_mask: np.ndarray,
     reflectivity: np.ndarray,
@@ -117,6 +148,7 @@ def compute_object_properties(
     object_id: int,
     elevation_deg: float = 0.5,
     elevations: np.ndarray | None = None,
+    gate_classification: np.ndarray | None = None,
 ) -> "DetectedObject | None":
     """Compute properties for a single detected object. Returns None if too small.
 
@@ -125,6 +157,11 @@ def compute_object_properties(
     `elevation_deg` for georeferencing the centroid -- see
     `geometry.gate_coordinates`'s docstring. When absent, `elevation_deg`
     (the nominal sweep angle) is used for every centroid instead.
+
+    `gate_classification`, if given, is the sweep's QC classification array
+    (co-registered with `reflectivity`) and is used to populate the returned
+    object's `class_fractions`. Absent by default so existing/synthetic
+    callers that never ran quality control keep working unchanged.
     """
     az_indices, rng_indices = np.where(obj_mask)
     if len(az_indices) == 0:
@@ -202,6 +239,7 @@ def compute_object_properties(
         peak_label=peak_label,
         area_km2=round(total_area_km2, 2),
         layers=layers,
+        class_fractions=_object_class_fractions(obj_mask, gate_classification),
     )
 
 
@@ -390,11 +428,18 @@ def detect_objects_with_grid(
     radar_lon: float,
     elevation_deg: float = 0.5,
     elevations: np.ndarray | None = None,
+    gate_classification: np.ndarray | None = None,
 ) -> DetectionResult:
     """Detect precipitation objects and return labeled grid + masks for tracking.
 
     Same as detect_objects but also returns the scipy labeled grid and
     per-object boolean masks needed for overlap-based tracking.
+
+    `gate_classification`, if given, is forwarded to `compute_object_properties`
+    so each returned object carries its QC class composition (see
+    `DetectedObject.class_fractions`). Detection itself is unaffected by
+    classification -- since the 2026-08-26 amendment `reflectivity` here is
+    always the full, unfiltered field.
     """
     valid = ~np.isnan(reflectivity) & (reflectivity >= MIN_DBZ_THRESHOLD)
     # No structure argument => 4-connectivity, preserved from the original
@@ -420,6 +465,7 @@ def detect_objects_with_grid(
                 object_id=next_object_id,
                 elevation_deg=elevation_deg,
                 elevations=elevations,
+                gate_classification=gate_classification,
             )
             if obj is None:
                 continue
@@ -448,6 +494,7 @@ def detect_objects(
     radar_lon: float,
     elevation_deg: float = 0.5,
     elevations: np.ndarray | None = None,
+    gate_classification: np.ndarray | None = None,
 ) -> list[DetectedObject]:
     """Detect precipitation objects from reflectivity data.
     Returns list of DetectedObject sorted by peak_dbz descending.
@@ -460,5 +507,6 @@ def detect_objects(
         radar_lon=radar_lon,
         elevation_deg=elevation_deg,
         elevations=elevations,
+        gate_classification=gate_classification,
     )
     return result.objects

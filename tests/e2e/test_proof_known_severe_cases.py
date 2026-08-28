@@ -275,14 +275,15 @@ class CaseMeasurement:
             else float("nan")
         )
 
-        # (i) FULL PIPELINE: apply_quality_control (with protection) + speckle
-        # removal, exactly as production code runs it.
-        filtered, quality, rejected = preprocess_sweep(
+        # (i) FULL PIPELINE: apply_quality_control (classify only, per the
+        # 2026-08-26 amendment -- nothing is deleted) + speckle removal,
+        # exactly as production code runs it.
+        filtered, quality, advisory = preprocess_sweep(
             sweep, rotation_signatures, velocity=aligned_velocity
         )
         self.filtered = filtered
         self.quality = quality
-        self.rejected = rejected
+        self.advisory = advisory
 
         filtered_lat, filtered_lon = gate_coordinates(
             filtered.azimuths, filtered.ranges_m, filtered.elevation_angle,
@@ -313,7 +314,19 @@ def measurements():
 @pytest.mark.parametrize("case", KNOWN_CASES, ids=lambda c: c.name)
 def test_hazard_echo_survives_quality_control(case: SevereCase, measurements):
     """(i) Echo at the confirmed event location must not be removed by the
-    full pipeline (classification + protection + speckle removal)."""
+    full pipeline (classification + protection + speckle removal).
+
+    Under the 2026-08-26 amendment this is a weaker claim than it used to be:
+    `apply_quality_control` itself never removes anything from any gate any
+    more, protected or not, so this assertion can now only fail via speckle
+    removal (the one remaining step in `preprocess_sweep` that can modify
+    reflectivity). It is kept -- rather than deleted as vacuous -- because it
+    still guards a real invariant: that despeckling does not erase intense,
+    real-world hazard echo. What it no longer demonstrates is that protection
+    specifically is what saves this echo; see
+    test_protection_margin_at_event_location's updated docstring for that
+    distinction.
+    """
     m = measurements[case.name]
     print(f"\n{case.name}: {int(np.count_nonzero(m.surviving))} surviving gates "
           f"within {SEARCH_RADIUS_KM} km of ({case.event_lat}, {case.event_lon})")
@@ -394,11 +407,18 @@ def test_protection_margin_at_event_location(case: SevereCase, measurements):
     """(iii) Quantify the safety margin: what fraction of event-location
     gates would protected_mask save if the classifier condemned them all.
 
-    This is what actually explains why (i) passes despite (ii) failing.
-    Measuring it (rather than assuming it) is the point -- a margin that
-    happened to be, say, 40% would mean protection is not actually a
-    complete safety net for this case, and (i) passing would need
-    re-examining rather than being taken as reassurance.
+    Before the 2026-08-26 amendment, this margin was what actually explained
+    why (i) passed despite (ii) failing -- protection was the only thing
+    standing between the classifier's judgement and deletion. That is no
+    longer the mechanism: (i) now passes unconditionally with respect to QC,
+    because apply_quality_control never deletes anything regardless of this
+    margin. What this test still measures is real and worth keeping: it is
+    the advisory-flagging safety margin -- if ARW (or a future consumer)
+    ever acts on the advisory/class_fractions signal to filter or de-weight
+    echo, this margin is what would determine whether that filtering could
+    have silently discarded this hazard. A margin that dropped to, say, 40%
+    would mean any such downstream filtering built on the advisory signal
+    would need re-examining.
     """
     m = measurements[case.name]
     print(

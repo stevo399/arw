@@ -208,6 +208,62 @@ def test_detect_objects_with_grid_returns_result():
     assert all(isinstance(node, ThresholdHierarchyNode) for node in result.object_hierarchy[1])
 
 
+def test_detected_object_class_fractions_absent_without_classification():
+    """No gate_classification supplied -> class_fractions is the empty dict,
+    not a misleading all-zero map. Guards legacy/synthetic callers (most of
+    this test file, and every caller predating the 2026-08-26 amendment)
+    that never ran quality control."""
+    reflectivity = np.full((360, 500), np.nan)
+    reflectivity[85:95, 195:205] = 45.0
+    azimuths = np.linspace(0, 359, 360)
+    ranges_m = np.linspace(2000, 250000, 500)
+    result = detect_objects_with_grid(
+        reflectivity=reflectivity,
+        azimuths=azimuths,
+        ranges_m=ranges_m,
+        radar_lat=35.0,
+        radar_lon=-97.0,
+    )
+    assert len(result.objects) == 1
+    assert result.objects[0].class_fractions == {}
+
+
+def test_detected_object_carries_class_composition():
+    """THE POINT OF THE 2026-08-26 amendment: an object made mostly of
+    ground-clutter-classified gates must be distinguishable from one made
+    mostly of precipitation-classified gates, by reading the object alone.
+
+    A 10x10 block of reflectivity forms one connected object (all gates
+    >= MIN_DBZ_THRESHOLD). 70 of its 100 gates are classified ground_clutter,
+    30 precipitation -- class_fractions must reflect that exact composition,
+    not just note that the object is non-empty.
+    """
+    from src.qc.classifier import CLASS_CODES
+    from src.qc.parameters import GateClass
+
+    reflectivity = np.full((360, 500), np.nan)
+    reflectivity[100:110, 200:210] = 45.0
+    gate_classification = np.zeros((360, 500), dtype=np.int8)
+    gate_classification[100:107, 200:210] = CLASS_CODES[GateClass.GROUND_CLUTTER]  # 70 gates
+    gate_classification[107:110, 200:210] = CLASS_CODES[GateClass.PRECIPITATION]  # 30 gates
+    azimuths = np.linspace(0, 359, 360)
+    ranges_m = np.linspace(2000, 250000, 500)
+    result = detect_objects_with_grid(
+        reflectivity=reflectivity,
+        azimuths=azimuths,
+        ranges_m=ranges_m,
+        radar_lat=35.0,
+        radar_lon=-97.0,
+        gate_classification=gate_classification,
+    )
+    assert len(result.objects) == 1
+    fractions = result.objects[0].class_fractions
+    assert fractions[GateClass.GROUND_CLUTTER] == pytest.approx(0.7)
+    assert fractions[GateClass.PRECIPITATION] == pytest.approx(0.3)
+    assert fractions[GateClass.BIOLOGICAL] == 0.0
+    assert sum(fractions.values()) == pytest.approx(1.0)
+
+
 def test_detect_objects_with_grid_masks_match_objects():
     reflectivity = np.full((360, 500), np.nan)
     reflectivity[10:20, 50:60] = 35.0

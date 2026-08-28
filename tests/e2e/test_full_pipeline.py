@@ -7,6 +7,7 @@ and exercise the entire pipeline: sites → scan → objects → summary.
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 import numpy as np
+import pytest
 from src.server import app
 from src.parser import SweepData
 
@@ -58,25 +59,29 @@ def test_full_pipeline_sites_to_summary():
         resp = client.get("/objects/KTLX")
     assert resp.status_code == 200
     data = resp.json()
-    # QC is now wired into the pipeline (Task 13). This fixture has no
-    # rhohv/zdr/velocity, so the classifier falls back to reflectivity and
-    # texture alone. Storm 1 peaks at 50 dBZ, at/above the hard protection
-    # floor (PROTECTED_MIN_DBZ = 50.0 in src/qc/protection.py), so protection
-    # rule 1 plus rule 3 (whole connected component) protects it entirely and
-    # it survives as one object. Storm 2 peaks at only 42 dBZ, below that
-    # floor, and has no rotation signature to protect it either -- its
-    # one-gate-thick boundary ring between the 30 dBZ shell and 42 dBZ core
-    # (a sharp step change) scores highest for "biological" on texture, and
-    # gets rejected. That ring completely encircles the core, splitting storm
-    # 2 into two disconnected components: an isolated 42 dBZ core and the
-    # surrounding shell fragment. Total objects: 1 (storm 1) + 2 (storm 2) = 3.
-    assert data["object_count"] == 3
+    # QC is wired into the pipeline (Task 13), and under the 2026-08-26
+    # amendment ("quality control flags, it does not delete") it classifies
+    # every gate but never removes any echo -- gate_classification is
+    # attached and advisory-flagged gates are reported, but nothing is set
+    # to NaN. Before the amendment, storm 2's one-gate-thick boundary ring
+    # (a sharp 30->42 dBZ step that scores highest for "biological" on
+    # texture, with this fixture carrying no rhohv/zdr/velocity so the
+    # classifier falls back to reflectivity and texture alone) used to be
+    # deleted from the filtered field, splitting storm 2 into two
+    # disconnected components. That ring now survives in the reflectivity
+    # detection actually sees, so storm 2 stays a single connected object.
+    # Total objects: 1 (storm 1) + 1 (storm 2) = 2.
+    assert data["object_count"] == 2
     assert data["objects"][0]["peak_dbz"] >= data["objects"][1]["peak_dbz"]
     strongest = data["objects"][0]
     layer_labels = [l["label"] for l in strongest["layers"]]
     assert "light precipitation" in layer_labels
     assert "moderate precipitation" in layer_labels
     assert "intense precipitation" in layer_labels
+    # class_fractions must reach the API surface (2026-08-26 amendment) and
+    # sum to ~1 for a real, classified object.
+    assert strongest["class_fractions"]
+    assert sum(strongest["class_fractions"].values()) == pytest.approx(1.0, abs=1e-6)
 
     # Step 3: Get summary for KTLX
     with patch("src.server.fetch_scan", return_value="/fake/path"), \
@@ -86,7 +91,7 @@ def test_full_pipeline_sites_to_summary():
         resp = client.get("/summary/KTLX")
     assert resp.status_code == 200
     summary = resp.json()
-    assert "3 precipitation objects" in summary["text"]
+    assert "2 precipitation objects" in summary["text"]
     assert "intense precipitation" in summary["text"]
     assert "Oklahoma City" in summary["text"]
 
