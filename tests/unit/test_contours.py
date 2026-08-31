@@ -6,6 +6,7 @@ from shapely.ops import unary_union
 
 from src.contours import (
     DEFAULT_SIMPLIFY_M,
+    _repair_if_invalid,
     contour_field,
     contour_mask,
     exclusive_bands,
@@ -225,3 +226,54 @@ def test_exclusive_band_has_a_hole_where_the_next_band_sits(sweep):
 def test_highest_band_is_open_ended(sweep):
     bands = exclusive_bands(_ramp_field(sweep), [20.0, 30.0], sweep)
     assert (30.0, float("inf")) in bands
+
+
+def test_contour_field_all_nan_returns_multipolygon(sweep):
+    """No data anywhere must still come back as MultiPolygon, not GeometryCollection.
+
+    unary_union of an all-empty piece list returns GEOMETRYCOLLECTION EMPTY,
+    not MULTIPOLYGON EMPTY. Still empty (no invented geometry), but the wrong
+    type would serialise to a different GeoJSON "type" for downstream
+    consumers than `exclusive_bands` produces for the same input.
+    """
+    field = np.full(np.asarray(sweep.reflectivity).shape, np.nan)
+    result = contour_field(field, [20.0, 30.0, 40.0], sweep)
+    for level, region in result.items():
+        assert region.geom_type == "MultiPolygon", f"level {level} was {region.geom_type}"
+        assert region.is_empty
+
+
+class _FakeInvalidGeom:
+    """A minimal stand-in for a shapely geometry that is invalid, reports a
+    non-zero pre-repair area, and collapses to empty under buffer(0).
+
+    Neither this task nor the prior review round could construct a real
+    difference/simplify result that actually exercises this path on live
+    radar data, so the warning path is exercised directly against a
+    contrived input satisfying `_repair_if_invalid`'s three preconditions
+    (invalid, non-zero area, buffer(0) empties it) rather than against real
+    geometry.
+    """
+
+    is_valid = False
+    area = 1.23456
+
+    def buffer(self, distance):
+        return _FakeEmptyGeom()
+
+
+class _FakeEmptyGeom:
+    is_empty = True
+
+
+def test_repair_if_invalid_warns_when_buffer_zero_empties_real_content(caplog):
+    """A band that had real area before repair must not vanish in silence."""
+    with caplog.at_level("WARNING", logger="src.contours"):
+        result = _repair_if_invalid(_FakeInvalidGeom(), (20.0, 30.0))
+
+    assert result.is_empty
+    assert len(caplog.records) == 1
+    message = caplog.records[0].getMessage()
+    assert caplog.records[0].levelname == "WARNING"
+    assert "(20.0, 30.0)" in message
+    assert "1.23456" in message

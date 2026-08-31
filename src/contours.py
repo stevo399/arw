@@ -9,6 +9,8 @@ spacing can match a radar at both 20 km and 200 km, and inventing detail at
 range is the worse failure for a user exploring a shape by touch.
 """
 
+import logging
+
 import numpy as np
 from contourpy import contour_generator
 from shapely import coverage_simplify
@@ -19,6 +21,8 @@ from pyart.core.transforms import (
 )
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.ops import transform, unary_union
+
+logger = logging.getLogger(__name__)
 
 # The radar's finest real resolution: one range gate is 250 m deep. Simplifying
 # below this would discard measurement; above it would invent detail.
@@ -233,6 +237,32 @@ def _contour_at_level_raw(field: np.ndarray, level: float, sweep):
     return MultiPolygon([merged]) if merged.geom_type == "Polygon" else merged
 
 
+def _repair_if_invalid(geom, label):
+    """Return `geom` unchanged if valid; otherwise repair it with buffer(0).
+
+    buffer(0) can turn a self-intersecting geometry into a clean one, but for
+    a genuinely degenerate case it can also collapse the geometry to nothing.
+    Silently returning that empty result would mean a band vanishes and the
+    user is never told there was weather there. `is_empty` is not checked
+    here because an already-empty band isn't a repair problem -- only a
+    non-empty input that repair turns empty is.
+    """
+    if geom.is_valid:
+        return geom
+    try:
+        pre_repair_area = geom.area
+    except Exception:
+        pre_repair_area = float("nan")
+    repaired = geom.buffer(0)
+    if pre_repair_area > 0 and repaired.is_empty:
+        logger.warning(
+            "buffer(0) repair emptied band %s: pre-repair area was %.6g "
+            "(this band's weather will not appear in the output)",
+            label, pre_repair_area,
+        )
+    return repaired
+
+
 def _raw_bands(field: np.ndarray, ordered_levels, sweep):
     """Exact, unsimplified exclusive bands between consecutive levels.
 
@@ -254,8 +284,7 @@ def _raw_bands(field: np.ndarray, ordered_levels, sweep):
         region = cumulative_raw[lower]
         if upper != float("inf"):
             region = region.difference(cumulative_raw[upper])
-        if not region.is_valid:
-            region = region.buffer(0)
+        region = _repair_if_invalid(region, (lower, upper))
         bands[(lower, upper)] = region
     return bands
 
@@ -302,8 +331,7 @@ def _simplify_bands_as_coverage(bands: dict, sweep, simplify_m: float) -> dict:
         # applied identically, per band, to output that was already
         # edge-matched going in.
         back = transform(to_degrees, geom)
-        if not back.is_valid:
-            back = back.buffer(0)
+        back = _repair_if_invalid(back, keys[i])
         if not back.is_empty:
             result[keys[i]] = MultiPolygon([back]) if back.geom_type == "Polygon" else back
     return result
@@ -345,5 +373,16 @@ def contour_field(field: np.ndarray, levels, sweep, simplify_m: float = DEFAULT_
     for index, level in enumerate(ordered):
         pieces = [simplified_bands[key] for key in band_keys[index:]]
         merged = unary_union(pieces)
-        cumulative[level] = MultiPolygon([merged]) if merged.geom_type == "Polygon" else merged
+        # unary_union of an all-empty input list returns GEOMETRYCOLLECTION
+        # EMPTY, not MULTIPOLYGON EMPTY (e.g. an all-NaN field, or a level
+        # above the field's maximum). Still empty, so no invented geometry,
+        # but the wrong type would serialise to the wrong GeoJSON "type" for
+        # downstream consumers -- normalise it the same way `exclusive_bands`
+        # already does for its own empty case.
+        if merged.is_empty:
+            cumulative[level] = MultiPolygon()
+        elif merged.geom_type == "Polygon":
+            cumulative[level] = MultiPolygon([merged])
+        else:
+            cumulative[level] = merged
     return cumulative

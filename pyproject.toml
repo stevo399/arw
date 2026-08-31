@@ -13,7 +13,11 @@ dependencies = [
     "nexradaws>=2.0.0",
     "numpy>=2.4.4",
     "scipy>=1.17.1",
-    "shapely>=2.0",
+    # 2.1 floor is load-bearing: src/contours.py calls shapely.coverage_simplify,
+    # added in 2.1.0 and requiring GEOS >= 3.12. It is what keeps exclusive
+    # intensity bands edge-matched (no gap/overlap) after simplification --
+    # do not lower this thinking it is an arbitrary minimum.
+    "shapely>=2.1.0",
     "uvicorn>=0.44.0",
 ]
 
