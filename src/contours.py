@@ -24,9 +24,13 @@ from shapely.ops import transform, unary_union
 
 logger = logging.getLogger(__name__)
 
-# The radar's finest real resolution: one range gate is 250 m deep. Simplifying
-# below this would discard measurement; above it would invent detail.
-DEFAULT_SIMPLIFY_M = 250.0
+# Douglas-Peucker simplification with tolerance t may displace any vertex by
+# up to t. A tolerance equal to the full 250 m gate depth can therefore
+# displace a vertex enough to swallow a gate-wide notch whole -- the
+# displacement bound has to stay a fraction of the gate, not equal to it.
+# 100 m keeps displacement under half a gate while still discarding
+# sub-gate jitter that isn't real structure.
+DEFAULT_SIMPLIFY_M = 100.0
 
 # Rows of wrap-around padding added before contouring so a shape crossing due
 # north is not severed by the array edge. Marching squares needs one row of
