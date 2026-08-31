@@ -9,6 +9,7 @@ from src.map_layer import (
     build_storm_centroid_geojson,
     build_storm_geojson,
     build_storm_intensity_geojson,
+    object_geometry,
 )
 from src.parser import SweepData
 
@@ -56,7 +57,10 @@ def test_build_storm_geojson_returns_polygon_features():
     assert geojson["type"] == "FeatureCollection"
     assert len(geojson["features"]) == 1
     feature = geojson["features"][0]
-    assert feature["geometry"]["type"] == "Polygon"
+    # contour_mask always wraps its result in a MultiPolygon (src/contours.py),
+    # even for a single contiguous blob, so this is never bare "Polygon" now
+    # that the shape comes from contouring rather than a convex hull.
+    assert feature["geometry"]["type"] == "MultiPolygon"
     assert feature["properties"]["heat_value"] == 50.0
     assert feature["properties"]["name"] == "Intense precipitation storm 19 miles E"
     assert feature["properties"]["ruleName"] == "Storm polygon"
@@ -74,7 +78,12 @@ def test_build_storm_geojson_returns_polygon_features():
         "type": "number",
     }
     assert geojson["metadata"]["coordinateSystem"] == "standard"
-    ring = feature["geometry"]["coordinates"][0]
+    assert geojson["metadata"]["omittedObjectCount"] == 0
+    # MultiPolygon coordinates are [polygon][ring][point]; a single blob still
+    # contains exactly one polygon component.
+    polygons = feature["geometry"]["coordinates"]
+    assert len(polygons) == 1
+    ring = polygons[0][0]
     assert len(ring) >= 4
     assert ring[0] == ring[-1]
 
@@ -333,3 +342,96 @@ def test_intensity_fill_color_complete_coverage():
             f"'{label}' fell through to default color '{default_color}'. "
             f"This silently changes polygon appearance."
         )
+
+
+def _scan_with_mask(mask: np.ndarray, peak_dbz: float = 50.0) -> BufferedScan:
+    """A BufferedScan whose single object occupies exactly `mask`."""
+    n_rays, n_gates = mask.shape
+    reflectivity = np.where(mask, peak_dbz, np.nan)
+    return BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0),
+        site_id="KTLX",
+        reflectivity_data=SweepData(
+            reflectivity=reflectivity,
+            azimuths=np.linspace(0.0, 359.0, n_rays),
+            ranges_m=np.linspace(20000.0, 60000.0, n_gates),
+            radar_lat=35.3331,
+            radar_lon=-97.2778,
+            elevation_angle=0.5,
+            elevations=np.full(n_rays, 0.5),
+            elevation_angles=[0.5],
+            radar_alt_m=390.0,
+            timestamp="2026-04-10T20:00:00Z",
+        ),
+        detected_objects=[
+            DetectedObject(
+                object_id=1,
+                centroid_lat=35.2,
+                centroid_lon=-96.9,
+                distance_km=30.0,
+                bearing_deg=90.0,
+                peak_dbz=peak_dbz,
+                peak_label="intense precipitation",
+                area_km2=100.0,
+            )
+        ],
+        labeled_grid=mask.astype(int),
+        object_masks={1: mask},
+    )
+
+
+def test_object_geometry_emits_a_polygon_type():
+    mask = np.zeros((60, 60), dtype=bool)
+    mask[20:40, 20:40] = True
+    geometry = object_geometry(_scan_with_mask(mask), _scan_with_mask(mask).detected_objects[0])
+    assert geometry["type"] in ("Polygon", "MultiPolygon")
+
+
+def test_object_geometry_carries_an_interior_ring_for_a_donut():
+    """The convex hull fills this middle in. Walking into the gap would then
+    report a storm that is not there."""
+    mask = np.zeros((60, 60), dtype=bool)
+    mask[15:45, 15:45] = True
+    mask[25:35, 25:35] = False
+
+    scan = _scan_with_mask(mask)
+    geometry = object_geometry(scan, scan.detected_objects[0])
+
+    if geometry["type"] == "Polygon":
+        rings = [geometry["coordinates"]]
+    else:
+        rings = geometry["coordinates"]
+    assert any(len(part) > 1 for part in rings), "no interior ring emitted"
+
+
+def test_object_geometry_keeps_two_blobs_separate():
+    mask = np.zeros((60, 60), dtype=bool)
+    mask[5:15, 5:15] = True
+    mask[40:50, 40:50] = True
+
+    scan = _scan_with_mask(mask)
+    geometry = object_geometry(scan, scan.detected_objects[0])
+
+    assert geometry["type"] == "MultiPolygon"
+    assert len(geometry["coordinates"]) == 2
+
+
+def test_object_geometry_returns_none_rather_than_inventing_a_shape():
+    """The previous implementation drew a square at the centroid when hulling
+    failed, presenting a fabricated shape as measurement.
+
+    An implementation that unconditionally returns None would pass this
+    assertion alone -- so this test also checks, in the same function, that a
+    real mask still comes back as real geometry. That makes the "returns
+    None" claim mean "returns None *only* for the empty case," not "returns
+    None, full stop," without relying on test execution order or on the
+    other three tests in this file to catch a stubbed-out implementation.
+    """
+    empty_mask = np.zeros((60, 60), dtype=bool)
+    empty_scan = _scan_with_mask(empty_mask)
+    assert object_geometry(empty_scan, empty_scan.detected_objects[0]) is None
+
+    real_mask = np.zeros((60, 60), dtype=bool)
+    real_mask[20:40, 20:40] = True
+    real_scan = _scan_with_mask(real_mask)
+    assert object_geometry(real_scan, real_scan.detected_objects[0]) is not None

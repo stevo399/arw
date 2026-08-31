@@ -122,8 +122,11 @@ def test_storm_map_layer_endpoint_returns_geojson_layer():
     assert data["feature_count"] == len(data["geojson"]["features"])
     assert data["feature_count"] == len(data["centroid_geojson"]["features"])
     assert len(data["audiom_geojson"]["features"]) >= data["feature_count"]
-    assert data["geojson"]["features"][0]["geometry"]["type"] == "Polygon"
-    assert data["intensity_geojson"]["features"][0]["geometry"]["type"] == "Polygon"
+    # contour_mask (src/contours.py) always wraps its result in a MultiPolygon,
+    # even for a single contiguous blob, now that storm footprints are
+    # contoured from real echo rather than convex-hulled.
+    assert data["geojson"]["features"][0]["geometry"]["type"] == "MultiPolygon"
+    assert data["intensity_geojson"]["features"][0]["geometry"]["type"] == "MultiPolygon"
     assert data["centroid_geojson"]["features"][0]["geometry"]["type"] == "Point"
     assert data["geojson"]["features"][0]["properties"]["peak_dbz"] == 45.0
 
@@ -156,7 +159,8 @@ def test_storm_map_geojson_endpoint_returns_raw_feature_collection():
     assert data["type"] == "FeatureCollection"
     assert data["metadata"]["mapType"] == "heatmap"
     assert data["metadata"]["currentStat"] == "heat_value"
-    assert data["features"][0]["geometry"]["type"] == "Polygon"
+    # contour_mask always returns a MultiPolygon, even for one contiguous blob.
+    assert data["features"][0]["geometry"]["type"] == "MultiPolygon"
     rule_types = {feature["properties"]["ruleType"] for feature in data["features"]}
     assert "storm_heavy_footprint" in rule_types
     assert "radar_heavy_rain" in rule_types

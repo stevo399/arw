@@ -1,15 +1,12 @@
 from typing import Any
 
 import numpy as np
-from scipy.spatial import ConvexHull, QhullError
+from shapely.geometry import mapping
 
 from src.buffer import BufferedScan
+from src.contours import contour_mask
 from src.detection import DetectedObject, IntensityLayerData, degrees_to_bearing
-from src.geometry import gate_latlon
 from src.summary import km2_to_mi2, km_to_miles
-
-
-MAX_HULL_POINTS = 240
 
 
 def _storm_fill_color(peak_dbz: float) -> str:
@@ -93,74 +90,49 @@ def _timestamp_to_str(timestamp) -> str:
     return str(timestamp)
 
 
-def _sample_mask_points(mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    az_indices, range_indices = np.where(mask)
-    if len(az_indices) <= MAX_HULL_POINTS:
-        return az_indices, range_indices
-    step = max(1, len(az_indices) // MAX_HULL_POINTS)
-    return az_indices[::step], range_indices[::step]
+def object_geometry(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any] | None:
+    """GeoJSON geometry for a detected object, or None if it has no valid shape.
 
-
-def _fallback_square(lon: float, lat: float, area_km2: float) -> list[list[float]]:
-    half_km = max(area_km2 ** 0.5 / 2.0, 0.5)
-    lat_delta = half_km / 111.0
-    lon_delta = half_km / max(111.0 * np.cos(np.radians(lat)), 1.0)
-    return [
-        [round(lon - lon_delta, 6), round(lat - lat_delta, 6)],
-        [round(lon + lon_delta, 6), round(lat - lat_delta, 6)],
-        [round(lon + lon_delta, 6), round(lat + lat_delta, 6)],
-        [round(lon - lon_delta, 6), round(lat + lat_delta, 6)],
-        [round(lon - lon_delta, 6), round(lat - lat_delta, 6)],
-    ]
-
-
-def mask_to_polygon(
-    scan: BufferedScan,
-    mask: np.ndarray,
-    fallback_lon: float,
-    fallback_lat: float,
-    fallback_area_km2: float,
-) -> list[list[float]]:
-    if mask is None or not np.any(mask):
-        return _fallback_square(fallback_lon, fallback_lat, fallback_area_km2)
-
-    az_indices, range_indices = _sample_mask_points(mask)
-    coordinates = []
-    ref = scan.reflectivity_data
-    for az_idx, range_idx in zip(az_indices, range_indices):
-        lat, lon = gate_latlon(
-            azimuth_deg=float(ref.azimuths[az_idx]),
-            range_m=float(ref.ranges_m[range_idx]),
-            elevation_deg=float(ref.elevations[az_idx]),
-            radar_lat=ref.radar_lat,
-            radar_lon=ref.radar_lon,
-        )
-        coordinates.append([float(lon), float(lat)])
-
-    unique = np.unique(np.array(coordinates), axis=0)
-    if len(unique) < 3:
-        return _fallback_square(fallback_lon, fallback_lat, fallback_area_km2)
-
-    try:
-        hull = ConvexHull(unique)
-    except QhullError:
-        return _fallback_square(fallback_lon, fallback_lat, fallback_area_km2)
-
-    ring = [[round(float(unique[idx][0]), 6), round(float(unique[idx][1]), 6)] for idx in hull.vertices]
-    if ring[0] != ring[-1]:
-        ring.append(ring[0])
-    return ring
-
-
-def object_mask_to_polygon(scan: BufferedScan, obj: DetectedObject) -> list[list[float]]:
+    Returns None rather than inventing a placeholder. The previous
+    implementation drew a square at the centroid when hulling failed, which
+    presented a fabricated shape as measurement to a user who explores it by
+    walking its surface.
+    """
     mask = scan.object_masks.get(obj.object_id)
-    return mask_to_polygon(scan, mask, obj.centroid_lon, obj.centroid_lat, obj.area_km2)
+    if mask is None:
+        return None
+    geom = contour_mask(mask, scan.reflectivity_data)
+    if geom.is_empty:
+        return None
+    return mapping(geom)
 
 
-def storm_object_to_feature(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any]:
+def _layer_geometry(
+    scan: BufferedScan, obj: DetectedObject, layer: IntensityLayerData
+) -> dict[str, Any] | None:
+    """GeoJSON geometry for one intensity band within an object, or None.
+
+    Same no-invented-shape contract as `object_geometry`: a band that yields
+    no valid contour (e.g. its mask is empty or the parent object has no
+    mask) is omitted rather than drawn as a fallback shape.
+    """
+    object_mask = scan.object_masks.get(obj.object_id)
+    if object_mask is None:
+        return None
+    reflectivity = scan.reflectivity_data.reflectivity
+    layer_mask = object_mask & ~np.isnan(reflectivity) & (reflectivity >= layer.min_dbz)
+    if layer.max_dbz != float("inf"):
+        layer_mask = layer_mask & (reflectivity < layer.max_dbz)
+    geom = contour_mask(layer_mask, scan.reflectivity_data)
+    if geom.is_empty:
+        return None
+    return mapping(geom)
+
+
+def _storm_properties(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any]:
     rotation = getattr(obj, "rotation", None)
     rotation_strength = rotation.strength if rotation is not None else None
-    properties = {
+    return {
         "object_id": obj.object_id,
         "id": f"{scan.site_id}-{obj.object_id}",
         "name": _storm_name(obj),
@@ -199,14 +171,24 @@ def storm_object_to_feature(scan: BufferedScan, obj: DetectedObject) -> dict[str
         # tell a mostly-clutter polygon apart from a mostly-precipitation one.
         "class_fractions": dict(getattr(obj, "class_fractions", None) or {}),
     }
+
+
+def storm_object_to_feature(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any] | None:
+    """A GeoJSON Feature for this object, or None if it has no valid shape.
+
+    Returning None (rather than a fabricated placeholder) means callers must
+    filter -- see `build_storm_geojson` and `build_storm_audiom_geojson`,
+    which count what they skip so the omission is visible in the layer
+    metadata instead of silently vanishing.
+    """
+    geometry = object_geometry(scan, obj)
+    if geometry is None:
+        return None
     return {
         "type": "Feature",
         "id": obj.object_id,
-        "geometry": {
-            "type": "Polygon",
-            "coordinates": [object_mask_to_polygon(scan, obj)],
-        },
-        "properties": properties,
+        "geometry": geometry,
+        "properties": _storm_properties(scan, obj),
     }
 
 
@@ -214,15 +196,11 @@ def storm_intensity_layer_to_feature(
     scan: BufferedScan,
     obj: DetectedObject,
     layer: IntensityLayerData,
-) -> dict[str, Any]:
-    object_mask = scan.object_masks.get(obj.object_id)
-    if object_mask is None:
-        layer_mask = None
-    else:
-        reflectivity = scan.reflectivity_data.reflectivity
-        layer_mask = object_mask & ~np.isnan(reflectivity) & (reflectivity >= layer.min_dbz)
-        if layer.max_dbz != float("inf"):
-            layer_mask = layer_mask & (reflectivity < layer.max_dbz)
+) -> dict[str, Any] | None:
+    """A GeoJSON Feature for this intensity band, or None if it has no valid shape."""
+    geometry = _layer_geometry(scan, obj, layer)
+    if geometry is None:
+        return None
 
     heat_value = _intensity_heat_value(layer)
     area_mi2 = km2_to_mi2(layer.area_km2)
@@ -268,24 +246,15 @@ def storm_intensity_layer_to_feature(
     return {
         "type": "Feature",
         "id": properties["id"],
-        "geometry": {
-            "type": "Polygon",
-            "coordinates": [
-                mask_to_polygon(
-                    scan,
-                    layer_mask,
-                    obj.centroid_lon,
-                    obj.centroid_lat,
-                    layer.area_km2,
-                )
-            ],
-        },
+        "geometry": geometry,
         "properties": properties,
     }
 
 
 def storm_object_to_centroid_feature(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any]:
-    polygon_feature = storm_object_to_feature(scan, obj)
+    # Deliberately independent of object_geometry: a centroid is known even
+    # for an object whose footprint has no valid contour, and the centroid
+    # layer must not lose that object just because its shape did.
     return {
         "type": "Feature",
         "id": obj.object_id,
@@ -293,7 +262,7 @@ def storm_object_to_centroid_feature(scan: BufferedScan, obj: DetectedObject) ->
             "type": "Point",
             "coordinates": [obj.centroid_lon, obj.centroid_lat],
         },
-        "properties": polygon_feature["properties"],
+        "properties": _storm_properties(scan, obj),
     }
 
 
@@ -317,29 +286,50 @@ def _storm_metadata(name: str = "ARW storm polygons") -> dict[str, Any]:
 
 
 def build_storm_geojson(scan: BufferedScan) -> dict[str, Any]:
+    features = []
+    omitted = 0
+    for obj in scan.detected_objects:
+        feature = storm_object_to_feature(scan, obj)
+        if feature is None:
+            omitted += 1
+            continue
+        features.append(feature)
+    metadata = _storm_metadata()
+    # A detected object with no valid contour (empty or degenerate mask) is
+    # left out of `features` entirely rather than drawn as a placeholder --
+    # this count is how that omission stays visible instead of silent.
+    metadata["omittedObjectCount"] = omitted
     return {
         "type": "FeatureCollection",
-        "metadata": _storm_metadata(),
-        "features": [storm_object_to_feature(scan, obj) for obj in scan.detected_objects],
+        "metadata": metadata,
+        "features": features,
     }
 
 
 def build_storm_intensity_geojson(scan: BufferedScan) -> dict[str, Any]:
     features = []
+    omitted = 0
     for obj in scan.detected_objects:
         for layer in obj.layers:
-            features.append(storm_intensity_layer_to_feature(scan, obj, layer))
+            feature = storm_intensity_layer_to_feature(scan, obj, layer)
+            if feature is None:
+                omitted += 1
+                continue
+            features.append(feature)
+    metadata = _storm_metadata("ARW radar intensity bands")
+    metadata["omittedBandCount"] = omitted
     return {
         "type": "FeatureCollection",
-        "metadata": _storm_metadata("ARW radar intensity bands"),
+        "metadata": metadata,
         "features": features,
     }
 
 
 def build_storm_audiom_geojson(scan: BufferedScan) -> dict[str, Any]:
-    intensity_features = build_storm_intensity_geojson(scan)["features"]
+    intensity_geojson = build_storm_intensity_geojson(scan)
+    footprint_geojson = build_storm_geojson(scan)
     footprint_features = []
-    for feature in build_storm_geojson(scan)["features"]:
+    for feature in footprint_geojson["features"]:
         feature = dict(feature)
         feature["properties"] = {
             **feature["properties"],
@@ -350,10 +340,13 @@ def build_storm_audiom_geojson(scan: BufferedScan) -> dict[str, Any]:
             "soundPriority": 450,
         }
         footprint_features.append(feature)
+    metadata = _storm_metadata("ARW radar reflectivity")
+    metadata["omittedObjectCount"] = footprint_geojson["metadata"]["omittedObjectCount"]
+    metadata["omittedBandCount"] = intensity_geojson["metadata"]["omittedBandCount"]
     return {
         "type": "FeatureCollection",
-        "metadata": _storm_metadata("ARW radar reflectivity"),
-        "features": footprint_features + intensity_features,
+        "metadata": metadata,
+        "features": footprint_features + intensity_geojson["features"],
     }
 
 
