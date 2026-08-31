@@ -1,10 +1,9 @@
 from typing import Any
 
-import numpy as np
-from shapely.geometry import mapping
+from shapely.geometry import MultiPolygon, mapping
 
 from src.buffer import BufferedScan
-from src.contours import contour_mask
+from src.contours import contour_mask, exclusive_bands
 from src.detection import DetectedObject, IntensityLayerData, degrees_to_bearing
 from src.summary import km2_to_mi2, km_to_miles
 
@@ -90,6 +89,23 @@ def _timestamp_to_str(timestamp) -> str:
     return str(timestamp)
 
 
+def _object_footprint(scan: BufferedScan, obj: DetectedObject):
+    """Shapely geometry of this object's own footprint, or None.
+
+    Shared by `object_geometry` (which maps it to GeoJSON) and
+    `_object_bands` (which uses it to clip each intensity band to this
+    object's own silhouette so a band cannot bleed into a neighbouring
+    object at the same intensity).
+    """
+    mask = scan.object_masks.get(obj.object_id)
+    if mask is None:
+        return None
+    geom = contour_mask(mask, scan.reflectivity_data)
+    if geom.is_empty:
+        return None
+    return geom
+
+
 def object_geometry(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any] | None:
     """GeoJSON geometry for a detected object, or None if it has no valid shape.
 
@@ -98,17 +114,77 @@ def object_geometry(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any] |
     presented a fabricated shape as measurement to a user who explores it by
     walking its surface.
     """
-    mask = scan.object_masks.get(obj.object_id)
-    if mask is None:
-        return None
-    geom = contour_mask(mask, scan.reflectivity_data)
-    if geom.is_empty:
+    geom = _object_footprint(scan, obj)
+    if geom is None:
         return None
     return mapping(geom)
 
 
+def _as_multipolygon(geom) -> MultiPolygon:
+    """Coerce a shapely geometry to a MultiPolygon.
+
+    `exclusive_bands` output intersected with an object footprint is
+    ordinarily still Polygon/MultiPolygon, but a boundary-hugging
+    intersection can in principle degenerate into a GeometryCollection
+    holding stray points or lines along with the real area. Those
+    lower-dimensional slivers are dropped here rather than left to trip up
+    downstream GeoJSON consumers that expect only polygonal geometry.
+    """
+    if geom is None or geom.is_empty:
+        return MultiPolygon()
+    if geom.geom_type == "Polygon":
+        return MultiPolygon([geom])
+    if geom.geom_type == "MultiPolygon":
+        return geom
+    if geom.geom_type == "GeometryCollection":
+        parts: list = []
+        for part in geom.geoms:
+            if part.geom_type == "Polygon":
+                parts.append(part)
+            elif part.geom_type == "MultiPolygon":
+                parts.extend(part.geoms)
+        return MultiPolygon(parts)
+    return MultiPolygon()
+
+
+def _object_bands(
+    scan: BufferedScan, obj: DetectedObject
+) -> dict[tuple[float, float], MultiPolygon]:
+    """This object's intensity bands: exclusive, and clipped to its own footprint.
+
+    `exclusive_bands` (src/contours.py) contours the whole scan's
+    reflectivity field at once, so a raw band's geometry can include other
+    objects elsewhere in the sweep that happen to sit at the same
+    intensity. Intersecting each band with this object's own footprint --
+    the same contour `object_geometry` draws -- confines every band to this
+    storm before it becomes a feature.
+
+    Clipping cannot itself introduce overlap between two bands of the same
+    object: `exclusive_bands` already guarantees bands are interior-disjoint
+    (area(A intersect B) == 0), and for any one fixed footprint C,
+    area((A^C) intersect (B^C)) == area(A intersect B intersect C)
+    <= area(A intersect B) == 0. Intersecting with a shared footprint can
+    only shrink each band, never make two disjoint bands overlap.
+    """
+    footprint = _object_footprint(scan, obj)
+    if footprint is None or not obj.layers:
+        return {}
+
+    levels: set[float] = set()
+    for layer in obj.layers:
+        levels.add(float(layer.min_dbz))
+        if layer.max_dbz != float("inf"):
+            levels.add(float(layer.max_dbz))
+
+    raw_bands = exclusive_bands(scan.reflectivity_data.reflectivity, levels, scan.reflectivity_data)
+    return {
+        key: _as_multipolygon(geom.intersection(footprint))
+        for key, geom in raw_bands.items()
+    }
+
+
 def _layer_geometry(
-    scan: BufferedScan, obj: DetectedObject, layer: IntensityLayerData
+    bands: dict[tuple[float, float], MultiPolygon], layer: IntensityLayerData
 ) -> dict[str, Any] | None:
     """GeoJSON geometry for one intensity band within an object, or None.
 
@@ -116,15 +192,8 @@ def _layer_geometry(
     no valid contour (e.g. its mask is empty or the parent object has no
     mask) is omitted rather than drawn as a fallback shape.
     """
-    object_mask = scan.object_masks.get(obj.object_id)
-    if object_mask is None:
-        return None
-    reflectivity = scan.reflectivity_data.reflectivity
-    layer_mask = object_mask & ~np.isnan(reflectivity) & (reflectivity >= layer.min_dbz)
-    if layer.max_dbz != float("inf"):
-        layer_mask = layer_mask & (reflectivity < layer.max_dbz)
-    geom = contour_mask(layer_mask, scan.reflectivity_data)
-    if geom.is_empty:
+    geom = bands.get((float(layer.min_dbz), float(layer.max_dbz)))
+    if geom is None or geom.is_empty:
         return None
     return mapping(geom)
 
@@ -196,9 +265,15 @@ def storm_intensity_layer_to_feature(
     scan: BufferedScan,
     obj: DetectedObject,
     layer: IntensityLayerData,
+    bands: dict[tuple[float, float], MultiPolygon],
 ) -> dict[str, Any] | None:
-    """A GeoJSON Feature for this intensity band, or None if it has no valid shape."""
-    geometry = _layer_geometry(scan, obj, layer)
+    """A GeoJSON Feature for this intensity band, or None if it has no valid shape.
+
+    `bands` is this object's own exclusive-band geometry (see
+    `_object_bands`), precomputed once per object rather than once per layer
+    since `exclusive_bands` contours the whole field in a single pass.
+    """
+    geometry = _layer_geometry(bands, layer)
     if geometry is None:
         return None
 
@@ -310,8 +385,9 @@ def build_storm_intensity_geojson(scan: BufferedScan) -> dict[str, Any]:
     features = []
     omitted = 0
     for obj in scan.detected_objects:
+        bands = _object_bands(scan, obj)
         for layer in obj.layers:
-            feature = storm_intensity_layer_to_feature(scan, obj, layer)
+            feature = storm_intensity_layer_to_feature(scan, obj, layer, bands)
             if feature is None:
                 omitted += 1
                 continue

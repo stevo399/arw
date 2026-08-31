@@ -1,6 +1,7 @@
 from datetime import datetime
 
 import numpy as np
+from shapely.geometry import shape as shapely_shape
 
 from src.buffer import BufferedScan
 from src.detection import DetectedObject, IntensityLayerData
@@ -576,3 +577,71 @@ def test_build_storm_intensity_geojson_omits_band_with_no_valid_contour():
     assert len(geojson["features"]) == 1
     assert geojson["features"][0]["properties"]["intensity_label"] == "heavy precipitation"
     assert geojson["metadata"]["omittedBandCount"] == 1
+
+
+def _scan_with_core() -> BufferedScan:
+    """A 25 dBZ object wrapped around a 45 dBZ core."""
+    reflectivity = np.full((60, 60), np.nan)
+    reflectivity[15:45, 15:45] = 25.0
+    reflectivity[25:35, 25:35] = 45.0
+    mask = np.isfinite(reflectivity)
+    scan = _scan_with_mask(mask)
+    scan.reflectivity_data.reflectivity = reflectivity
+    scan.detected_objects[0].layers = [
+        IntensityLayerData("light precipitation", 20.0, 30.0, 60.0),
+        IntensityLayerData("heavy precipitation", 40.0, 50.0, 10.0),
+    ]
+    return scan
+
+
+def test_intensity_bands_do_not_overlap():
+    """Walking must place the user in exactly one band.
+
+    Today each band is its own convex hull, filled to its own middle, so
+    walking inward crosses several overlapping claims about the same ground.
+    """
+    geojson = build_storm_intensity_geojson(_scan_with_core())
+    geoms = [shapely_shape(f["geometry"]) for f in geojson["features"]]
+
+    # A non-emptiness check first: nothing overlaps nothing, so a
+    # no-overlap assertion alone would also pass an implementation that
+    # (bugfully) emitted no bands at all. This pins that both real bands
+    # from _scan_with_core are actually present before checking they don't
+    # overlap each other.
+    assert len(geoms) == 2
+    for geom in geoms:
+        assert geom.area > 0
+
+    for i, a in enumerate(geoms):
+        for b in geoms[i + 1:]:
+            assert a.intersection(b).area < 1e-12
+
+
+def test_weaker_band_has_a_hole_where_the_core_sits():
+    geojson = build_storm_intensity_geojson(_scan_with_core())
+    weaker = next(
+        shapely_shape(f["geometry"])
+        for f in geojson["features"]
+        if f["properties"]["min_dbz"] == 20.0
+    )
+    assert weaker.area > 0
+    parts = list(weaker.geoms) if weaker.geom_type == "MultiPolygon" else [weaker]
+    assert sum(len(p.interiors) for p in parts) >= 1
+
+
+def test_band_rule_types_are_unchanged():
+    """These identifiers are an external contract with Audiom's styling.
+
+    Spec 1 established that renaming them breaks the user's map silently.
+    """
+    geojson = build_storm_intensity_geojson(_scan_with_core())
+    rule_types = {f["properties"]["ruleType"] for f in geojson["features"]}
+    assert rule_types <= {
+        "radar_light_rain", "radar_moderate_rain", "radar_heavy_rain",
+        "radar_intense_rain", "radar_severe_core",
+    }
+    # `<=` alone would also pass an empty set, which proves nothing about
+    # this scan's actual bands -- pin that both bands from _scan_with_core
+    # are present and that their ruleTypes are the expected two, not just
+    # "a subset of the five".
+    assert rule_types == {"radar_light_rain", "radar_heavy_rain"}
