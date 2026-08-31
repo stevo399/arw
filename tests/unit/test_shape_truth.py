@@ -51,9 +51,12 @@ def test_undersized_shape_is_caught_as_false_negative(sweep):
     # only ~20% of area on this reference volume -- measured false-negative
     # rate on the full candidate population is ~18.3%, and the n=2000 sample
     # lands anywhere from ~13% to ~17% across seeds, under the 0.2 threshold
-    # more often than not. -0.04 deg shrinks enough that the population rate
-    # clears 0.2 with margin (~24-25% measured across seeds 0/1/2/7), so the
-    # assertion is a genuine, non-flaky check rather than a coin flip.
+    # more often than not. -0.04 deg shrinks enough that the rate clears 0.2
+    # with margin, so the assertion is a genuine, non-flaky check rather than
+    # a coin flip. Re-verified after the metric became area-weighted
+    # (fix round 1): -0.04 measures ~26.2-27.3% false-negative across seeds
+    # 0/1/2/7 under area weighting -- still comfortably clear of 0.2, so no
+    # further change was needed here.
     shrunk = honest.buffer(-0.04)
     truth = measure_walk_truth(shrunk, field, sweep, 20.0)
     assert truth.false_negative_rate > 0.2
