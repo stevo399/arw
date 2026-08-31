@@ -11,6 +11,7 @@ range is the worse failure for a user exploring a shape by touch.
 
 import numpy as np
 from contourpy import contour_generator
+from shapely import coverage_simplify
 from pyart.core.transforms import (
     antenna_to_cartesian,
     cartesian_to_geographic_aeqd,
@@ -181,3 +182,168 @@ def contour_mask(mask: np.ndarray, sweep, simplify_m: float = DEFAULT_SIMPLIFY_M
     if merged.geom_type == "Polygon":
         return MultiPolygon([merged])
     return merged
+
+
+def _contour_at_level_raw(field: np.ndarray, level: float, sweep):
+    """Cumulative super-level-set region ('at or above `level`'), unsimplified.
+
+    No `simplify_ground_metres` call here on purpose. Set inclusion between
+    two levels of the *same* field is exact in index space ({field >= 40} is
+    always a subset of {field >= 30}), and the polar-to-geographic map is a
+    smooth, invertible coordinate change, so that inclusion survives the
+    conversion. Simplifying each level's polygon independently with
+    Douglas-Peucker does NOT preserve that inclusion -- two nearby but
+    genuinely different curves, simplified separately, can end up crossing
+    each other by hundreds of metres to a few kilometres over a long,
+    gently-curved azimuthal span (observed directly on this field: level 30
+    and level 40 contours of a 100-ray-wide test ramp, simplified
+    independently, failed containment by ~0.00026 sq deg, several sq km, in
+    scattered slivers along the arc). Callers must simplify only after
+    combining levels (see `_simplify_bands_as_coverage`), never before.
+    """
+    padded = np.vstack([field, field[:SEAM_PAD_RAYS]])
+    # NaN means 'no data', which must not read as 'below the level' in a way
+    # that closes a contour around it. Push it well below any real level.
+    filled = np.where(np.isfinite(padded), padded, -9999.0)
+
+    generator = contour_generator(z=filled, name="serial", fill_type="OuterCode")
+    points_list, codes_list = generator.filled(level, np.inf)
+
+    geographic = []
+    for polygon in _rings_to_polygons(points_list, codes_list):
+        shell_xy = np.asarray(polygon.exterior.coords)
+        shell = polar_vertices_to_lonlat(shell_xy[:, 1], shell_xy[:, 0], sweep)
+        holes = []
+        for ring in polygon.interiors:
+            ring_xy = np.asarray(ring.coords)
+            converted = polar_vertices_to_lonlat(ring_xy[:, 1], ring_xy[:, 0], sweep)
+            if len(converted) >= 4:
+                holes.append(converted)
+        candidate = Polygon(shell, holes or None)
+        if not candidate.is_valid:
+            candidate = candidate.buffer(0)
+        if not candidate.is_empty:
+            geographic.append(candidate)
+
+    if not geographic:
+        return MultiPolygon()
+
+    # The wrap padding duplicates a sliver of geometry; union dissolves it.
+    merged = unary_union(geographic)
+    return MultiPolygon([merged]) if merged.geom_type == "Polygon" else merged
+
+
+def _raw_bands(field: np.ndarray, ordered_levels, sweep):
+    """Exact, unsimplified exclusive bands between consecutive levels.
+
+    Each band is built from `cumulative[lower].difference(cumulative[upper])`
+    where both operands are raw (unsimplified) regions of the *same* field.
+    Because `cumulative[upper]` is a true geometric subset of
+    `cumulative[lower]` (see `_contour_at_level_raw`), this difference is
+    clean: no new intersection vertices need to be invented, so the shared
+    boundary between one band and its neighbour is the same ring object in
+    both differences, before any simplification touches it. That is what
+    keeps `exclusive_bands` from re-opening a gap or overlap at the seam
+    between two adjacent bands.
+    """
+    cumulative_raw = {level: _contour_at_level_raw(field, level, sweep) for level in ordered_levels}
+
+    bands = {}
+    for index, lower in enumerate(ordered_levels):
+        upper = ordered_levels[index + 1] if index + 1 < len(ordered_levels) else float("inf")
+        region = cumulative_raw[lower]
+        if upper != float("inf"):
+            region = region.difference(cumulative_raw[upper])
+        if not region.is_valid:
+            region = region.buffer(0)
+        bands[(lower, upper)] = region
+    return bands
+
+
+def _simplify_bands_as_coverage(bands: dict, sweep, simplify_m: float) -> dict:
+    """Simplify a dict of edge-matched, non-overlapping bands as one coverage.
+
+    `shapely.coverage_simplify` (Visvalingam-Whyatt) simplifies a set of
+    polygons that share edges *together*, moving a shared vertex once for
+    every polygon that references it -- unlike calling `.simplify()` on each
+    band separately, which treats each ring as its own problem and lets two
+    neighbours drift apart or across each other along a boundary they are
+    supposed to share exactly. `_raw_bands` guarantees the input here is
+    exactly such a coverage (edge-matched, non-overlapping) before
+    simplification ever runs.
+    """
+    keys = list(bands.keys())
+    geoms = [bands[key] for key in keys]
+
+    def to_metres(x, y, z=None):
+        return geographic_to_cartesian_aeqd(np.asarray(x), np.asarray(y), sweep.radar_lon, sweep.radar_lat)
+
+    def to_degrees(x, y, z=None):
+        return cartesian_to_geographic_aeqd(np.asarray(x), np.asarray(y), sweep.radar_lon, sweep.radar_lat)
+
+    non_empty = [i for i, g in enumerate(geoms) if not g.is_empty]
+    if not non_empty:
+        return {key: MultiPolygon() for key in keys}
+
+    projected = [transform(to_metres, geoms[i]) for i in non_empty]
+    simplified_metres = coverage_simplify(projected, tolerance=simplify_m)
+
+    result = {key: MultiPolygon() for key in keys}
+    for i, geom in zip(non_empty, simplified_metres):
+        # coverage_simplify's own output is valid in the metres frame it ran
+        # in (checked directly: every band comes back geom.is_valid there).
+        # The nonlinear aeqd->lon/lat projection can still fold a near-acute
+        # vertex into a self-intersection on the way back out, so validity
+        # has to be re-checked and repaired *after* that projection, in the
+        # degree space downstream operations actually run in -- not before
+        # it, and not in the metres frame. buffer(0) repairs it locally; it
+        # does not undo the edge-matching coverage_simplify already did
+        # between neighbouring bands, since projection and repair are both
+        # applied identically, per band, to output that was already
+        # edge-matched going in.
+        back = transform(to_degrees, geom)
+        if not back.is_valid:
+            back = back.buffer(0)
+        if not back.is_empty:
+            result[keys[i]] = MultiPolygon([back]) if back.geom_type == "Polygon" else back
+    return result
+
+
+def exclusive_bands(field: np.ndarray, levels, sweep, simplify_m: float = DEFAULT_SIMPLIFY_M):
+    """Non-overlapping bands, each covering one level up to the next.
+
+    Built by geometric difference on raw (unsimplified) geometry, so a band
+    wrapped around a stronger core is an annulus with a hole -- which is what
+    that region physically is. Simplification runs once, jointly, across all
+    bands (`_simplify_bands_as_coverage`), so the user walking inward is
+    always in exactly one band and crosses a real boundary, not a
+    simplification artefact.
+    """
+    field = np.asarray(field, dtype=float)
+    ordered = sorted(float(level) for level in levels)
+    raw = _raw_bands(field, ordered, sweep)
+    return _simplify_bands_as_coverage(raw, sweep, simplify_m)
+
+
+def contour_field(field: np.ndarray, levels, sweep, simplify_m: float = DEFAULT_SIMPLIFY_M):
+    """Cumulative contours: each level is the region at or above that value.
+
+    Internally reuses the same exclusive-band machinery as `exclusive_bands`
+    (raw difference, then one joint coverage-simplify pass) and reconstitutes
+    each cumulative level as the union of that level's band and every band
+    above it. Because those bands are simplified together as a single
+    coverage, the resulting cumulative levels nest exactly: `contour_field`
+    and `exclusive_bands` can never disagree about where a boundary sits.
+    """
+    field = np.asarray(field, dtype=float)
+    ordered = sorted(float(level) for level in levels)
+    raw = _raw_bands(field, ordered, sweep)
+    simplified_bands = _simplify_bands_as_coverage(raw, sweep, simplify_m)
+
+    band_keys = list(simplified_bands.keys())  # same order as `ordered`
+    cumulative = {}
+    for index, level in enumerate(ordered):
+        pieces = [simplified_bands[key] for key in band_keys[index:]]
+        merged = unary_union(pieces)
+        cumulative[level] = MultiPolygon([merged]) if merged.geom_type == "Polygon" else merged
+    return cumulative

@@ -2,10 +2,13 @@ import numpy as np
 import pyart
 import pytest
 from shapely.geometry import Polygon as ShapelyPolygon
+from shapely.ops import unary_union
 
 from src.contours import (
     DEFAULT_SIMPLIFY_M,
+    contour_field,
     contour_mask,
+    exclusive_bands,
     polar_vertices_to_lonlat,
     simplify_ground_metres,
 )
@@ -165,3 +168,60 @@ def test_contour_mask_joins_a_shape_across_the_seam(sweep):
     out = contour_mask(_mask_sweep(sweep, build), sweep)
     polys = list(out.geoms) if out.geom_type == "MultiPolygon" else [out]
     assert len(polys) == 1, f"seam split the shape into {len(polys)} pieces"
+
+
+def _ramp_field(sweep):
+    """A field rising from 10 to 60 dBZ across a block, NaN elsewhere."""
+    field = np.full(np.asarray(sweep.reflectivity).shape, np.nan)
+    block = field[100:200, 300:400]
+    field[100:200, 300:400] = np.linspace(10.0, 60.0, block.shape[1])[None, :]
+    return field
+
+
+def test_contour_field_levels_are_nested(sweep):
+    """Higher levels must sit inside lower ones: 40+ is contained by 30+."""
+    result = contour_field(_ramp_field(sweep), [20.0, 30.0, 40.0], sweep)
+    assert result[40.0].area < result[30.0].area < result[20.0].area
+    assert result[30.0].buffer(1e-9).contains(result[40.0])
+
+
+def test_exclusive_bands_do_not_overlap(sweep):
+    """Walking must place the user in exactly one band."""
+    bands = exclusive_bands(_ramp_field(sweep), [20.0, 30.0, 40.0], sweep)
+    geoms = list(bands.values())
+    # A band silently going empty would trivially satisfy "no overlap" while
+    # hiding weather from the user -- rule that out explicitly.
+    assert all(not g.is_empty for g in geoms), "a band must not be silently empty"
+    for i, a in enumerate(geoms):
+        for b in geoms[i + 1:]:
+            assert a.intersection(b).area < 1e-12
+
+
+def test_exclusive_bands_tile_the_cumulative_region(sweep):
+    """The bands together must cover exactly the 20+ region, no more, no less."""
+    field = _ramp_field(sweep)
+    cumulative = contour_field(field, [20.0], sweep)[20.0]
+    bands = exclusive_bands(field, [20.0, 30.0, 40.0], sweep)
+    union = unary_union(list(bands.values()))
+    assert union.area == pytest.approx(cumulative.area, rel=0.01)
+
+
+def test_exclusive_band_has_a_hole_where_the_next_band_sits(sweep):
+    """A 20-30 band wrapped around a 30+ core is an annulus, not a filled blob.
+
+    The convex hull fills this middle in -- so today, walking from the edge
+    inward, the user passes through overlapping claims about the same ground.
+    """
+    field = np.full(np.asarray(sweep.reflectivity).shape, np.nan)
+    field[100:200, 300:400] = 25.0
+    field[130:170, 330:370] = 45.0
+
+    bands = exclusive_bands(field, [20.0, 40.0], sweep)
+    low = bands[(20.0, 40.0)]
+    polys = list(low.geoms) if low.geom_type == "MultiPolygon" else [low]
+    assert sum(len(p.interiors) for p in polys) >= 1
+
+
+def test_highest_band_is_open_ended(sweep):
+    bands = exclusive_bands(_ramp_field(sweep), [20.0, 30.0], sweep)
+    assert (30.0, float("inf")) in bands
