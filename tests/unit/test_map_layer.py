@@ -435,3 +435,144 @@ def test_object_geometry_returns_none_rather_than_inventing_a_shape():
     real_mask[20:40, 20:40] = True
     real_scan = _scan_with_mask(real_mask)
     assert object_geometry(real_scan, real_scan.detected_objects[0]) is not None
+
+
+def _sweep_for_omission_tests(n: int, reflectivity: np.ndarray) -> SweepData:
+    return SweepData(
+        reflectivity=reflectivity,
+        azimuths=np.linspace(0.0, 359.0, n),
+        ranges_m=np.linspace(20000.0, 60000.0, n),
+        radar_lat=35.3331,
+        radar_lon=-97.2778,
+        elevation_angle=0.5,
+        elevations=np.full(n, 0.5),
+        elevation_angles=[0.5],
+        radar_alt_m=390.0,
+        timestamp="2026-04-10T20:00:00Z",
+    )
+
+
+def _scan_with_one_missing_object() -> BufferedScan:
+    """Two detected objects: object 1 has real echo backing its mask, object
+    2's mask is entirely False (its supporting gates vanished after
+    detection, or it was never given one). object_geometry must return None
+    for object 2 without touching object 1 -- this is the exact "a storm
+    disappears from the map with no trace" failure the omission-count
+    metadata exists to make visible instead of silent."""
+    n = 20
+    reflectivity = np.full((n, n), np.nan)
+    reflectivity[4:8, 4:8] = 45.0
+    mask1 = ~np.isnan(reflectivity)
+    mask2 = np.zeros((n, n), dtype=bool)
+    return BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0),
+        site_id="KTLX",
+        reflectivity_data=_sweep_for_omission_tests(n, reflectivity),
+        detected_objects=[
+            DetectedObject(
+                object_id=1,
+                centroid_lat=35.2,
+                centroid_lon=-96.9,
+                distance_km=30.0,
+                bearing_deg=90.0,
+                peak_dbz=45.0,
+                peak_label="heavy precipitation",
+                area_km2=50.0,
+                layers=[IntensityLayerData("heavy precipitation", 40, 50, 50.0)],
+            ),
+            DetectedObject(
+                object_id=2,
+                centroid_lat=35.5,
+                centroid_lon=-97.1,
+                distance_km=40.0,
+                bearing_deg=180.0,
+                peak_dbz=45.0,
+                peak_label="heavy precipitation",
+                area_km2=50.0,
+                layers=[IntensityLayerData("heavy precipitation", 40, 50, 50.0)],
+            ),
+        ],
+        labeled_grid=mask1.astype(int),
+        object_masks={1: mask1, 2: mask2},
+    )
+
+
+def test_build_storm_geojson_omits_object_with_no_valid_contour():
+    """Pins the skip-and-count path in build_storm_geojson. Without this,
+    an implementation that reverted to a bare list comprehension over
+    storm_object_to_feature results -- restoring the vanishing-storm
+    behaviour object_geometry was built to prevent -- would stay green."""
+    scan = _scan_with_one_missing_object()
+    geojson = build_storm_geojson(scan)
+
+    assert len(geojson["features"]) == 1
+    assert geojson["features"][0]["properties"]["object_id"] == 1
+    assert geojson["metadata"]["omittedObjectCount"] == 1
+
+
+def test_build_storm_audiom_geojson_omits_object_and_records_both_counts():
+    """Audiom is the layer the accessible mapping tool actually consumes, so
+    the omission count must survive being combined from the footprint and
+    intensity-band builders into this layer's own metadata."""
+    scan = _scan_with_one_missing_object()
+    geojson = build_storm_audiom_geojson(scan)
+
+    footprints = [
+        f for f in geojson["features"] if f["properties"]["ruleName"] == "Storm footprint"
+    ]
+    assert len(footprints) == 1
+    assert footprints[0]["properties"]["object_id"] == 1
+    assert geojson["metadata"]["omittedObjectCount"] == 1
+    # Object 2's own "heavy precipitation" layer is also omitted, for the
+    # same reason its footprint is: its mask is entirely False, so its band
+    # contour comes back empty too. Both counts must independently survive
+    # into this layer's combined metadata.
+    assert geojson["metadata"]["omittedBandCount"] == 1
+
+
+def _scan_with_one_empty_band() -> BufferedScan:
+    """One object with two intensity layers: 'heavy precipitation' (40-50
+    dBZ) matches real gates in the mask; 'severe core' (60+ dBZ) does not --
+    no gate in this object ever reaches 60 dBZ, so that band's mask is
+    entirely False and its contour must come back empty. The object's own
+    footprint must still be reported; only the empty band should vanish from
+    the intensity layer, and only with its omission counted."""
+    n = 20
+    reflectivity = np.full((n, n), np.nan)
+    reflectivity[4:8, 4:8] = 45.0
+    mask = ~np.isnan(reflectivity)
+    return BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0),
+        site_id="KTLX",
+        reflectivity_data=_sweep_for_omission_tests(n, reflectivity),
+        detected_objects=[
+            DetectedObject(
+                object_id=1,
+                centroid_lat=35.2,
+                centroid_lon=-96.9,
+                distance_km=30.0,
+                bearing_deg=90.0,
+                peak_dbz=45.0,
+                peak_label="heavy precipitation",
+                area_km2=50.0,
+                layers=[
+                    IntensityLayerData("heavy precipitation", 40, 50, 50.0),
+                    IntensityLayerData("severe core", 60, float("inf"), 0.0),
+                ],
+            ),
+        ],
+        labeled_grid=mask.astype(int),
+        object_masks={1: mask},
+    )
+
+
+def test_build_storm_intensity_geojson_omits_band_with_no_valid_contour():
+    """Pins the equivalent skip-and-count path for intensity bands
+    (omittedBandCount), added beyond the brief but under the same
+    no-invented-shape contract as object_geometry."""
+    scan = _scan_with_one_empty_band()
+    geojson = build_storm_intensity_geojson(scan)
+
+    assert len(geojson["features"]) == 1
+    assert geojson["features"][0]["properties"]["intensity_label"] == "heavy precipitation"
+    assert geojson["metadata"]["omittedBandCount"] == 1
