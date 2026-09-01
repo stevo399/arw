@@ -106,6 +106,39 @@ def _object_footprint(scan: BufferedScan, obj: DetectedObject):
     return geom
 
 
+def _object_footprint_raw(scan: BufferedScan, obj: DetectedObject):
+    """Unsimplified shapely geometry of this object's own footprint, or None.
+
+    Used only to clip intensity bands (`_object_bands`), never for display.
+
+    Object masks are disjoint at the raster level: `detect_objects_with_grid`
+    labels each gate to at most one object, so two objects' boolean masks
+    never share a True gate. Contouring a mask at `simplify_m=0.0` produces
+    the exact (gate-hugging) boundary with no Douglas-Peucker displacement,
+    so two objects' raw footprints stay exactly as disjoint as their masks
+    were -- they can share an edge (zero-width, zero-area) but never enclose
+    overlapping area.
+
+    `object_geometry`/`_object_footprint` simplify each object's footprint
+    independently (`DEFAULT_SIMPLIFY_M`) for a nicer displayed outline, and
+    that is exactly where cross-object overlap was coming from: independent
+    Douglas-Peucker on two adjacent, disjoint boundaries can bulge each one
+    toward the other by up to the tolerance, the same failure mode Task 2
+    fixed for same-object bands by simplifying them jointly
+    (`coverage_simplify`). There is no such joint pass across *different*
+    objects' footprints, so clipping uses the exact, unsimplified contour
+    instead, which carries no bulge to begin with rather than needing one
+    cancelled out.
+    """
+    mask = scan.object_masks.get(obj.object_id)
+    if mask is None:
+        return None
+    geom = contour_mask(mask, scan.reflectivity_data, simplify_m=0.0)
+    if geom.is_empty:
+        return None
+    return geom
+
+
 def object_geometry(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any] | None:
     """GeoJSON geometry for a detected object, or None if it has no valid shape.
 
@@ -155,18 +188,31 @@ def _object_bands(
     `exclusive_bands` (src/contours.py) contours the whole scan's
     reflectivity field at once, so a raw band's geometry can include other
     objects elsewhere in the sweep that happen to sit at the same
-    intensity. Intersecting each band with this object's own footprint --
-    the same contour `object_geometry` draws -- confines every band to this
-    storm before it becomes a feature.
+    intensity. Intersecting each band with this object's own footprint
+    confines most of that leakage to this storm before it becomes a
+    feature. The footprint used here is the *unsimplified* one
+    (`_object_footprint_raw`), not the display footprint `object_geometry`
+    draws -- see that function's docstring for why: an independently
+    simplified footprint can bulge toward a neighbouring object and let two
+    different objects' clipped bands overlap.
 
-    Clipping cannot itself introduce overlap between two bands of the same
-    object: `exclusive_bands` already guarantees bands are interior-disjoint
-    (area(A intersect B) == 0), and for any one fixed footprint C,
-    area((A^C) intersect (B^C)) == area(A intersect B intersect C)
-    <= area(A intersect B) == 0. Intersecting with a shared footprint can
-    only shrink each band, never make two disjoint bands overlap.
+    What this guarantees, precisely:
+
+    - Two bands of the SAME object never overlap. `exclusive_bands` already
+      guarantees bands are interior-disjoint (area(A intersect B) == 0), and
+      for any one fixed footprint C, area((A^C) intersect (B^C)) ==
+      area(A intersect B intersect C) <= area(A intersect B) == 0.
+      Intersecting with a shared footprint can only shrink each band, never
+      make two disjoint bands overlap. (Proved algebraically; not dependent
+      on which footprint -- raw or simplified -- is used.)
+    - Two bands belonging to DIFFERENT objects also do not overlap, because
+      each is clipped to its own object's raw, unsimplified footprint, and
+      those footprints are themselves disjoint (see
+      `_object_footprint_raw`). This is NOT true of the simplified
+      footprint `object_geometry` draws for display -- do not swap this
+      call for that one.
     """
-    footprint = _object_footprint(scan, obj)
+    footprint = _object_footprint_raw(scan, obj)
     if footprint is None or not obj.layers:
         return {}
 

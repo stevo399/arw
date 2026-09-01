@@ -645,3 +645,96 @@ def test_band_rule_types_are_unchanged():
     # are present and that their ruleTypes are the expected two, not just
     # "a subset of the five".
     assert rule_types == {"radar_light_rain", "radar_heavy_rain"}
+
+
+def _scan_with_two_adjacent_objects() -> BufferedScan:
+    """Two separate objects, same intensity, disjoint at the raster level
+    but separated by only a single gate along a deliberately wavy (two
+    superimposed sine frequencies) shared boundary.
+
+    A plain rectangle will NOT reproduce the bug this guards: a rectangle's
+    corners are exactly the points Douglas-Peucker keeps, so independently
+    simplifying two rectangular footprints doesn't bulge them into each
+    other (verified by hand before landing on this fixture). Real storm
+    object boundaries are irregular like this wavy one, not rectangular --
+    on a real KTLX volume (2013-05-20 19:55:27, objects 29 and 30) this
+    exact failure mode measured 4.03e-06 deg^2 of cross-object band overlap
+    before the fix this test pins.
+    """
+    n_rays, n_gates = 60, 80
+    cols = np.arange(n_gates)
+    boundary = np.round(30 + 28 * np.sin(cols * 1.3) + 14 * np.sin(cols * 3.7)).astype(int)
+    gap = 1  # rows of empty space between the two objects at every column
+    mask_upper = np.zeros((n_rays, n_gates), dtype=bool)
+    mask_lower = np.zeros((n_rays, n_gates), dtype=bool)
+    for c in range(n_gates):
+        top = boundary[c]
+        mask_upper[0:max(top, 0), c] = True
+        mask_lower[min(top + gap, n_rays):n_rays, c] = True
+    assert not np.any(mask_upper & mask_lower), "fixture must be disjoint at the raster level"
+    assert mask_upper.any() and mask_lower.any()
+
+    reflectivity = np.full((n_rays, n_gates), np.nan)
+    reflectivity[mask_upper] = 45.0
+    reflectivity[mask_lower] = 45.0
+    labeled_grid = np.zeros((n_rays, n_gates), dtype=int)
+    labeled_grid[mask_upper] = 1
+    labeled_grid[mask_lower] = 2
+
+    return BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0),
+        site_id="KTLX",
+        reflectivity_data=SweepData(
+            reflectivity=reflectivity,
+            azimuths=np.linspace(0.0, 29.5, n_rays),
+            ranges_m=np.linspace(200.0, 3200.0, n_gates),
+            radar_lat=35.3331,
+            radar_lon=-97.2778,
+            elevation_angle=0.5,
+            elevations=np.full(n_rays, 0.5),
+            elevation_angles=[0.5],
+            radar_alt_m=390.0,
+            timestamp="2026-04-10T20:00:00Z",
+        ),
+        detected_objects=[
+            DetectedObject(
+                object_id=1, centroid_lat=35.30, centroid_lon=-97.25, distance_km=1.0,
+                bearing_deg=5.0, peak_dbz=45.0, peak_label="heavy precipitation",
+                area_km2=1.0, layers=[IntensityLayerData("heavy precipitation", 40, 50, 1.0)],
+            ),
+            DetectedObject(
+                object_id=2, centroid_lat=35.20, centroid_lon=-97.25, distance_km=1.0,
+                bearing_deg=25.0, peak_dbz=45.0, peak_label="heavy precipitation",
+                area_km2=1.0, layers=[IntensityLayerData("heavy precipitation", 40, 50, 1.0)],
+            ),
+        ],
+        labeled_grid=labeled_grid,
+        object_masks={1: mask_upper, 2: mask_lower},
+    )
+
+
+def test_intensity_bands_do_not_overlap_across_different_objects():
+    """Two separate storms must never claim overlapping ground, even when
+    their raster masks are genuinely disjoint and their footprints are
+    independently simplified.
+
+    Measured directly on this fixture against the pre-fix code (clipping
+    against each object's independently-simplified display footprint):
+    7.834e-07 deg^2 of real cross-object overlap -- twelve orders of
+    magnitude above float noise, so this is not a precision artefact. The
+    area assertions below also guard against a stub that returns empty
+    bands passing this vacuously (nothing overlaps nothing).
+    """
+    geojson = build_storm_intensity_geojson(_scan_with_two_adjacent_objects())
+    by_object: dict[int, list] = {}
+    for feature in geojson["features"]:
+        oid = feature["properties"]["object_id"]
+        by_object.setdefault(oid, []).append(shapely_shape(feature["geometry"]))
+
+    assert set(by_object) == {1, 2}
+    for geoms in by_object.values():
+        assert sum(g.area for g in geoms) > 0
+
+    for a in by_object[1]:
+        for b in by_object[2]:
+            assert a.intersection(b).area < 1e-12
