@@ -6,6 +6,7 @@ from shapely.geometry import shape as shapely_shape
 from src.buffer import BufferedScan
 from src.detection import DetectedObject, IntensityLayerData
 from src.map_layer import (
+    build_precipitation_field_geojson,
     build_storm_audiom_geojson,
     build_storm_centroid_geojson,
     build_storm_geojson,
@@ -13,6 +14,8 @@ from src.map_layer import (
     object_geometry,
 )
 from src.parser import SweepData
+from src.qc.classifier import CLASS_CODES
+from src.qc.parameters import GateClass
 
 
 def test_build_storm_geojson_returns_polygon_features():
@@ -738,3 +741,70 @@ def test_intensity_bands_do_not_overlap_across_different_objects():
     for a in by_object[1]:
         for b in by_object[2]:
             assert a.intersection(b).area < 1e-12
+
+
+def _scan_with_light_rain(rhohv_value: float = 0.99) -> BufferedScan:
+    """Echo at 17 dBZ -- below the 20 dBZ object threshold -- plus a tiny patch.
+
+    `gate_classification` is populated here (code for "precipitation" on
+    every echoing gate) because that mirrors production: `_ingest_to_buffer`
+    in src/server.py always runs `preprocess_sweep` -> `apply_quality_control`
+    before a scan's reflectivity_data reaches `build_precipitation_field_geojson`,
+    so `sweep.gate_classification` is never None by the time this builder
+    actually runs. Leaving it None here (its BufferedScan default) would
+    exercise a code path -- `dominant_class` computed with no class_fractions
+    at all -- that production never hits, and would make
+    `test_high_correlation_still_names_a_class` pass or fail for the wrong
+    reason (an always-empty `class_fractions`) rather than genuinely
+    exercising the `UNCERTAIN_RHOHV` threshold it is meant to pin.
+    """
+    reflectivity = np.full((60, 60), np.nan)
+    reflectivity[10:30, 10:30] = 17.0        # light rain, forms no object
+    reflectivity[50:52, 50:52] = 35.0        # patch far below 4 km2
+    mask = np.isfinite(reflectivity)
+    scan = _scan_with_mask(mask)
+    scan.reflectivity_data.reflectivity = reflectivity
+    scan.reflectivity_data.rhohv = np.where(mask, rhohv_value, np.nan)
+    scan.reflectivity_data.zdr = np.where(mask, 1.4, np.nan)
+    scan.reflectivity_data.gate_classification = np.where(
+        mask, CLASS_CODES[GateClass.PRECIPITATION], CLASS_CODES[GateClass.UNKNOWN]
+    ).astype(np.int8)
+    return scan
+
+
+def test_precipitation_layer_shows_rain_below_the_object_threshold():
+    """17 dBZ forms no detected object today, so it is invisible on the map."""
+    geojson = build_precipitation_field_geojson(_scan_with_light_rain())
+    bands = [f["properties"]["min_dbz"] for f in geojson["features"]]
+    assert 15.0 in bands
+
+
+def test_precipitation_layer_shows_patches_below_the_area_threshold():
+    geojson = build_precipitation_field_geojson(_scan_with_light_rain())
+    strong = [f for f in geojson["features"] if f["properties"]["min_dbz"] == 30.0]
+    assert strong, "a 2x2 gate patch at 35 dBZ produced no feature"
+
+
+def test_every_band_carries_its_evidence():
+    geojson = build_precipitation_field_geojson(_scan_with_light_rain())
+    for feature in geojson["features"]:
+        properties = feature["properties"]
+        assert "median_rhohv" in properties
+        assert "median_zdr" in properties
+        assert "dominant_class" in properties
+        assert "class_fractions" in properties
+
+
+def test_low_correlation_reports_uncertain_rather_than_guessing():
+    """On the clear-air KIWA volume both precipitation and biological classes
+    sit at correlation 0.58-0.64 -- indistinguishable, and far too low to be
+    rain. No label is supportable there, so the band must say so."""
+    geojson = build_precipitation_field_geojson(_scan_with_light_rain(rhohv_value=0.60))
+    classes = {f["properties"]["dominant_class"] for f in geojson["features"]}
+    assert classes == {"uncertain"}
+
+
+def test_high_correlation_still_names_a_class():
+    geojson = build_precipitation_field_geojson(_scan_with_light_rain(rhohv_value=0.99))
+    classes = {f["properties"]["dominant_class"] for f in geojson["features"]}
+    assert "uncertain" not in classes

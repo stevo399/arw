@@ -1,10 +1,12 @@
 from typing import Any
 
+import numpy as np
 from shapely.geometry import MultiPolygon, mapping
 
 from src.buffer import BufferedScan
 from src.contours import contour_mask, exclusive_bands
-from src.detection import DetectedObject, IntensityLayerData, degrees_to_bearing
+from src.detection import DetectedObject, IntensityLayerData, classify_intensity, degrees_to_bearing
+from src.qc.classifier import CODE_TO_CLASS
 from src.summary import km2_to_mi2, km_to_miles
 
 
@@ -483,6 +485,133 @@ def build_storm_centroid_geojson(scan: BufferedScan) -> dict[str, Any]:
             "suggestedRefreshInterval": 300,
         },
         "features": [storm_object_to_centroid_feature(scan, obj) for obj in scan.detected_objects],
+    }
+
+
+PRECIP_FIELD_LEVELS = (15.0, 20.0, 30.0, 40.0, 50.0, 60.0)
+
+# ARW-tuned. Below this median correlation coefficient no class label is
+# supportable: on clear-air volumes both precipitation and biological classes
+# collapse to 0.58-0.64, indistinguishable and far too low to be rain.
+UNCERTAIN_RHOHV = 0.85
+
+
+def _band_gate_mask(sweep, lower: float, upper: float) -> np.ndarray:
+    """Boolean mask of gates whose reflectivity genuinely falls in [lower, upper).
+
+    Shared by `build_precipitation_field_geojson` (to decide whether a band's
+    contoured geometry is backed by any real gate at all) and `_band_evidence`
+    (to compute that band's evidence from exactly those gates), so the two
+    can never disagree about which gates support a band.
+    """
+    field = np.asarray(sweep.reflectivity, dtype=float)
+    in_band = np.isfinite(field) & (field >= lower)
+    if upper != float("inf"):
+        in_band &= field < upper
+    return in_band
+
+
+def _band_evidence(sweep, lower: float, upper: float) -> dict[str, Any]:
+    """Evidence attributes for one intensity band.
+
+    Within a real storm, polarimetry separates rain from insects cleanly:
+    precipitation sits near rhohv 0.99 with zdr around +1.4, biological near
+    rhohv 0.89 with zdr above +4. In clear air both collapse to rhohv ~0.6,
+    where no label is supportable -- so the band reports uncertainty rather
+    than guessing, and always carries the raw numbers so the call can be
+    checked.
+    """
+    in_band = _band_gate_mask(sweep, lower, upper)
+
+    evidence: dict[str, Any] = {
+        "median_rhohv": None,
+        "median_zdr": None,
+        "dominant_class": "uncertain",
+        "class_fractions": {},
+    }
+    if not in_band.any():
+        return evidence
+
+    if sweep.rhohv is not None:
+        values = np.asarray(sweep.rhohv, dtype=float)[in_band]
+        values = values[np.isfinite(values)]
+        if values.size:
+            evidence["median_rhohv"] = round(float(np.median(values)), 4)
+    if sweep.zdr is not None:
+        values = np.asarray(sweep.zdr, dtype=float)[in_band]
+        values = values[np.isfinite(values)]
+        if values.size:
+            evidence["median_zdr"] = round(float(np.median(values)), 4)
+
+    if sweep.gate_classification is not None:
+        codes = np.asarray(sweep.gate_classification)[in_band]
+        total = float(codes.size)
+        fractions = {
+            name: round(float(np.count_nonzero(codes == code)) / total, 4)
+            for code, name in CODE_TO_CLASS.items()
+        }
+        evidence["class_fractions"] = {k: v for k, v in fractions.items() if v > 0.0}
+
+    median_rhohv = evidence["median_rhohv"]
+    if median_rhohv is not None and median_rhohv >= UNCERTAIN_RHOHV and evidence["class_fractions"]:
+        evidence["dominant_class"] = max(
+            evidence["class_fractions"], key=evidence["class_fractions"].get
+        )
+    return evidence
+
+
+def build_precipitation_field_geojson(scan: BufferedScan) -> dict[str, Any]:
+    """The whole precipitation field, independent of object detection.
+
+    Detection ignores echo below 20 dBZ and discards anything under 4 km2, so
+    light rain and small showers are invisible on the storm layer. This layer
+    has neither threshold.
+    """
+    sweep = scan.reflectivity_data
+    bands = exclusive_bands(sweep.reflectivity, PRECIP_FIELD_LEVELS, sweep)
+
+    features = []
+    for (lower, upper), geometry in bands.items():
+        if geometry.is_empty:
+            continue
+        if not _band_gate_mask(sweep, lower, upper).any():
+            # Geometric difference between two contour levels can leave a
+            # floating-point sliver (observed directly: ~1.5e-6 sq deg on a
+            # synthetic two-blob field, from the coverage-simplify/aeqd
+            # round-trip in src/contours.py) even where no gate's own
+            # reflectivity actually falls in this band. That sliver is not
+            # precipitation -- reporting it as a shape would be exactly the
+            # fabricated-shape failure this codebase already rejects
+            # elsewhere (see object_geometry's docstring), just from a
+            # different source. A band with no supporting gate is skipped
+            # rather than emitted with an empty/"uncertain" evidence block.
+            continue
+        properties = {
+            "id": f"{scan.site_id}-precip-{int(lower)}",
+            "ruleName": "Precipitation field",
+            "ruleType": _intensity_rule_type(classify_intensity(lower)),
+            "min_dbz": lower,
+            "max_dbz": None if upper == float("inf") else upper,
+            "heat_value": lower,
+            "site_id": scan.site_id,
+            "timestamp": _timestamp_to_str(sweep.timestamp),
+            "passable": True,
+            "soundPriority": 700,
+            "minstep": "100m",
+            "maxstep": "300mi",
+        }
+        properties.update(_band_evidence(sweep, lower, upper))
+        features.append({
+            "type": "Feature",
+            "id": properties["id"],
+            "geometry": mapping(geometry),
+            "properties": properties,
+        })
+
+    return {
+        "type": "FeatureCollection",
+        "metadata": _storm_metadata("ARW precipitation field"),
+        "features": features,
     }
 
 

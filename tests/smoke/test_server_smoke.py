@@ -166,6 +166,43 @@ def test_storm_map_geojson_endpoint_returns_raw_feature_collection():
     assert "radar_heavy_rain" in rule_types
 
 
+def test_precipitation_map_geojson_endpoint_shows_echo_below_object_threshold():
+    """17 dBZ everywhere forms no detected object (below the 20 dBZ object
+    threshold) and so is entirely absent from /map/storms.geojson -- but this
+    layer has neither threshold and must still surface it."""
+    mock_ref = _make_reflectivity_data(17.0)
+    with patch("src.server.geocode_city_state", return_value=(35.4676, -97.5164)), \
+         patch("src.server.fetch_scan", return_value="/fake/path"), \
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_sweep_data", return_value=mock_ref), \
+         patch("src.server.extract_velocity", return_value=None):
+        resp = client.get("/map/precipitation.geojson?city=Oklahoma+City&state=OK")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["type"] == "FeatureCollection"
+    assert data["metadata"]["name"] == "ARW precipitation field"
+    bands = [feature["properties"]["min_dbz"] for feature in data["features"]]
+    assert 15.0 in bands
+    for feature in data["features"]:
+        properties = feature["properties"]
+        assert "median_rhohv" in properties
+        assert "dominant_class" in properties
+
+
+def test_precipitation_map_geojson_endpoint_accepts_zipcode():
+    mock_ref = _make_reflectivity_data(np.nan)
+    with patch("src.server.geocode_zipcode", return_value=(35.4676, -97.5164)), \
+         patch("src.server.fetch_scan", return_value="/fake/path"), \
+         patch("src.server.parse_radar_file", return_value=MagicMock()), \
+         patch("src.server.extract_sweep_data", return_value=mock_ref), \
+         patch("src.server.extract_velocity", return_value=None):
+        resp = client.get("/map/precipitation.geojson?zipcode=73102")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["type"] == "FeatureCollection"
+    assert data["features"] == []
+
+
 def test_storm_map_layer_endpoint_requires_location():
     resp = client.get("/map/storms")
     assert resp.status_code == 422

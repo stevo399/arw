@@ -23,6 +23,7 @@ from src.preprocess import preprocess_sweep
 from src.geometry import align_field_by_azimuth
 from src.summary import generate_summary
 from src.map_layer import (
+    build_precipitation_field_geojson,
     build_storm_audiom_geojson,
     build_storm_centroid_geojson,
     build_storm_geojson,
@@ -431,6 +432,36 @@ def get_storm_map_geojson(
             status_code=422,
             detail="mode must be one of: audiom, intensity, footprints",
         )
+    return JSONResponse(_json_safe(geojson))
+
+
+@app.get("/map/precipitation.geojson")
+def get_precipitation_map_geojson(
+    city: str | None = Query(None),
+    state: str | None = Query(None),
+    zipcode: str | None = Query(None),
+    datetime: str | None = Query(None),
+    date: date_type | None = Query(None),
+    time: str | None = Query(None),
+):
+    """The whole precipitation field, contoured to 15 dBZ with neither the
+    20 dBZ nor the 4 km2 threshold object detection applies -- see
+    build_precipitation_field_geojson. Mirrors get_storm_map_geojson's
+    location/datetime parameter handling exactly; there is no `mode` here
+    since this layer has only one representation.
+    """
+    try:
+        lat, lon, _label = _resolve_map_location(city, state, zipcode)
+        dt = _parse_layer_datetime(datetime, date, time)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    ranked_sites = rank_sites(lat, lon)
+    if not ranked_sites:
+        raise HTTPException(status_code=404, detail="No radar site found for that location")
+
+    buffered = _ingest_to_buffer(ranked_sites[0]["site_id"], dt)
+    geojson = build_precipitation_field_geojson(buffered)
     return JSONResponse(_json_safe(geojson))
 
 
