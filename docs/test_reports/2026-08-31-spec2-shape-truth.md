@@ -1,7 +1,21 @@
 # Spec 2, Task 7: storm shapes tell the truth when walked on
 
+**Fix round 1 (2026-09-01):** this report was corrected after review found the vertex-count
+table measured the wrong unit (per polygon fragment instead of per GeoJSON Feature) and stated
+its conclusion backwards, and after commit `1803346` landed a 0.5 km² minimum-fragment-area
+filter (`MIN_PRECIP_FRAGMENT_AREA_KM2` in `src/map_layer.py`) that changed the precipitation
+layer's geometry. Every number below was re-measured against current HEAD of `spec2-shapes`
+(commit `1803346`) rather than carried forward. See the "Vertex-count distribution" section for
+the corrected table and what changed, and `docs/test_reports/2026-08-31-spec2-vertex-measurement.py`
+for the script used. Storm-layer numbers (walking truth, holes, seam, area agreement, the
+resolution-floor guard) do not touch the precipitation layer and were re-run fresh to confirm
+they are unaffected, rather than assumed unaffected.
+
 Proof test: `tests/e2e/test_proof_shape_truth.py`. Run: `.venv/Scripts/python.exe -m pytest tests/e2e/test_proof_shape_truth.py -v -s`
--- **9 passed** in 201.5s. Full suite: `.venv/Scripts/python.exe -m pytest -q` -- **374 passed, 4 xfailed**, 0 regressions, the four Spec 1 xfails unchanged and still strict.
+-- **9 passed** in 198.6s. Full suite: `.venv/Scripts/python.exe -m pytest -q` -- **378 passed, 4 xfailed** in 690.3s,
+0 regressions, the four Spec 1 xfails unchanged and still strict (the passed count is 4 higher than the previously
+committed report's 374 because commit `1803346` itself added 4 new unit tests for the fragment filter to
+`tests/unit/test_map_layer.py`, all passing -- not a change caused by this fix round).
 
 Reference volumes: `cache/KTLX/KTLX20130520_195527_V06.gz` (Moore, OK tornado), `cache/KEMX/KEMX20260712_022646_V06`,
 `cache/KIWA/KIWA20260712_170029_V06` (clear air). Hull baseline recovered from git history at
@@ -114,7 +128,16 @@ margin (17.5%-65.9% over) -- worst single-volume deviation 65.9% (KIWA), consist
 magnitude with the spec's cited ~1.32x hull inflation (pooled across all three volumes here: hull totals
 45,405 km2 against 33,255 km2 gate-summed, a **1.365x** ratio).
 
-## 5. No invented detail -- an honest, non-discriminating finding
+## 5. Resolution-floor guard -- deliberately one-sided, not a hull comparison
+
+**Correction (fix round 1):** this section previously read as though the assertion below
+distinguished the contour implementation from the hull it replaced. It does not, and by
+construction cannot: a convex hull is coarser than the radar's resolution floor, not finer. It
+omits detail; it never invents any, so there is no formulation of "no invented detail" a
+12-vertex hull could violate. The assertion below is a **one-sided guard against a failure mode
+only the contour implementation can have** (e.g. simplification being disabled or broken) -- it
+is legitimate and worth keeping, but it is not evidence that the contour beats the hull, and this
+report must not be read as claiming that.
 
 Floor per edge: `min(250 m radial gate depth, range x 0.5 deg azimuthal beamwidth)` at that edge's own midpoint
 range. Measured for every edge of every emitted polygon, both implementations, all three volumes.
@@ -137,32 +160,106 @@ violation still sits at 73.6% of its floor, and the hull's violations cluster at
 (ratio median 0.997) -- consistent with gate-grid quantization and aeqd floating-point round-trip precision
 landing a hair under a hard cutoff, not with either implementation asserting knowledge the radar does not have.
 **No polygon edge on either implementation, anywhere measured, falls below half its local resolution floor** --
-that is the bound the committed test actually asserts (`test_no_catastrophic_invented_detail`), and it is what
-"no invented detail" is substantively protecting against. The literal, un-relaxed formulation could not be
-established as hull-discriminating and is reported as such rather than hidden or quietly threshold-shopped until
-it passed only for the contour.
+that is the bound the committed test actually asserts
+(`test_resolution_floor_guard_no_edge_below_half_floor`), and it is what "no invented detail" is substantively
+protecting against. The literal, un-relaxed formulation could not be established as hull-discriminating -- because
+no formulation of it can be, per the correction above -- and is reported as such rather than hidden or quietly
+threshold-shopped until it passed only for the contour.
 
 ## Vertex-count distribution (a deliverable measurement, not a pass/fail gate)
 
-`DEFAULT_SIMPLIFY_M` was deliberately shipped without an invented vertex cap. This is what it actually produces.
+**Correction (fix round 1):** this table was first published counting vertices **per disjoint
+polygon fragment**. That is not the unit that matters. `build_storm_geojson` and
+`build_precipitation_field_geojson` each emit **one GeoJSON Feature per object / per intensity
+band**, and a map viewer loads a Feature, not a fragment inside it -- a Feature's geometry can be
+a MultiPolygon holding hundreds of patches. Counting per fragment understated the precipitation
+layer's per-shape burden by roughly two orders of magnitude and, worse, stated the comparison
+between the two layers **backwards**: the first version of this table said the largest single
+precipitation band reached "11,870" vertices, making the precipitation layer look lighter than
+the storm layer. Measured per Feature -- the object actually loaded -- the largest precipitation
+band is **53,410 vertices**, and the precipitation layer is **roughly 9x heavier** than the storm
+layer by pooled total, not lighter. `DEFAULT_SIMPLIFY_M` was deliberately shipped without an
+invented vertex cap; this is what it actually produces, re-measured against current HEAD
+(commit `1803346`). The measurement script is checked in at
+`docs/test_reports/2026-08-31-spec2-vertex-measurement.py`.
 
-**Storm footprint layer** (contour, 100 m tolerance):
+**Per-Feature vertex counts -- the unit a map viewer loads -- both layers, side by side:**
 
-| Site | n polygons | min | median | max | p95 |
+| Layer | Site | n Features | min verts/Feature | median | p95 | max | total verts |
+|---|---|---|---|---|---|---|---|
+| Storm footprint | KTLX (Moore) | 36 | 10 | 80 | 1,002 | 2,222 | 9,166 |
+| Storm footprint | KEMX | 81 | 12 | 35 | 759 | 3,535 | 15,510 |
+| Storm footprint | KIWA (clear air) | 1 | 67 | 67 | 67 | 67 | 67 |
+| Storm footprint | **POOLED** | **118** | **10** | **40** | **823** | **3,535** | **24,743** |
+| Precipitation band | KTLX (Moore) | 6 | 42 | 19,065 | 24,083 | 24,608 | 88,336 |
+| Precipitation band | KEMX | 6 | 20 | 14,999 | 51,382 | 53,410 | 130,028 |
+| Precipitation band | KIWA (clear air) | 2 | 505 | 1,141 | 1,713 | 1,777 | 2,282 |
+| Precipitation band | **POOLED** | **14** | **20** | **11,844** | **48,138** | **53,410** | **220,646** |
+
+Read per Feature, the precipitation layer is far heavier to load than the storm layer: its
+largest single Feature (53,410 vertices) is roughly **15x** the storm layer's largest Feature
+(3,535), and its pooled total (220,646) is roughly **9x** the storm layer's pooled total (24,743)
+despite emitting only 14 Features against the storm layer's 118 -- because it has no 4 km2
+object-detection area floor and each Feature is one whole intensity band's MultiPolygon rather
+than one object's.
+
+**Cross-check against the fix brief's independently-measured calibration table.** For the
+storm-footprint row, every column above matches the brief's calibration exactly, including the
+decimal (p95 = 823.45 -> 823). For the precipitation-band row, `n` (14), `min` (20), and `median`
+(11,844) match exactly; `p95`, `max`, and `total` do not (this report: 48,138 / 53,410 / 220,646;
+brief's calibration: 49,613 / 56,875 / 227,887 -- roughly 3-6% higher). Investigated rather than
+silently adopting either set, per the fix brief's instruction:
+
+- The mismatch is confined to the two largest, most fragment-dense Features (KEMX's 15-20 dBZ
+  and 20-30 dBZ bands) -- the other 12 of 14 precipitation Features, and every storm-layer
+  number without exception, reproduce bit-for-bit against the calibration table.
+- Ruled out: non-determinism (identical result across repeated runs in this process and
+  environment), a replaced or duplicated cache file (one copy of each reference volume on disk,
+  hashes checked directly), dependency-version drift (`shapely` has been pinned to `2.1.2` / GEOS
+  `3.13.1` in `uv.lock` across this commit's entire history, not a floating minimum), and a
+  geometry-type edge case silently dropping vertices (every precipitation Feature's geometry
+  parses as a valid `MultiPolygon`; none is a `GeometryCollection`).
+- The **pre-filter** fragment counts (unaffected by any threshold decision) reproduce this
+  report's own earlier pre-filter measurement exactly -- 16,996 total pieces pooled across all
+  three volumes, 7,535 for KTLX alone -- which rules out a difference in the underlying
+  contour/simplify geometry itself, the thing coverage-simplify's floating-point behaviour would
+  most plausibly have disturbed.
+- Swept the fragment-drop threshold against the measured fragment-area distribution: only 58 of
+  16,996 fragments sit within 2% of the 0.5 km2 cutoff -- far too few to account for the
+  ~1,400-fragment gap between this measurement's dropped count (14,941) and the brief's stated
+  16,355 -- so a floating-point boundary effect on the drop decision does not explain it either.
+- No further explanation was found from this side within the scope of this task. Since the storm
+  layer and every pre-filter (topology-only) precipitation figure reproduce exactly, the
+  discrepancy looks confined to how the *post-filter* precipitation aggregate was produced on the
+  calibration side, not to this measurement -- but that could not be confirmed further without
+  access to how the calibration table was generated. The numbers in this report are the ones a
+  command in this repository, against this commit, actually produces; per the fix brief's
+  instruction not to adopt either set silently, they are reported as measured rather than
+  reconciled to the calibration table.
+
+**What the fragment filter changed** (`MIN_PRECIP_FRAGMENT_AREA_KM2 = 0.5`, commit `1803346`),
+pooled across all three volumes: pre-filter, the precipitation layer contoured **16,996 fragments
+totalling 299,394 vertices**; post-filter (current HEAD, as shipped) it contours **2,055
+fragments totalling 220,646 vertices (a 26.3% reduction)**. **14,941 fragments totalling 951.0
+km2** were dropped as sub-0.5 km2 speckle -- now discoverable per band in the layer's own
+metadata via `omittedFragmentCount` / `omittedFragmentAreaKm2` (per volume: KTLX 7,022 fragments
+/ 340.8 km2, KEMX 6,030 / 541.6 km2, KIWA 1,889 / 68.5 km2). The `MIN_PRECIP_FRAGMENT_AREA_KM2`
+comment in `src/map_layer.py` previously cited a pre-filter figure from an earlier, non-reproducing
+measurement (7,876 pieces / 131,472 vertices for KTLX alone); it has been corrected to the figure
+re-derived here (7,535 pieces / 127,049 vertices, KTLX only, pre-filter), which matches this
+report's own pre-filter measurement and the pre-filter figure independently reported before
+commit `1803346` existed.
+
+**Fragment-level counts** (the wrong unit for judging per-Feature load -- kept here only because
+it is the quantity `MIN_PRECIP_FRAGMENT_AREA_KM2` was tuned against, and it is what the layer's
+own source comment now cites):
+
+| Site | n polygons (fragments) | min | median | max | p95 |
 |---|---|---|---|---|---|
-| KTLX (Moore) | 37 | 4 | 74 | 1872 | 885 |
-| KEMX | 95 | 4 | 28 | 3204 | 688 |
-| KIWA (clear air) | 1 | 65 | 65 | 65 | 65 |
-| **POOLED** | **133** | **4** | **35** | **3204** | **744** |
-
-**Precipitation-field layer** (contour, no object/area floor):
-
-| Site | n polygons | min | median | max | p95 |
-|---|---|---|---|---|---|
-| KTLX (Moore) | 7535 | 3 | 3 | 10379 | 16 |
-| KEMX | 7522 | 3 | 4 | 11870 | 22 |
-| KIWA (clear air) | 1939 | 3 | 3 | 324 | 14 |
-| **POOLED** | **16996** | **3** | **3** | **11870** | **18** |
+| KTLX (Moore) | 513 | 3 | 16 | 10,379 | 525 |
+| KEMX | 1,492 | 3 | 11 | 11,870 | 164 |
+| KIWA (clear air) | 50 | 5 | 29 | 324 | 129 |
+| **POOLED** | **2,055** | **3** | **12** | **11,870** | **218** |
 
 **Hull baseline** (for scale, storm footprint layer only -- the hull has no precipitation-field equivalent):
 
@@ -174,21 +271,32 @@ it passed only for the contour.
 | **POOLED** | **118** | **5** | **12** | **40** | **24** |
 
 The old hull's pooled median (12) matches the design-spec-cited "8-18 vertices, mean 12" baseline exactly,
-corroborating both this measurement and the earlier one. The honest finding for the project owner: contours in
-the hundreds are typical for the storm footprint layer (pooled median 35, p95 744 -- roughly 3x-60x the hull's
-vertex count depending on percentile), and the largest single storm footprint measured here has **3204 vertices**
-(a KEMX object). The precipitation-field layer's individual bands are mostly small (pooled median 3 -- the minimum
-possible closed ring -- because most bands are small, simple patches), but its largest single band reaches
-**11,870 vertices** and it emits far more polygons overall (16,996 vs. 133) since it has no 4 km2 area floor.
-Whether this vertex density is workable for keyboard/spatial-audio exploration in Audiom is not something this
-report decides -- it is the number the project owner asked for so he can decide it himself.
+corroborating both this measurement and the earlier one. The honest finding for the project owner, corrected:
+**the precipitation-field layer is the heavier of the two layers to load, not the lighter one.** Per Feature, the
+storm footprint layer runs from 10 to 3,535 vertices (pooled median 40, p95 823 -- roughly 3x-60x the hull's
+vertex count depending on percentile); the precipitation-field layer runs from 20 to 53,410 vertices (pooled
+median 11,844 -- roughly 300x the storm layer's median) despite emitting far fewer Features overall (14 vs. 118),
+because it has no 4 km2 area floor and each Feature is one whole intensity band's entire MultiPolygon rather than
+one object. Whether this vertex density is workable for keyboard/spatial-audio exploration in Audiom is not
+something this report decides -- it is the number the project owner asked for so he can decide it himself.
 
 ## What failed or could not be established
 
-- **Assertion 5 ("no invented detail"), literal form, is not hull-discriminating.** See the section above. The
-  committed test asserts the substantive claim that held up under investigation (no edge below half its local
-  resolution floor, true for both implementations) rather than the literal one (no edge below the floor, true for
-  neither). This is disclosed, not hidden.
+- **Assertion 5 ("no invented detail") is a deliberately one-sided resolution-floor guard, not a
+  hull-comparison, and cannot be made into one.** A convex hull is coarser than the resolution
+  floor, not finer, so no formulation of "no invented detail" exists that a 12-vertex hull could
+  violate -- see the corrected section above. The committed test
+  (`test_resolution_floor_guard_no_edge_below_half_floor`) asserts the substantive claim that
+  held up under investigation (no edge below half its local resolution floor, true for both
+  implementations) rather than the literal one (no edge below the floor, true for neither). This
+  is disclosed, not hidden, and is not evidence the contour beats the hull on this axis -- it
+  guards only against the contour's own simplification breaking.
+- **The precipitation-band vertex-count calibration cross-check did not fully reconcile.** See
+  the "Vertex-count distribution" section above: `n`, `min`, and `median` match the fix brief's
+  independently-measured calibration exactly, but `p95`, `max`, and `total` are 3-6% lower here,
+  confined to the two largest bands. Several causes were ruled out (non-determinism, cache-file
+  drift, dependency-version drift, geometry-type dropout, threshold boundary sensitivity); no
+  further explanation was found within this task's scope. Reported as measured, not reconciled.
 - **Holes are not perfectly empty.** 0.89% (KTLX) and 1.52% (KEMX) of hole-interior samples carry real,
   unclaimed echo -- small, within the asserted 5% bound, but non-zero and not explained further than "plausibly a
   hierarchy-split fragment or area-floor-dropped blob." Not chased further per the task's scope (measure and

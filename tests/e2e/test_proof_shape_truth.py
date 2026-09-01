@@ -28,8 +28,8 @@ For 1, 4 and 5, the identical measurement is also run against the
 convex-hull implementation Task 4 deleted (recovered from git history, never
 reimplemented) so a pass here is proven to be something the hull could not
 achieve. Assertion 5 turned out NOT to discriminate between the two -- see
-`test_no_catastrophic_invented_detail` and the deliverable report for why,
-disclosed rather than hidden.
+`test_resolution_floor_guard_no_edge_below_half_floor` and the deliverable
+report for why, disclosed rather than hidden.
 
 FALSE-NEGATIVE SCOPE, stated up front because it is easy to over-claim:
 `measure_walk_truth` only samples gates in a shape's own bounding box. That
@@ -631,28 +631,39 @@ def test_hull_baseline_area_agreement_fails_the_five_percent_bound(volumes):
 # 5. No invented detail
 # ===================================================================
 
-def test_no_catastrophic_invented_detail(volumes):
-    """No polygon edge should assert range/angular precision the radar does
-    not have -- floor is min(250 m radial gate depth, range * 0.5 deg
-    azimuthal beamwidth) at that edge's own range.
+def test_resolution_floor_guard_no_edge_below_half_floor(volumes):
+    """One-sided resolution-floor guard -- NOT a hull-comparison test.
 
-    HONEST FINDING, not papered over: taken completely literally
-    (edge_length >= floor), this assertion does NOT discriminate between the
-    contour and the hull it replaced. Both show a meaningful fraction of
-    edges landing marginally UNDER their local floor (contour ~14-20% of
-    edges, hull ~8-22%) -- but investigation (see the deliverable report)
-    found every one of those violations sits at 50-100% of its floor
-    (contour worst case observed: 73.6% of floor at the 10th percentile;
-    hull's violations cluster at essentially exactly the floor, ratio
-    median 0.997). None of that is a genuinely fabricated fine edge -- it is
-    gate-grid quantization and aeqd floating-point precision landing a
-    hair under a hard 250 m/beamwidth cutoff, on BOTH implementations.
-    Zero edges on either implementation, across all three volumes, fall
-    below HALF their local floor -- that is the bound actually asserted
-    here, and it IS what "no invented detail" is protecting against: no
-    polygon edge on this map claims sub-half-gate knowledge the radar does
-    not have. The literal >= floor formulation could not be established as
-    hull-discriminating and that is stated here rather than hidden.
+    Asserts that no polygon edge, on either implementation, falls below
+    HALF of its local resolution floor (min(250 m radial gate depth,
+    range * 0.5 deg azimuthal beamwidth) at that edge's own range).
+
+    Deliberately one-sided: a convex hull is far COARSER than the
+    resolution floor, not finer. It omits detail; it never invents any, so
+    there is no formulation of "no invented detail" a 12-vertex hull could
+    violate -- this assertion can only fail for the contour implementation
+    (e.g. if simplification were disabled or broken), which is exactly the
+    failure mode worth guarding against. The hull passes this test too;
+    that is expected, and it does not mean the guard is vacuous, only that
+    it does not discriminate between the two implementations the way
+    `test_hull_baseline_walking_truth_fails_the_five_percent_bound` and
+    `test_hull_baseline_area_agreement_fails_the_five_percent_bound` do.
+
+    HONEST FINDING, disclosed rather than hidden: taken completely
+    literally (edge_length >= floor, not half of it), NEITHER
+    implementation passes -- contour ~14-20% of edges land marginally
+    UNDER their local floor, hull ~8-22%. Investigated (see the
+    deliverable report): every one of those violations sits at 50-100% of
+    its floor (contour worst case observed: 73.6% of floor at the 10th
+    percentile; hull's violations cluster at essentially exactly the
+    floor, ratio median 0.997). None of that is a genuinely fabricated
+    fine edge -- it is gate-grid quantization and aeqd floating-point
+    precision landing a hair under a hard 250 m/beamwidth cutoff, on BOTH
+    implementations. Zero edges on either implementation, across all three
+    volumes, fall below HALF their local floor -- that is the bound
+    actually asserted here, and it IS what "no invented detail"
+    substantively protects against: no polygon edge on this map claims
+    sub-half-gate knowledge the radar does not have.
     """
     print(f"\n{'site':<18} {'impl':<8} {'n_edges':>8} {'viol<floor':>11} {'viol<0.5*floor':>15}")
     for label, vol in volumes.items():

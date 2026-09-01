@@ -499,11 +499,18 @@ PRECIP_FIELD_LEVELS = (15.0, 20.0, 30.0, 40.0, 50.0, 60.0)
 UNCERTAIN_RHOHV = 0.85
 
 # Measured on cache/KTLX/KTLX20130520_195527_V06.gz (Newcastle-Moore,
-# 2013-05-20 19:55:27): this layer contoured 7,876 separate polygon pieces
-# (131,472 vertices total). The size distribution is extremely lopsided --
+# 2013-05-20 19:55:27), pre-filter (this constant disabled): this layer
+# contoured 7,535 separate polygon pieces (127,049 vertices total, counting
+# len(exterior.coords) plus every interior ring's coords per piece, no
+# closure-duplicate subtracted). Re-derived 2026-09-01 against this same
+# commit's own code via docs/test_reports/2026-08-31-spec2-vertex-measurement.py
+# (see docs/test_reports/2026-08-31-spec2-shape-truth.md, Finding 4) --
+# the previous figure here (7,876 pieces / 131,472 vertices) came from a
+# measurement taken at an earlier commit and does not reproduce; this one
+# does. The size distribution is extremely lopsided --
 # 93% of pieces carry only 2.6% of the total area, and are mostly under
 # ~700 m across: isolated single/few-gate speckle, not real weather.
-# Raising DEFAULT_SIMPLIFY_M does not help (still 7,876 pieces at 2000 m):
+# Raising DEFAULT_SIMPLIFY_M does not help (still 7,535 pieces at 2000 m):
 # simplification smooths a piece's outline, it does not merge pieces
 # together, so the complexity here is fragment COUNT, not smoothness.
 # 0.5 km2 is roughly 700 m across -- eight times smaller than the 4 km2
