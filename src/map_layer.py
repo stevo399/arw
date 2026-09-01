@@ -1,7 +1,9 @@
 from typing import Any
 
 import numpy as np
+from pyart.core.transforms import geographic_to_cartesian_aeqd
 from shapely.geometry import MultiPolygon, mapping
+from shapely.ops import transform
 
 from src.buffer import BufferedScan
 from src.contours import contour_mask, exclusive_bands
@@ -496,6 +498,67 @@ PRECIP_FIELD_LEVELS = (15.0, 20.0, 30.0, 40.0, 50.0, 60.0)
 # collapse to 0.58-0.64, indistinguishable and far too low to be rain.
 UNCERTAIN_RHOHV = 0.85
 
+# Measured on cache/KTLX/KTLX20130520_195527_V06.gz (Newcastle-Moore,
+# 2013-05-20 19:55:27): this layer contoured 7,876 separate polygon pieces
+# (131,472 vertices total). The size distribution is extremely lopsided --
+# 93% of pieces carry only 2.6% of the total area, and are mostly under
+# ~700 m across: isolated single/few-gate speckle, not real weather.
+# Raising DEFAULT_SIMPLIFY_M does not help (still 7,876 pieces at 2000 m):
+# simplification smooths a piece's outline, it does not merge pieces
+# together, so the complexity here is fragment COUNT, not smoothness.
+# 0.5 km2 is roughly 700 m across -- eight times smaller than the 4 km2
+# object-detection threshold this layer exists to bypass -- chosen so a
+# genuine small shower still survives while isolated speckle does not.
+# Project-owner decision, 2026-08-31; do not raise or lower this thinking
+# it arbitrary without re-measuring the fragment-size distribution first.
+# Applies to the precipitation-field layer only -- the storm layer's own
+# polygons are already well-behaved (median 40 vertices, p95 823 on the
+# same volume) and are governed by a different contract (object detection's
+# 4 km2 area floor), so they are never touched by this constant.
+MIN_PRECIP_FRAGMENT_AREA_KM2 = 0.5
+
+
+def _fragment_area_km2(polygon, radar_lat: float, radar_lon: float) -> float:
+    """A single polygon piece's ground area in square kilometres.
+
+    Projects to the same radar-centred azimuthal-equidistant frame
+    `src/contours.py` uses (`geographic_to_cartesian_aeqd`), so this agrees
+    with that module's own notion of ground distance rather than computing
+    area in degrees^2, which is anisotropic and means nothing on its own.
+    """
+    def to_metres(x, y, z=None):
+        return geographic_to_cartesian_aeqd(np.asarray(x), np.asarray(y), radar_lon, radar_lat)
+
+    return transform(to_metres, polygon).area / 1e6
+
+
+def _drop_small_fragments(
+    geometry: MultiPolygon, radar_lat: float, radar_lon: float
+) -> tuple[MultiPolygon, int, float]:
+    """Split a band's geometry into its separate polygon pieces and drop any
+    piece below `MIN_PRECIP_FRAGMENT_AREA_KM2`.
+
+    Returns (kept_geometry, dropped_count, dropped_area_km2) -- the caller
+    accumulates the latter two into layer metadata so a dropped fragment is
+    counted, never silently discarded (the same principle the storm layer
+    already applies via `omittedObjectCount`/`omittedBandCount`).
+    """
+    if geometry.is_empty:
+        return geometry, 0, 0.0
+    pieces = list(geometry.geoms) if geometry.geom_type == "MultiPolygon" else [geometry]
+
+    kept = []
+    dropped_count = 0
+    dropped_area_km2 = 0.0
+    for piece in pieces:
+        area_km2 = _fragment_area_km2(piece, radar_lat, radar_lon)
+        if area_km2 < MIN_PRECIP_FRAGMENT_AREA_KM2:
+            dropped_count += 1
+            dropped_area_km2 += area_km2
+        else:
+            kept.append(piece)
+    return MultiPolygon(kept), dropped_count, dropped_area_km2
+
 
 def _band_gate_mask(sweep, lower: float, upper: float) -> np.ndarray:
     """Boolean mask of gates whose reflectivity genuinely falls in [lower, upper).
@@ -572,6 +635,8 @@ def build_precipitation_field_geojson(scan: BufferedScan) -> dict[str, Any]:
     bands = exclusive_bands(sweep.reflectivity, PRECIP_FIELD_LEVELS, sweep)
 
     features = []
+    omitted_fragment_count = 0
+    omitted_fragment_area_km2 = 0.0
     for (lower, upper), geometry in bands.items():
         if geometry.is_empty:
             continue
@@ -586,6 +651,13 @@ def build_precipitation_field_geojson(scan: BufferedScan) -> dict[str, Any]:
             # elsewhere (see object_geometry's docstring), just from a
             # different source. A band with no supporting gate is skipped
             # rather than emitted with an empty/"uncertain" evidence block.
+            continue
+        geometry, fragment_count, fragment_area_km2 = _drop_small_fragments(
+            geometry, sweep.radar_lat, sweep.radar_lon
+        )
+        omitted_fragment_count += fragment_count
+        omitted_fragment_area_km2 += fragment_area_km2
+        if geometry.is_empty:
             continue
         properties = {
             "id": f"{scan.site_id}-precip-{int(lower)}",
@@ -609,9 +681,16 @@ def build_precipitation_field_geojson(scan: BufferedScan) -> dict[str, Any]:
             "properties": properties,
         })
 
+    metadata = _storm_metadata("ARW precipitation field")
+    # A fragment below MIN_PRECIP_FRAGMENT_AREA_KM2 is dropped rather than
+    # displayed -- see that constant's comment for why. Both counts survive
+    # into metadata rather than vanishing: a count alone would not say
+    # whether the filter is behaving, so the area is reported too.
+    metadata["omittedFragmentCount"] = omitted_fragment_count
+    metadata["omittedFragmentAreaKm2"] = round(omitted_fragment_area_km2, 4)
     return {
         "type": "FeatureCollection",
-        "metadata": _storm_metadata("ARW precipitation field"),
+        "metadata": metadata,
         "features": features,
     }
 

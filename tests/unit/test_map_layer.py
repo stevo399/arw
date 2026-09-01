@@ -857,3 +857,130 @@ def test_light_rain_band_gets_its_own_ruletype_not_generic_echo():
     )
     assert drizzle_band["properties"]["ruleType"] == "radar_drizzle"
     assert drizzle_band["properties"]["ruleType"] != "radar_echo"
+
+
+def _scan_with_fragment_sizes() -> BufferedScan:
+    """One 25 dBZ band containing two disjoint pieces at genuinely different
+    ground sizes, at real NEXRAD-like resolution (360 rays at ~1 degree,
+    250 m gate spacing) so contouring produces realistic piece geometry
+    rather than the coarse, oversized single-gate footprints the other
+    fixtures in this file use (which would make every piece huge).
+
+    - A 2x2 block of gates (rays 0-1, gates 40-41, ~30 km range) -- confirmed
+      directly against `exclusive_bands` on this exact field: contouring it
+      at DEFAULT_SIMPLIFY_M produces a real piece of about 0.1315 km2 --
+      below MIN_PRECIP_FRAGMENT_AREA_KM2 (0.5), i.e. the speckle the filter
+      exists to drop, but not so close to zero that its area would round
+      away to nothing when reported.
+    - A 6x6 block of gates (rays 90-95, gates 40-45) -- confirmed directly
+      at about 3.34 km2, comfortably above the 0.5 km2 threshold, i.e. a
+      genuine small shower that must survive.
+    """
+    n_rays, n_gates = 360, 60
+    azimuths = np.linspace(0.0, 359.0, n_rays)
+    ranges_m = np.arange(20000.0, 20000.0 + 250.0 * n_gates, 250.0)
+    reflectivity = np.full((n_rays, n_gates), np.nan)
+    reflectivity[0:2, 40:42] = 25.0     # tiny: 2x2 gate block, ~0.13 km2
+    reflectivity[90:96, 40:46] = 25.0   # big: 6x6 gate block, ~3.34 km2
+    return BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0),
+        site_id="KTLX",
+        reflectivity_data=SweepData(
+            reflectivity=reflectivity,
+            azimuths=azimuths,
+            ranges_m=ranges_m,
+            radar_lat=35.3331,
+            radar_lon=-97.2778,
+            elevation_angle=0.5,
+            elevations=np.full(n_rays, 0.5),
+            elevation_angles=[0.5],
+            radar_alt_m=390.0,
+            timestamp="2026-04-10T20:00:00Z",
+        ),
+        detected_objects=[],
+        labeled_grid=np.zeros((n_rays, n_gates), dtype=int),
+        object_masks={},
+    )
+
+
+def test_small_fragment_is_dropped_and_counted():
+    geojson = build_precipitation_field_geojson(_scan_with_fragment_sizes())
+    band = next(f for f in geojson["features"] if f["properties"]["min_dbz"] == 20.0)
+    geometry = shapely_shape(band["geometry"])
+    pieces = list(geometry.geoms) if geometry.geom_type == "MultiPolygon" else [geometry]
+    # Only the 6x6 piece should remain -- the isolated single-gate piece is
+    # below MIN_PRECIP_FRAGMENT_AREA_KM2 and must be gone from the geometry
+    # actually served, not just noted in metadata.
+    assert len(pieces) == 1
+    assert geojson["metadata"]["omittedFragmentCount"] == 1
+
+
+def test_large_fragment_survives():
+    geojson = build_precipitation_field_geojson(_scan_with_fragment_sizes())
+    band = next(f for f in geojson["features"] if f["properties"]["min_dbz"] == 20.0)
+    geometry = shapely_shape(band["geometry"])
+    # A stub that dropped every fragment (not just the small one) would also
+    # leave omittedFragmentCount == 1 if it happened to report the count
+    # correctly but return empty geometry -- so this checks the surviving
+    # shape actually has real area, not just that the feature exists.
+    assert geometry.area > 0
+
+
+def test_dropped_fragment_area_is_reported_and_nonzero():
+    geojson = build_precipitation_field_geojson(_scan_with_fragment_sizes())
+    assert geojson["metadata"]["omittedFragmentCount"] == 1
+    assert geojson["metadata"]["omittedFragmentAreaKm2"] > 0.0
+    # The dropped piece is the 2x2 gate block (~0.13 km2), not the
+    # surviving 6x6 block (~3.34 km2) -- pin that the reported area is on
+    # the scale of the dropped piece, not the whole band.
+    assert geojson["metadata"]["omittedFragmentAreaKm2"] < 0.5
+
+
+def test_storm_layer_is_unaffected_by_the_fragment_filter():
+    """The fragment-size filter (MIN_PRECIP_FRAGMENT_AREA_KM2) applies only
+    to build_precipitation_field_geojson. A tiny object footprint -- well
+    under the 0.5 km2 threshold -- must still be reported in full by the
+    storm layer, which is governed by object detection's own 4 km2 area
+    floor, not this constant.
+    """
+    n_rays, n_gates = 360, 60
+    azimuths = np.linspace(0.0, 359.0, n_rays)
+    ranges_m = np.arange(20000.0, 20000.0 + 250.0 * n_gates, 250.0)
+    reflectivity = np.full((n_rays, n_gates), np.nan)
+    reflectivity[0:1, 40:41] = 45.0  # a single isolated gate, ~3.3e-8 km2
+    mask = np.isfinite(reflectivity)
+    scan = BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0),
+        site_id="KTLX",
+        reflectivity_data=SweepData(
+            reflectivity=reflectivity,
+            azimuths=azimuths,
+            ranges_m=ranges_m,
+            radar_lat=35.3331,
+            radar_lon=-97.2778,
+            elevation_angle=0.5,
+            elevations=np.full(n_rays, 0.5),
+            elevation_angles=[0.5],
+            radar_alt_m=390.0,
+            timestamp="2026-04-10T20:00:00Z",
+        ),
+        detected_objects=[
+            DetectedObject(
+                object_id=1,
+                centroid_lat=35.30,
+                centroid_lon=-97.20,
+                distance_km=3.0,
+                bearing_deg=0.0,
+                peak_dbz=45.0,
+                peak_label="intense precipitation",
+                area_km2=0.00000003,
+                layers=[IntensityLayerData("intense precipitation", 40, 50, 0.00000003)],
+            )
+        ],
+        labeled_grid=mask.astype(int),
+        object_masks={1: mask},
+    )
+
+    geojson = build_storm_geojson(scan)
+    assert len(geojson["features"]) == 1
+    assert geojson["metadata"]["omittedObjectCount"] == 0
