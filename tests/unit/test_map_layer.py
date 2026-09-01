@@ -291,12 +291,19 @@ def test_intensity_rule_type_stability():
     configuration. Renaming them silently breaks existing user styling without
     any error or warning. This test protects against silent breakage by asserting
     the complete mapping.
+
+    "drizzle" -> "radar_drizzle" is included here too: it is a NEW identifier
+    (added for the precipitation-field layer's 15-20 dBZ band, which
+    `classify_intensity` labels "drizzle"), but once it ships it becomes an
+    external contract exactly like the other five, so it belongs in this same
+    pinning test rather than a separate one that could silently drift.
     """
     from src.map_layer import _intensity_rule_type
     from src.detection import INTENSITY_THRESHOLDS
 
     # Build expected mapping from INTENSITY_THRESHOLDS
     expected = {
+        "drizzle": "radar_drizzle",
         "light precipitation": "radar_light_rain",
         "moderate precipitation": "radar_moderate_rain",
         "heavy precipitation": "radar_heavy_rain",
@@ -808,3 +815,45 @@ def test_high_correlation_still_names_a_class():
     geojson = build_precipitation_field_geojson(_scan_with_light_rain(rhohv_value=0.99))
     classes = {f["properties"]["dominant_class"] for f in geojson["features"]}
     assert "uncertain" not in classes
+
+
+def test_precipitation_layer_skips_a_band_with_no_supporting_gate():
+    """`_scan_with_light_rain`'s reflectivity has two disjoint blobs (17 dBZ
+    and 35 dBZ) with nothing in between, so `exclusive_bands` (src/contours.py)
+    produces a genuinely non-empty [20, 30) geometry -- a floating-point
+    sliver left by its coverage-simplify/aeqd round-trip on two contour
+    levels that coincide before simplification -- even though no gate's own
+    reflectivity ever falls in [20, 30). Confirmed directly against
+    `exclusive_bands` on this fixture's field: that band's geometry has
+    area ~1.5e-6 sq deg and `is_empty` is False, so the ordinary
+    `geometry.is_empty` check alone would let it through. This pins that
+    `build_precipitation_field_geojson` skips it (via `_band_gate_mask`)
+    rather than emitting a shape with no real precipitation behind it,
+    while the two real bands either side of it still come through --
+    ruling out a stub that (bugfully) drops every band.
+    """
+    geojson = build_precipitation_field_geojson(_scan_with_light_rain())
+    band_keys = {
+        (f["properties"]["min_dbz"], f["properties"]["max_dbz"])
+        for f in geojson["features"]
+    }
+    assert band_keys == {(15.0, 20.0), (30.0, 40.0)}
+    assert (20.0, 30.0) not in band_keys
+
+
+def test_light_rain_band_gets_its_own_ruletype_not_generic_echo():
+    """15-20 dBZ is exactly the band this layer exists to surface (it is
+    below the storm layer's 20 dBZ floor). `classify_intensity(15.0)`
+    returns "drizzle", which had no entry in `_intensity_rule_type`'s
+    mapping -- so this band fell through to the generic "radar_echo",
+    which the Audiom accessible-mapping tool leaves unstyled. Styled or
+    not, the band is present in the GeoJSON, so a test asserting only
+    "some ruleType string exists" would pass either way; this pins the
+    specific identifier so an unstyled regression is caught.
+    """
+    geojson = build_precipitation_field_geojson(_scan_with_light_rain())
+    drizzle_band = next(
+        f for f in geojson["features"] if f["properties"]["min_dbz"] == 15.0
+    )
+    assert drizzle_band["properties"]["ruleType"] == "radar_drizzle"
+    assert drizzle_band["properties"]["ruleType"] != "radar_echo"

@@ -59,6 +59,7 @@ def _intensity_rule_type(label: str) -> str:
     # to preserve existing Audiom map styling (renaming them would silently break
     # the user's styling configuration).
     return {
+        "drizzle": "radar_drizzle",
         "light precipitation": "radar_light_rain",
         "moderate precipitation": "radar_moderate_rain",
         "heavy precipitation": "radar_heavy_rain",
