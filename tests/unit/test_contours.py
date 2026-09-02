@@ -1,8 +1,9 @@
 import numpy as np
 import pyart
 import pytest
-from shapely.geometry import Polygon as ShapelyPolygon
-from shapely.ops import unary_union
+from pyart.core.transforms import geographic_to_cartesian_aeqd
+from shapely.geometry import Point, Polygon as ShapelyPolygon
+from shapely.ops import transform as shapely_transform, unary_union
 
 from src.contours import (
     DEFAULT_SIMPLIFY_M,
@@ -13,7 +14,7 @@ from src.contours import (
     polar_vertices_to_lonlat,
     simplify_ground_metres,
 )
-from src.geometry import gate_coordinates
+from src.geometry import gate_areas_km2, gate_coordinates, gate_latlon
 from src.parser import extract_sweep_data
 
 REFERENCE_VOLUME = "cache/KEMX/KEMX20260712_022646_V06"
@@ -169,6 +170,182 @@ def test_contour_mask_joins_a_shape_across_the_seam(sweep):
     out = contour_mask(_mask_sweep(sweep, build), sweep)
     polys = list(out.geoms) if out.geom_type == "MultiPolygon" else [out]
     assert len(polys) == 1, f"seam split the shape into {len(polys)} pieces"
+
+
+def _area_km2(geom, sweep):
+    if geom is None or geom.is_empty:
+        return 0.0
+    projected = shapely_transform(
+        lambda x, y: geographic_to_cartesian_aeqd(
+            np.asarray(x), np.asarray(y), sweep.radar_lon, sweep.radar_lat
+        ),
+        geom,
+    )
+    return projected.area / 1e6
+
+
+def _probe(sweep, ray: int, gate: int, range_gates: float = 0.0, beamwidths: float = 0.0):
+    """A lon/lat point offset from one gate's centre in gate-widths.
+
+    `range_gates` is measured in whole range bins along the beam and
+    `beamwidths` in whole ray spacings across it, so 0.45 lands just inside
+    that gate's own edge and 0.6 lands outside it, in the neighbouring cell.
+    """
+    ranges_m = np.asarray(sweep.ranges_m, dtype=float)
+    azimuths = np.asarray(sweep.azimuths, dtype=float)
+    gate_depth_m = float(np.median(np.diff(ranges_m)))
+    beamwidth_deg = float(np.median(np.abs(np.diff(np.unwrap(azimuths, period=360.0)))))
+    lat, lon = gate_latlon(
+        azimuth_deg=float(azimuths[ray]) + beamwidths * beamwidth_deg,
+        range_m=float(ranges_m[gate]) + range_gates * gate_depth_m,
+        elevation_deg=float(np.asarray(sweep.elevations, dtype=float)[ray]),
+        radar_lat=sweep.radar_lat,
+        radar_lon=sweep.radar_lon,
+    )
+    return Point(lon, lat)
+
+
+def test_isolated_gate_contours_to_its_gate_edge_not_its_gate_centre(sweep):
+    """A single no-data-surrounded echoing gate must be drawn out to its edges.
+
+    A gate is a patch of ground, not a point. The boundary between an
+    echoing gate and a gate the radar reported nothing for belongs half a
+    range gate out along the beam and half a beamwidth out across it -- at
+    that gate's own outer edge.
+
+    Before `_fill_no_data`, no-data was a flat -9999.0, which drove the
+    marching-squares crossing fraction to essentially zero and collapsed the
+    boundary onto the echoing gate's CENTRE: an isolated 18 dBZ gate drew
+    4.7e-8 km2 against a 0.4383 km2 ground footprint, and every shape in the
+    system was inset by half a gate all the way round its no-data boundary.
+    That is silence about weather that is there, which for a user who reads
+    this map by walking it is the worst failure direction available.
+
+    The four inside probes below all sit within the gate's own footprint and
+    all fell outside the pre-fix polygon.
+    """
+    ray, gate = 200, 600
+    field = np.full(np.asarray(sweep.reflectivity).shape, np.nan)
+    field[ray, gate] = 18.0
+
+    drawn = contour_field(field, [15.0], sweep, simplify_m=0.0)[15.0]
+    assert not drawn.is_empty
+
+    for label, probe in (
+        ("outward along the beam", _probe(sweep, ray, gate, range_gates=0.45)),
+        ("inward along the beam", _probe(sweep, ray, gate, range_gates=-0.45)),
+        ("clockwise across the beam", _probe(sweep, ray, gate, beamwidths=0.45)),
+        ("anticlockwise across the beam", _probe(sweep, ray, gate, beamwidths=-0.45)),
+    ):
+        assert drawn.contains(probe), (
+            f"{label}: a point still inside this gate's own footprint is outside "
+            "the drawn shape -- the no-data boundary has collapsed back toward "
+            "the gate centre"
+        )
+
+    for label, probe in (
+        ("outward along the beam", _probe(sweep, ray, gate, range_gates=0.7)),
+        ("clockwise across the beam", _probe(sweep, ray, gate, beamwidths=0.7)),
+    ):
+        assert not drawn.contains(probe), (
+            f"{label}: the shape reaches into a neighbouring cell the radar "
+            "reported nothing for"
+        )
+
+
+def test_isolated_gate_field_contour_matches_its_binary_mask_contour(sweep):
+    """The echo/no-data boundary must behave exactly like an echo/no-echo one.
+
+    `contour_mask` contours a binary mask, where 0 already puts the crossing
+    half a gate out. That is the reference behaviour: contouring a FIELD
+    whose only echo is one gate must produce the same shape as contouring the
+    mask of that same gate. Pre-fix the field path produced 4.7e-8 km2 and
+    the mask path 0.2310 km2 for the same gate -- a factor of 5 million
+    between two functions in the same module describing the same gate.
+
+    HONEST LIMIT, recorded here rather than in a report nobody opens: both
+    numbers are close to HALF the gate's true 0.4383 km2 ground footprint,
+    because marching squares cuts each convex corner of a cell diagonally.
+    An isolated gate is drawn as the diamond inscribed in its footprint, so
+    its area is ~0.5x that footprint however the no-data boundary is placed;
+    an n x n block loses 0.5 of one gate in total, so the error vanishes with
+    size (measured on this geometry: 2x2 0.86, 3x3 0.92, 5x5 0.99, 20x20
+    1.00). This test therefore pins the two paths to each other and to the
+    diamond, and does NOT claim full-footprint area agreement for a single
+    gate, which marching squares cannot deliver at any sentinel value.
+    """
+    ray, gate = 200, 600
+    field = np.full(np.asarray(sweep.reflectivity).shape, np.nan)
+    field[ray, gate] = 18.0
+    mask = np.zeros(field.shape, dtype=bool)
+    mask[ray, gate] = True
+
+    field_area = _area_km2(contour_field(field, [15.0], sweep, simplify_m=0.0)[15.0], sweep)
+    mask_area = _area_km2(contour_mask(mask, sweep, simplify_m=0.0), sweep)
+    footprint = float(
+        gate_areas_km2(sweep.azimuths, sweep.ranges_m, sweep.elevation_angle)[gate]
+    )
+
+    assert field_area == pytest.approx(mask_area, rel=0.05)
+    assert field_area == pytest.approx(0.5 * footprint, rel=0.05)
+
+
+def test_echo_in_the_last_range_bin_reaches_that_bin_s_outer_edge(sweep):
+    """Echo at the end of the range axis must not stop dead on the gate centre.
+
+    contourpy cannot place a vertex outside the array it was handed, so
+    without the no-data column `_pad_for_contouring` adds at each end of the
+    range axis, a shape reaching the first or last range bin was cut off at
+    that bin's centre. The matching coordinate extension lives in
+    `_padded_ranges`; without it `np.interp` would clamp the vertex straight
+    back onto the same centre.
+    """
+    n_gates = np.asarray(sweep.reflectivity).shape[1]
+    for gate in (0, n_gates - 1):
+        field = np.full(np.asarray(sweep.reflectivity).shape, np.nan)
+        field[195:205, gate] = 25.0
+        drawn = contour_field(field, [15.0], sweep, simplify_m=0.0)[15.0]
+        outward = 0.45 if gate else -0.45
+        assert drawn.contains(_probe(sweep, 200, gate, range_gates=outward)), (
+            f"gate {gate}: the shape stops at the outermost bin's centre "
+            "instead of its edge"
+        )
+
+
+def test_inner_range_padding_never_produces_a_negative_range(sweep):
+    """Half a gate inside the first range bin must stay a real, positive range."""
+    from src.contours import _padded_ranges
+
+    padded, index = _padded_ranges(sweep)
+    assert np.all(np.diff(padded) > 0), "extended range axis is not increasing"
+    assert padded[0] >= 0.0
+    assert index[0] == -1.0 and index[-1] == len(np.asarray(sweep.ranges_m))
+    # The innermost vertex a contour can produce sits at index -0.5.
+    assert float(np.interp(-0.5, index, padded)) >= 0.0
+
+
+def test_field_contour_joins_a_blob_across_the_seam_with_the_right_area(sweep):
+    """The seam, re-verified for the FIELD path after the padding change.
+
+    `_pad_for_contouring` now pads the range axis as well as the ray axis and
+    computes a neighbour maximum that must treat azimuth as periodic. This
+    project has had four separate defects at the 0/360 seam, one of which
+    reported a storm due north as due south, so a padding change is
+    re-checked here rather than assumed: a blob straddling due north must
+    come back as ONE polygon carrying the ground area its gates cover.
+    """
+    shape = np.asarray(sweep.reflectivity).shape
+    field = np.full(shape, np.nan)
+    field[-15:, 300:340] = 25.0
+    field[:15, 300:340] = 25.0
+
+    drawn = contour_field(field, [15.0], sweep, simplify_m=0.0)[15.0]
+    polys = list(drawn.geoms) if drawn.geom_type == "MultiPolygon" else [drawn]
+    assert len(polys) == 1, f"seam split the shape into {len(polys)} pieces"
+
+    per_bin = gate_areas_km2(sweep.azimuths, sweep.ranges_m, sweep.elevation_angle)
+    gate_summed = float(np.broadcast_to(per_bin[None, :], shape)[np.isfinite(field)].sum())
+    assert _area_km2(drawn, sweep) == pytest.approx(gate_summed, rel=0.05)
 
 
 def _ramp_field(sweep):
