@@ -693,6 +693,22 @@ def test_vertex_count_distribution(volumes):
     pooled, for both layers, plus the hull baseline for scale. No threshold
     is asserted: whether this vertex count is workable in Audiom is the
     project owner's decision, and he cannot make it without these numbers.
+
+    UNITS -- read this before quoting anything printed here. These counts are
+    PER DISJOINT POLYGON FRAGMENT, which is NOT the unit that governs. A map
+    viewer loads a GeoJSON *Feature*, and `build_precipitation_field_geojson`
+    emits one Feature per intensity band whose geometry is a single
+    MultiPolygon holding hundreds of fragments. Per fragment, the
+    precipitation layer's median is ~3 vertices; per Feature it is ~11,844.
+    Quoting the fragment figure as the load a shape imposes understates it by
+    roughly two orders of magnitude and inverts which layer is heavier -- a
+    published report did exactly that and had to be corrected (see
+    `docs/test_reports/2026-08-31-spec2-shape-truth.md`).
+
+    The fragment view is kept because it is the right unit for a different
+    question -- how finely the contour+simplify stage is fracturing the field,
+    which is what motivated MIN_PRECIP_FRAGMENT_AREA_KM2. For the per-Feature
+    numbers, run `docs/test_reports/2026-08-31-spec2-vertex-measurement.py`.
     """
     def _stats(label, counts):
         if not counts:
@@ -702,6 +718,8 @@ def test_vertex_count_distribution(volumes):
         print(f"{label:<34} n={len(arr):>6} min={arr.min():>5} "
               f"median={np.median(arr):>7.0f} max={arr.max():>6} p95={np.percentile(arr, 95):>7.0f}")
 
+    print("\n=== VERTICES PER DISJOINT FRAGMENT -- not the per-Feature load a map viewer "
+          "carries.\n    For per-Feature numbers see this test's docstring. ===")
     print(f"\n--- Storm footprint layer (contour, DEFAULT_SIMPLIFY_M={DEFAULT_SIMPLIFY_M}) ---")
     pooled_storm = []
     for label, vol in volumes.items():
