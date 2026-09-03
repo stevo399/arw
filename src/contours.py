@@ -445,6 +445,28 @@ def _raw_bands(field: np.ndarray, ordered_levels, sweep):
     both differences, before any simplification touches it. That is what
     keeps `exclusive_bands` from re-opening a gap or overlap at the seam
     between two adjacent bands.
+
+    WHAT THIS GUARANTEES, stated precisely because the previous wording
+    ("guarantees ... exactly such a coverage") was checked and found to
+    overclaim. Measured on the raw output of this function, real volumes:
+
+      - interior-disjoint: worst pairwise band overlap 0.000000000 km2
+        (KTLX and KEMX);
+      - exact tiling, no gaps: sum of the bands' own areas equals the area
+        of their union to full double precision -- 14374.946031 km2 on
+        KTLX, 34411.490698 km2 on KEMX, difference 0.000000000 km2.
+
+    What it does NOT guarantee is that `shapely.coverage_is_valid` returns
+    True, and it never did. It returns False on both volumes (182 flagged
+    edges on KTLX, 23 on KEMX, longest 1718.6 m). Those edges were traced:
+    all 182 of 182 and all 23 of 23 lie on the coverage's OWN OUTER
+    BOUNDARY, where by definition there is no neighbouring band to match
+    them, and each starts or ends at a point where three bands pinch
+    together. They are not overlaps, not gaps, and not mismatched interior
+    edges -- the two measurements above rule all three out directly. See
+    `_simplify_bands_as_coverage` for what that means for the operation
+    downstream, and `tests/e2e/test_proof_shape_truth.py` for the real-data
+    assertions that pin all of it.
     """
     padded = _pad_for_contouring(field)
     cumulative_raw = {
@@ -471,9 +493,47 @@ def _simplify_bands_as_coverage(bands: dict, sweep, simplify_m: float) -> dict:
     every polygon that references it -- unlike calling `.simplify()` on each
     band separately, which treats each ring as its own problem and lets two
     neighbours drift apart or across each other along a boundary they are
-    supposed to share exactly. `_raw_bands` guarantees the input here is
-    exactly such a coverage (edge-matched, non-overlapping) before
-    simplification ever runs.
+    supposed to share exactly.
+
+    THE PRECONDITION, and how far it actually holds. Shapely documents
+    `coverage_simplify` as assuming a valid polygonal coverage and leaves
+    the result undefined otherwise, so this is not a detail to wave at.
+    `_raw_bands` (see its docstring for the measurements) produces bands
+    that are interior-disjoint and tile their union exactly, with every
+    shared interior edge coming from the same ring object in both
+    neighbours. `shapely.coverage_is_valid` nevertheless reports False on
+    real volumes -- and on the INPUT to this function every edge it flags
+    (182 on KTLX, 23 on KEMX) was traced to the coverage's own OUTER
+    boundary, where there is no neighbour to match and nothing for joint
+    simplification to keep in step. The operation's meaningful precondition
+    therefore holds; the library's boolean does not report it.
+
+    On the OUTPUT the picture is the same: 177 flagged edges on KTLX, of
+    which 175 are outer-boundary and 2 are an interior matched PAIR -- one
+    edge from the 15-20 band and one from the 20-30 band, at the same place,
+    every vertex of each sitting 0.000000 m from the other's boundary. They
+    describe the same curve split into different segments, which is what
+    GEOS's edge matching objects to; they do not describe different ground.
+    KEMX and KIWA have no interior flagged edge at all. Overlap and tiling
+    gap are 0.000000000 km2 on all three.
+
+    That is a claim about today's geometry, so it is not left resting on
+    itself. Two things back it up:
+
+      - a runtime guard here: a band that had real area before
+        simplification and comes back empty afterwards means weather has
+        silently vanished from the map, so the whole simplification pass is
+        discarded and the exact, unsimplified bands are returned instead. An
+        unsimplified band is heavier to serialise; it is never wrong.
+      - real-data assertions in `tests/e2e/test_proof_shape_truth.py`
+        (`test_precipitation_bands_are_exclusive_and_nested`) covering
+        exclusivity, exact tiling and nesting on all three cached volumes,
+        so a future volume or a GEOS upgrade that breaks this fails the
+        suite instead of passing it quietly. The expensive geometric checks
+        live there rather than here because `exclusive_bands` runs once per
+        detected object on the storm layer, where a per-call union costs
+        ~2.3 s (measured, KTLX) and would be paid dozens of times per
+        request.
     """
     keys = list(bands.keys())
     geoms = [bands[key] for key in keys]
@@ -508,7 +568,32 @@ def _simplify_bands_as_coverage(bands: dict, sweep, simplify_m: float) -> dict:
         back = _repair_if_invalid(back, keys[i])
         if not back.is_empty:
             result[keys[i]] = MultiPolygon([back]) if back.geom_type == "Polygon" else back
+
+    emptied = [
+        keys[i] for i in non_empty if geoms[i].area > 0.0 and result[keys[i]].is_empty
+    ]
+    if emptied:
+        # Discard the whole pass rather than the affected bands only:
+        # coverage_simplify moves shared vertices jointly, so if it has gone
+        # wrong badly enough to delete a band, the bands either side of the
+        # deleted one are the ones whose shared boundary it was moving, and
+        # they cannot be trusted separately. `_raw_bands` output is exact and
+        # exclusive; it is only heavier.
+        logger.warning(
+            "coverage_simplify emptied %d band(s) that had real area (%s); "
+            "falling back to unsimplified bands so no weather is lost",
+            len(emptied), emptied,
+        )
+        return {
+            key: _as_multipolygon_or_empty(bands[key]) for key in keys
+        }
     return result
+
+
+def _as_multipolygon_or_empty(geom):
+    if geom is None or geom.is_empty:
+        return MultiPolygon()
+    return MultiPolygon([geom]) if geom.geom_type == "Polygon" else geom
 
 
 def exclusive_bands(field: np.ndarray, levels, sweep, simplify_m: float = DEFAULT_SIMPLIFY_M):

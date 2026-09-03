@@ -420,6 +420,45 @@ def test_contour_field_all_nan_returns_multipolygon(sweep):
         assert region.is_empty
 
 
+def test_simplify_falls_back_to_raw_bands_when_it_would_empty_one(sweep, monkeypatch, caplog):
+    """A band that had real area must never be simplified out of existence.
+
+    `shapely.coverage_simplify` is documented as assuming a valid polygonal
+    coverage and leaving its result undefined otherwise, and
+    `shapely.coverage_is_valid` reports False on real volumes here (traced in
+    `_raw_bands`'s docstring to outer-boundary edges, which is benign -- but
+    benign-today is not a guarantee). If the operation ever does go wrong,
+    the user-visible failure is a band vanishing: weather present on the
+    radar, absent from the map, with nothing said about it.
+
+    This forces that outcome and asserts the module discards the whole
+    simplification pass and returns the exact unsimplified bands instead.
+    """
+    import src.contours as contours
+
+    field = np.full(np.asarray(sweep.reflectivity).shape, np.nan)
+    field[100:200, 300:400] = 25.0
+    field[130:170, 330:370] = 45.0
+    levels = [20.0, 40.0]
+
+    raw = contours._raw_bands(field, levels, sweep)
+    assert all(g.area > 0 for g in raw.values()), "fixture must give both bands area"
+
+    monkeypatch.setattr(
+        contours, "coverage_simplify",
+        lambda geoms, tolerance: [ShapelyPolygon() for _ in geoms],
+    )
+    with caplog.at_level("WARNING", logger="src.contours"):
+        out = contours.exclusive_bands(field, levels, sweep)
+
+    assert [r.getMessage() for r in caplog.records], "the fallback must say so"
+    assert "falling back to unsimplified bands" in caplog.records[0].getMessage()
+    for key, geom in out.items():
+        assert not geom.is_empty, f"band {key} was lost"
+        assert geom.geom_type == "MultiPolygon"
+        assert geom.area == pytest.approx(raw[key].area, rel=1e-12)
+
+
 class _FakeInvalidGeom:
     """A minimal stand-in for a shapely geometry that is invalid, reports a
     non-zero pre-repair area, and collapses to empty under buffer(0).

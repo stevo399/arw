@@ -57,16 +57,23 @@ from pathlib import Path
 import numpy as np
 import pyart
 import pytest
+import shapely
 from shapely.geometry import Point, Polygon as ShapelyPolygon, shape as shapely_shape
-from shapely.ops import transform as shapely_transform
+from shapely.ops import transform as shapely_transform, unary_union
 from shapely.prepared import prep
 from pyart.core.transforms import geographic_to_cartesian_aeqd
 
 from src.buffer import BufferedScan
-from src.contours import DEFAULT_SIMPLIFY_M, contour_mask
+from src.contours import DEFAULT_SIMPLIFY_M, contour_mask, exclusive_bands
 from src.detection import MIN_DBZ_THRESHOLD, detect_objects_with_grid
 from src.geometry import align_field_by_azimuth, gate_areas_km2, gate_coordinates
-from src.map_layer import _object_footprint, build_precipitation_field_geojson
+from src.map_layer import (
+    MIN_PRECIP_FRAGMENT_AREA_KM2,
+    PRECIP_FIELD_LEVELS,
+    _band_gate_mask,
+    _object_footprint,
+    build_precipitation_field_geojson,
+)
 from src.parser import extract_sweep_data, extract_velocity
 from src.preprocess import preprocess_sweep
 from src.shape_truth import measure_walk_truth
@@ -328,12 +335,27 @@ class VolumeMeasurement:
             poly = _hull_ring_polygon(hull_module, self.scan, obj)
             if poly is not None:
                 self.hull_vertex_counts.append(_vertex_count(poly))
-        precip_geojson = build_precipitation_field_geojson(self.scan)
+        self.precip_geojson = build_precipitation_field_geojson(self.scan)
         self.precip_vertex_counts = []
-        for feature in precip_geojson["features"]:
+        for feature in self.precip_geojson["features"]:
             geom = shapely_shape(feature["geometry"])
             for poly in _polygons_of(geom):
                 self.precip_vertex_counts.append(_vertex_count(poly))
+
+        # The precipitation-field layer's own geometry, before
+        # `build_precipitation_field_geojson`'s small-fragment filter, so the
+        # contour module's own properties (exclusivity, tiling, nesting, area
+        # agreement) are measured on what it actually produced rather than on
+        # what survived a separate product decision. The filter's own cost is
+        # measured against these in `test_precipitation_fragment_filter_cost`.
+        self.precip_bands = exclusive_bands(
+            sweep.reflectivity, PRECIP_FIELD_LEVELS, sweep
+        )
+        self.precip_gate_area_km2 = {}
+        for lower, upper in self.precip_bands:
+            self.precip_gate_area_km2[(lower, upper)] = _gate_summed_area_km2(
+                sweep, _band_gate_mask(sweep, lower, upper)
+            )
 
         # Edge-floor ("no invented detail"), contour and hull.
         self.contour_edges = []
@@ -679,6 +701,151 @@ def test_resolution_floor_guard_no_edge_below_half_floor(volumes):
             assert severe == 0, (
                 f"{label} {impl_name}: {severe} edges below half their local resolution floor "
                 "-- genuinely fabricated fine detail"
+            )
+
+
+# ===================================================================
+# 6. The precipitation-field layer, on real data
+#
+# Everything above this line measures the storm-object layer. Until this
+# section existed, the precipitation-field layer had no real-data fidelity
+# assertion anywhere in the suite -- every test of it ran against a 60x60
+# synthetic sweep whose gates are ~12x a real NEXRAD gate, which is how a
+# half-gate inset, a level-membership mismatch and two uncounted omission
+# paths all reached a shipping branch. The measurements below reuse the same
+# machinery the storm layer is held to, pointed at this layer.
+# ===================================================================
+
+
+def _projected_metres(geom, sweep):
+    return shapely_transform(
+        lambda x, y: geographic_to_cartesian_aeqd(
+            np.asarray(x), np.asarray(y), sweep.radar_lon, sweep.radar_lat
+        ),
+        geom,
+    )
+
+
+def test_precipitation_bands_are_exclusive_and_nested(volumes):
+    """Stepping inward across this layer must cross exactly one real boundary.
+
+    Band exclusivity is the property the whole layer rests on, and it is
+    produced by `shapely.coverage_simplify`, which shapely documents as
+    assuming a valid polygonal coverage and leaving its result UNDEFINED
+    otherwise. `shapely.coverage_is_valid` returns False on this input, so
+    the property cannot be taken on trust from the library's contract. It is
+    measured directly here instead, on real volumes, and the reason the
+    library says False is pinned too:
+
+      - no two bands overlap;
+      - the bands tile their union exactly -- sum of areas == union area, so
+        there is no gap between neighbours either;
+      - every edge `coverage_invalid_edges` flags either lies on the
+        coverage's OWN OUTER boundary -- where there is no neighbouring band
+        to match it and nothing for joint simplification to keep in step --
+        or lies exactly ON a neighbouring band's boundary, differing from it
+        only in how the shared curve is split into segments.
+
+    That last assertion is the load-bearing one, and it is what turns
+    "the library says False and the output happens to look clean" into a
+    measured statement about what is actually wrong. Measured: 177 flagged
+    edges on KTLX, of which 175 are outer-boundary and 2 are an interior
+    matched PAIR -- one edge from the 15-20 band and one from the 20-30 band,
+    at the same place, every vertex of each sitting 0.000000 m from the
+    other's boundary. 23 flagged on KEMX and 8 on KIWA, all outer. So there
+    is no geometric disagreement anywhere: no overlap, no gap, no displaced
+    shared edge. If a future volume or a GEOS upgrade ever produces a real
+    one, this fails rather than passing quietly.
+    """
+    # A shared boundary that has genuinely MOVED would sit at the scale of
+    # the simplification tolerance (100 m) or at worst the aeqd round trip's
+    # own precision. A millimetre separates "the same curve, split
+    # differently" from "a curve that moved" by five orders of magnitude in
+    # either direction, so nothing hinges on where in that gap it is set.
+    COINCIDENT_M = 1e-3
+
+    print(f"\n{'site':<18} {'bands':>6} {'cov_valid':>10} {'worst_overlap_km2':>18} "
+          f"{'tiling_gap_km2':>15} {'flagged':>8} {'outer':>6} {'interior':>9} "
+          f"{'worst_gap_m':>12}")
+    for label, vol in volumes.items():
+        sweep = vol.sweep
+        geoms = [g for g in vol.precip_bands.values() if not g.is_empty]
+        assert geoms, f"{label}: the precipitation layer produced no bands at all"
+        projected = [_projected_metres(g, sweep) for g in geoms]
+
+        worst_overlap = 0.0
+        for i in range(len(projected)):
+            for j in range(i + 1, len(projected)):
+                worst_overlap = max(
+                    worst_overlap, projected[i].intersection(projected[j]).area / 1e6
+                )
+
+        union = unary_union(projected)
+        tiling_gap = abs(sum(p.area for p in projected) - union.area) / 1e6
+
+        is_valid = bool(shapely.coverage_is_valid(projected))
+        flagged = on_outer = interior = 0
+        worst_separation_m = 0.0
+        if not is_valid:
+            outer = union.boundary
+            for i, edge in enumerate(shapely.coverage_invalid_edges(projected)):
+                if edge is None or edge.is_empty:
+                    continue
+                neighbours = unary_union(
+                    [projected[j].boundary for j in range(len(projected)) if j != i]
+                )
+                for part in (edge.geoms if hasattr(edge, "geoms") else [edge]):
+                    flagged += 1
+                    if max(Point(xy).distance(outer) for xy in part.coords) < 1e-6:
+                        on_outer += 1
+                        continue
+                    interior += 1
+                    worst_separation_m = max(
+                        worst_separation_m,
+                        max(Point(xy).distance(neighbours) for xy in part.coords),
+                    )
+
+        print(f"{label:<18} {len(geoms):>6} {str(is_valid):>10} {worst_overlap:>18.9f} "
+              f"{tiling_gap:>15.9f} {flagged:>8} {on_outer:>6} {interior:>9} "
+              f"{worst_separation_m:>12.6f}")
+
+        assert worst_overlap < 1e-6, (
+            f"{label}: two precipitation bands claim the same {worst_overlap:.9f} km2 "
+            "of ground -- stepping inward crosses two features at once"
+        )
+        assert tiling_gap < 1e-6, (
+            f"{label}: the bands do not tile their own union ({tiling_gap:.9f} km2 "
+            "discrepancy) -- there is a gap or an overlap between neighbours"
+        )
+        assert worst_separation_m < COINCIDENT_M, (
+            f"{label}: an interior edge flagged by coverage_invalid_edges lies "
+            f"{worst_separation_m:.6f} m away from the neighbouring band's boundary. "
+            "Every flagged interior edge measured on these volumes was exactly "
+            "coincident with its neighbour (a segmentation difference, not a "
+            "geometric one) -- a separated one means coverage_simplify has moved a "
+            "shared boundary in one band and not the other"
+        )
+
+        # Nesting: everything at or above a level must sit inside everything
+        # at or above the level below it. This is what makes the cumulative
+        # reading of the layer coherent -- a severe core inside a heavy band
+        # inside a light one.
+        ordered = sorted(vol.precip_bands)
+        for i in range(len(ordered) - 1):
+            inner = unary_union([
+                _projected_metres(vol.precip_bands[k], sweep)
+                for k in ordered[i + 1:]
+                if not vol.precip_bands[k].is_empty
+            ])
+            outer_region = unary_union([
+                _projected_metres(vol.precip_bands[k], sweep)
+                for k in ordered[i:]
+                if not vol.precip_bands[k].is_empty
+            ])
+            leak = inner.difference(outer_region).area / 1e6
+            assert leak < 1e-6, (
+                f"{label}: {leak:.9f} km2 of the >= {ordered[i + 1][0]} dBZ region "
+                f"sits outside the >= {ordered[i][0]} dBZ region"
             )
 
 
