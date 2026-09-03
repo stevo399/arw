@@ -44,6 +44,35 @@ SEAM_PAD_RAYS = 2
 # not use this value.
 NO_DATA_FLOOR = -9999.0
 
+# Level membership is HALF-OPEN AND CLOSED AT THE BOTTOM: a gate belongs to
+# a level if its reflectivity is >= that level. That is the convention the
+# rest of the system already uses -- `src.map_layer._band_gate_mask`,
+# `src.detection.classify_intensity`, `src.shape_truth.measure_walk_truth`
+# all bucket with `>=` -- so the geometry is what had to move.
+#
+# contourpy's `filled(level, inf)` is strict: a value sitting exactly ON the
+# level is treated as on the boundary, not inside, and `filled(20.0, inf)`
+# over a block of exact 20.0s returns zero rings. NEXRAD reflectivity is
+# quantized to 0.5 dBZ, so exact hits on the integer band levels are not a
+# corner case: 5,912 gates on KTLX and 8,748 on KEMX sit exactly on a band
+# level, 6.5% and 7.8% of their >= 15 dBZ ground. Every one of those was in
+# the evidence a band reports (`_band_evidence`) and outside the polygon
+# that evidence was attached to.
+#
+# Contouring at `level - LEVEL_MEMBERSHIP_EPSILON` makes the geometry agree.
+# The epsilon has to be small enough not to reach the next quantum down --
+# any value in (0, 0.5) does that for quantized data -- and large enough to
+# survive float64 arithmetic at these magnitudes, where one ulp near 60 dBZ
+# is ~7e-15. 1e-6 dBZ is two millionths of the smallest real difference the
+# data can express, so it shifts an interpolated boundary between two gates
+# differing by even 1 dBZ by one part in a million of a gate.
+LEVEL_MEMBERSHIP_EPSILON = 1e-6
+
+
+def _contour_level(level: float) -> float:
+    """The value to hand contourpy so that `>= level` means inside."""
+    return float(level) - LEVEL_MEMBERSHIP_EPSILON
+
 
 def _padded_axes(sweep):
     """Ray-axis arrays extended past the seam, kept monotonic in azimuth.
@@ -391,10 +420,15 @@ def _contour_at_level_raw(field: np.ndarray, level: float, sweep, padded=None):
     # NaN means 'no data'. It must not read as 'below the level' in a way
     # that closes the contour around the last echoing gate's CENTRE -- see
     # `_fill_no_data`, which puts that boundary on the gate's edge instead.
-    filled = _fill_no_data(padded_field, neighbour_max, level)
+    # See LEVEL_MEMBERSHIP_EPSILON: contourpy's `filled` is strict, and this
+    # system buckets gates with `>=` everywhere else. The same effective
+    # level goes into `_fill_no_data`, so the gate-edge reflection stays
+    # centred on the level the contour is actually drawn at.
+    effective_level = _contour_level(level)
+    filled = _fill_no_data(padded_field, neighbour_max, effective_level)
 
     generator = contour_generator(z=filled, name="serial", fill_type="OuterCode")
-    points_list, codes_list = generator.filled(level, np.inf)
+    points_list, codes_list = generator.filled(effective_level, np.inf)
 
     geographic = _polygons_to_geographic(
         _rings_to_polygons(points_list, codes_list), sweep

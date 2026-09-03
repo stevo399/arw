@@ -420,6 +420,40 @@ def test_contour_field_all_nan_returns_multipolygon(sweep):
         assert region.is_empty
 
 
+def test_a_gate_exactly_on_a_level_is_inside_that_level(sweep):
+    """`>=` must mean the same thing to the geometry as to the evidence.
+
+    NEXRAD reflectivity is quantized to 0.5 dBZ, so gates sitting EXACTLY on
+    an integer band level are guaranteed, not incidental: 5,912 of them on
+    KTLX and 8,748 on KEMX, 6.5% and 7.8% of each volume's >= 15 dBZ ground.
+    contourpy's `filled(level, inf)` is strict -- verified directly, it
+    returns zero rings for a block of exact 20.0s at level 20.0 -- while
+    `src.map_layer._band_gate_mask` and every other bucketing site in this
+    system use `>=`. Each band's rhohv, zdr, dominant class and class
+    fractions therefore described a different set of gates from the polygon
+    they travelled with, which is the basis on which this layer tells the
+    user "this is rain" rather than "uncertain".
+    """
+    field = np.full(np.asarray(sweep.reflectivity).shape, np.nan)
+    field[100:140, 300:340] = 20.0
+
+    at_level = contour_field(field, [20.0], sweep, simplify_m=0.0)[20.0]
+    assert not at_level.is_empty, (
+        "a block of gates sitting exactly on the level produced no geometry -- "
+        "the contour and the gate mask disagree about level membership"
+    )
+
+    per_bin = gate_areas_km2(sweep.azimuths, sweep.ranges_m, sweep.elevation_angle)
+    gate_summed = float(per_bin[300:340].sum() * 40)
+    assert _area_km2(at_level, sweep) == pytest.approx(gate_summed, rel=0.05)
+
+    # And the epsilon must not reach down into the next quantum: gates at
+    # 19.5 dBZ, one NEXRAD step below the level, stay outside it.
+    below = np.full(np.asarray(sweep.reflectivity).shape, np.nan)
+    below[100:140, 300:340] = 19.5
+    assert contour_field(below, [20.0], sweep, simplify_m=0.0)[20.0].is_empty
+
+
 def test_simplify_falls_back_to_raw_bands_when_it_would_empty_one(sweep, monkeypatch, caplog):
     """A band that had real area must never be simplified out of existence.
 

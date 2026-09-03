@@ -574,6 +574,19 @@ def _band_gate_mask(sweep, lower: float, upper: float) -> np.ndarray:
     contoured geometry is backed by any real gate at all) and `_band_evidence`
     (to compute that band's evidence from exactly those gates), so the two
     can never disagree about which gates support a band.
+
+    HALF-OPEN, CLOSED AT THE BOTTOM -- `lower <= v < upper` -- which is the
+    convention `src.detection.classify_intensity` and
+    `src.shape_truth.measure_walk_truth` already use, and which
+    `src.contours` was made to match (see `LEVEL_MEMBERSHIP_EPSILON` there
+    for why the geometry was the side that moved and what it cost). Before
+    that, the geometry used contourpy's strict `>` while this used `>=`, so
+    a gate sitting exactly on a level was in the evidence a band reported
+    and outside the polygon that evidence was attached to: 5,912 such gates
+    on KTLX, 8,748 on KEMX, 6.5-13.6% of each volume's >= 15 dBZ ground.
+    NEXRAD reflectivity is quantized to 0.5 dBZ, so exact hits on integer
+    band levels are guaranteed, not incidental. Do not change one side of
+    this without the other.
     """
     field = np.asarray(sweep.reflectivity, dtype=float)
     in_band = np.isfinite(field) & (field >= lower)
