@@ -8,6 +8,7 @@ from shapely.ops import transform
 from src.buffer import BufferedScan
 from src.contours import contour_mask, exclusive_bands
 from src.detection import DetectedObject, IntensityLayerData, classify_intensity, degrees_to_bearing
+from src.geometry import gate_areas_km2
 from src.qc.classifier import CODE_TO_CLASS
 from src.summary import km2_to_mi2, km_to_miles
 
@@ -567,6 +568,23 @@ def _drop_small_fragments(
     return MultiPolygon(kept), dropped_count, dropped_area_km2
 
 
+def _gate_area_grid(sweep) -> np.ndarray:
+    """Ground area of every gate in the sweep, shaped like the field.
+
+    Every gate in a given range ring has the same ground footprint whatever
+    its azimuth, so `gate_areas_km2`'s one-value-per-range-bin result
+    broadcasts across the rays -- the same way `src.shape_truth` uses it.
+    """
+    per_range_bin = gate_areas_km2(sweep.azimuths, sweep.ranges_m, sweep.elevation_angle)
+    return np.broadcast_to(
+        per_range_bin[None, :], np.asarray(sweep.reflectivity).shape
+    )
+
+
+def _band_label(lower: float, upper: float) -> str:
+    return f"{lower:g}+" if upper == float("inf") else f"{lower:g}-{upper:g}"
+
+
 def _band_gate_mask(sweep, lower: float, upper: float) -> np.ndarray:
     """Boolean mask of gates whose reflectivity genuinely falls in [lower, upper).
 
@@ -653,14 +671,45 @@ def build_precipitation_field_geojson(scan: BufferedScan) -> dict[str, Any]:
     """
     sweep = scan.reflectivity_data
     bands = exclusive_bands(sweep.reflectivity, PRECIP_FIELD_LEVELS, sweep)
+    gate_area = _gate_area_grid(sweep)
 
     features = []
     omitted_fragment_count = 0
     omitted_fragment_area_km2 = 0.0
+    omitted_bands: list[dict[str, Any]] = []
+
+    def _record_omission(lower, upper, reason, support):
+        """Name a band that produced no feature, and say what it cost.
+
+        Every path out of this loop that does not append a feature comes
+        through here. A band can carry real weather and still be dropped --
+        by an empty geometry, by having no supporting gate, or by losing
+        every piece to the small-fragment filter -- and the standing rule
+        for this layer is that a dropped shape is counted and discoverable,
+        never silent. The gate count and gate-summed ground area travel with
+        the record because a bare count cannot tell the project owner
+        whether what vanished was a speckle or a severe core.
+        """
+        omitted_bands.append({
+            "band": _band_label(lower, upper),
+            "min_dbz": lower,
+            "max_dbz": None if upper == float("inf") else upper,
+            "reason": reason,
+            "gateCount": int(support.sum()),
+            "gateAreaKm2": round(float(gate_area[support].sum()), 4),
+        })
+
     for (lower, upper), geometry in bands.items():
+        support = _band_gate_mask(sweep, lower, upper)
         if geometry.is_empty:
+            # No contour at all for this band. Usually it means there is no
+            # such weather, in which case `support` is empty too and the
+            # record below says so -- but if `support` is NOT empty, real
+            # gates in this band produced no drawable shape, and that is a
+            # thing the metadata has to be able to say out loud.
+            _record_omission(lower, upper, "empty_geometry", support)
             continue
-        if not _band_gate_mask(sweep, lower, upper).any():
+        if not support.any():
             # Geometric difference between two contour levels can leave a
             # floating-point sliver (observed directly: ~1.5e-6 sq deg on a
             # synthetic two-blob field, from the coverage-simplify/aeqd
@@ -671,6 +720,7 @@ def build_precipitation_field_geojson(scan: BufferedScan) -> dict[str, Any]:
             # elsewhere (see object_geometry's docstring), just from a
             # different source. A band with no supporting gate is skipped
             # rather than emitted with an empty/"uncertain" evidence block.
+            _record_omission(lower, upper, "no_supporting_gate", support)
             continue
         geometry, fragment_count, fragment_area_km2 = _drop_small_fragments(
             geometry, sweep.radar_lat, sweep.radar_lon
@@ -678,6 +728,13 @@ def build_precipitation_field_geojson(scan: BufferedScan) -> dict[str, Any]:
         omitted_fragment_count += fragment_count
         omitted_fragment_area_km2 += fragment_area_km2
         if geometry.is_empty:
+            # Every piece of this band was below MIN_PRECIP_FRAGMENT_AREA_KM2,
+            # so the whole band disappears. The fragment counters alone
+            # cannot say that: they aggregate across bands and cannot tell
+            # you WHICH band went (measured on KIWA, where the 30-40 and
+            # 40-50 dBZ bands both vanish this way, leaving that volume's
+            # precipitation layer showing nothing at all above 30 dBZ).
+            _record_omission(lower, upper, "all_fragments_below_area_floor", support)
             continue
         properties = {
             "id": f"{scan.site_id}-precip-{int(lower)}",
@@ -708,6 +765,16 @@ def build_precipitation_field_geojson(scan: BufferedScan) -> dict[str, Any]:
     # whether the filter is behaving, so the area is reported too.
     metadata["omittedFragmentCount"] = omitted_fragment_count
     metadata["omittedFragmentAreaKm2"] = round(omitted_fragment_area_km2, 4)
+    # And every whole band that produced no feature, with the reason it
+    # produced none and the ground its own gates covered. Before this, two
+    # paths out of the feature loop incremented nothing at all: a uniform
+    # 60.0 dBZ severe core of 23 km2 came through this builder as zero
+    # features with every counter reading zero.
+    metadata["omittedBands"] = omitted_bands
+    metadata["omittedBandCount"] = len(omitted_bands)
+    metadata["omittedBandAreaKm2"] = round(
+        sum(band["gateAreaKm2"] for band in omitted_bands), 4
+    )
     return {
         "type": "FeatureCollection",
         "metadata": metadata,

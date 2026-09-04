@@ -6,6 +6,7 @@ from shapely.geometry import shape as shapely_shape
 from src.buffer import BufferedScan
 from src.detection import DetectedObject, IntensityLayerData
 from src.map_layer import (
+    PRECIP_FIELD_LEVELS,
     build_precipitation_field_geojson,
     build_storm_audiom_geojson,
     build_storm_centroid_geojson,
@@ -984,3 +985,130 @@ def test_storm_layer_is_unaffected_by_the_fragment_filter():
     geojson = build_storm_geojson(scan)
     assert len(geojson["features"]) == 1
     assert geojson["metadata"]["omittedObjectCount"] == 0
+
+
+def _scan_with_uniform_field(value: float) -> BufferedScan:
+    """A uniform block of exactly `value` dBZ, at real NEXRAD-like geometry.
+
+    360 rays at ~1 degree and 250 m gate spacing, so a 20x20 gate block is
+    about 23 km2 -- a real severe core's worth of ground, not the ~1550 km2
+    the 60x60 fixtures elsewhere in this file would make of the same block.
+    """
+    n_rays, n_gates = 360, 60
+    reflectivity = np.full((n_rays, n_gates), np.nan)
+    reflectivity[100:120, 20:40] = value
+    mask = np.isfinite(reflectivity)
+    return BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0),
+        site_id="KTLX",
+        reflectivity_data=SweepData(
+            reflectivity=reflectivity,
+            azimuths=np.linspace(0.0, 359.0, n_rays),
+            ranges_m=np.arange(20000.0, 20000.0 + 250.0 * n_gates, 250.0),
+            radar_lat=35.3331,
+            radar_lon=-97.2778,
+            elevation_angle=0.5,
+            elevations=np.full(n_rays, 0.5),
+            elevation_angles=[0.5],
+            radar_alt_m=390.0,
+            timestamp="2026-04-10T20:00:00Z",
+            rhohv=np.where(mask, 0.99, np.nan),
+            zdr=np.where(mask, 1.4, np.nan),
+            gate_classification=np.where(
+                mask, CLASS_CODES[GateClass.PRECIPITATION], CLASS_CODES[GateClass.UNKNOWN]
+            ).astype(np.int8),
+        ),
+        detected_objects=[],
+        labeled_grid=np.zeros((n_rays, n_gates), dtype=int),
+        object_masks={},
+    )
+
+
+def test_uniform_severe_core_is_drawn_not_silently_dropped():
+    """A 23 km2 region of uniform 60.0 dBZ must not come out as nothing.
+
+    This exact case produced ZERO features and every metadata counter
+    reading zero: the geometry used contourpy's strict `>` so a uniformly
+    60.0 field had no gate above 60, and the guard meant to suppress
+    phantom slivers used `>=` and deleted the band whose geometry was real.
+    A severe core, rendered as total silence, with the metadata saying
+    nothing had been omitted.
+    """
+    geojson = build_precipitation_field_geojson(_scan_with_uniform_field(60.0))
+    bands = {f["properties"]["min_dbz"] for f in geojson["features"]}
+    assert 60.0 in bands, (
+        f"a uniform 60 dBZ severe core produced no 60+ feature; "
+        f"omittedBands={geojson['metadata']['omittedBands']}"
+    )
+    core = next(f for f in geojson["features"] if f["properties"]["min_dbz"] == 60.0)
+    assert shapely_shape(core["geometry"]).area > 0
+
+
+def test_uniform_moderate_region_is_drawn_not_silently_dropped():
+    geojson = build_precipitation_field_geojson(_scan_with_uniform_field(20.0))
+    bands = {f["properties"]["min_dbz"] for f in geojson["features"]}
+    assert 20.0 in bands, (
+        f"a uniform 20 dBZ region produced no 20-30 feature; "
+        f"omittedBands={geojson['metadata']['omittedBands']}"
+    )
+
+
+def test_every_band_that_produces_no_feature_is_named_with_its_reason():
+    """No band may leave this builder without a trace.
+
+    Two paths out of the feature loop used to `continue` without
+    incrementing anything, so a band could disappear entirely and the
+    metadata would say nothing was omitted. Every band the layer does not
+    draw must now appear in `omittedBands` with a reason, the number of
+    gates that supported it, and the ground those gates covered -- because
+    a bare count cannot tell the project owner whether what vanished was
+    speckle or a severe core.
+    """
+    geojson = build_precipitation_field_geojson(_scan_with_uniform_field(60.0))
+    metadata = geojson["metadata"]
+
+    drawn = {f["properties"]["min_dbz"] for f in geojson["features"]}
+    omitted = {b["min_dbz"] for b in metadata["omittedBands"]}
+    assert drawn | omitted == set(PRECIP_FIELD_LEVELS), (
+        "some band neither drew a feature nor recorded an omission"
+    )
+    assert not (drawn & omitted), "a band cannot be both drawn and omitted"
+    assert metadata["omittedBandCount"] == len(metadata["omittedBands"])
+
+    reasons = {b["reason"] for b in metadata["omittedBands"]}
+    assert reasons <= {
+        "empty_geometry", "no_supporting_gate", "all_fragments_below_area_floor",
+    }
+    for band in metadata["omittedBands"]:
+        assert set(band) == {
+            "band", "min_dbz", "max_dbz", "reason", "gateCount", "gateAreaKm2",
+        }
+        # Nothing was actually lost in this fixture: every omitted band is
+        # omitted because there is no such weather, which the record says.
+        assert band["gateCount"] == 0
+        assert band["gateAreaKm2"] == 0.0
+
+
+def test_a_band_wiped_out_by_the_fragment_filter_is_named_in_metadata():
+    """The aggregate fragment counters cannot say WHICH band disappeared.
+
+    On KIWA the 30-40 and 40-50 dBZ bands both vanish this way, leaving
+    that volume's precipitation layer showing nothing at all above 30 dBZ,
+    with only an aggregate fragment count to show for it. A band that loses
+    every piece to the area floor is now named, with the ground its own
+    gates covered.
+    """
+    scan = _scan_with_fragment_sizes()
+    # Add an isolated 45 dBZ gate: a whole band whose only piece is far
+    # below MIN_PRECIP_FRAGMENT_AREA_KM2.
+    scan.reflectivity_data.reflectivity[200, 30] = 45.0
+
+    geojson = build_precipitation_field_geojson(scan)
+    drawn = {f["properties"]["min_dbz"] for f in geojson["features"]}
+    assert 40.0 not in drawn, "fixture no longer exercises the area floor"
+
+    wiped = [b for b in geojson["metadata"]["omittedBands"] if b["min_dbz"] == 40.0]
+    assert wiped, "a band wiped out by the fragment filter left no record"
+    assert wiped[0]["reason"] == "all_fragments_below_area_floor"
+    assert wiped[0]["gateCount"] == 1
+    assert wiped[0]["gateAreaKm2"] > 0.0
