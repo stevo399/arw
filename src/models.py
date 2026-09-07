@@ -39,6 +39,8 @@ class RainObject(BaseModel):
     max_inbound_ms: float | None = None
     max_outbound_ms: float | None = None
     rotation_strength: str | None = None
+    rotation_evidence_level: str | None = None
+    rotation_motion_reference: str | None = None
     # Fraction of this object's gates in each QC class (precipitation,
     # ground_clutter, biological, hail, debris, unknown). Quality control no
     # longer deletes echo (2026-08-26 amendment), so this is how a consumer
@@ -73,6 +75,7 @@ class RotationSignatureModel(BaseModel):
     strength: str
     associated_object_id: int | None = None
     evidence_level: str = "unconfirmed"
+    motion_reference: str = "base_radial"
 
 
 class VelocityResponse(BaseModel):

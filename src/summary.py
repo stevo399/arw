@@ -111,7 +111,7 @@ def _pick_summary_object(objects: list[DetectedObject], tracks) -> DetectedObjec
 
 
 def _format_rotation(obj: DetectedObject, track=None) -> str:
-    """Format rotation info for speech, with persistence language if track available."""
+    """Format rotation evidence for speech without overstating confidence."""
     rotation = getattr(obj, "rotation", None)
     if rotation is None:
         if track is not None and hasattr(track, "rotation_history"):
@@ -119,18 +119,14 @@ def _format_rotation(obj: DetectedObject, track=None) -> str:
             if len(recent) > 0 and track.rotation_history[-1].rotation is None:
                 return " Rotation weakening."
         return ""
-    if track is not None and hasattr(track, "rotation_history"):
-        consecutive_with = 0
-        for entry in reversed(track.rotation_history):
-            if entry.rotation is not None:
-                consecutive_with += 1
-            else:
-                break
-        if consecutive_with >= 3:
-            return f" Persistent {rotation.strength} rotation."
-        elif consecutive_with <= 1:
-            return f" New {rotation.strength} rotation detected."
-    return f" {rotation.strength.capitalize()} rotation detected."
+    reference = "base-radial velocity" if rotation.motion_reference == "base_radial" else rotation.motion_reference
+    if rotation.evidence_level == "persistent":
+        return f" Persistent {rotation.strength} rotation evidence in {reference}."
+    if rotation.evidence_level == "vertically_confirmed":
+        return f" {rotation.strength.capitalize()} rotation evidence, vertically confirmed in {reference}."
+    if rotation.evidence_level == "corroborated":
+        return f" {rotation.strength.capitalize()} corroborated rotation evidence in {reference}."
+    return f" Unconfirmed {rotation.strength} velocity couplet in {reference}."
 
 
 def _format_motion(motion: MotionVector | None, track=None, events: list[dict] | None = None) -> str:
@@ -209,9 +205,11 @@ def generate_summary(
         rot = obj.rotation
         rot_bearing = degrees_to_bearing(rot.bearing_deg)
         rot_distance_mi = km_to_miles(rot.distance_km)
+        evidence = "unconfirmed velocity couplet" if rot.evidence_level == "unconfirmed" else f"{rot.evidence_level.replace('_', ' ')} rotation evidence"
+        reference = "base-radial velocity" if rot.motion_reference == "base_radial" else rot.motion_reference
         parts.append(
-            f" Rotation signature {rot_distance_mi} miles {rot_bearing} of the radar,"
-            f" {rot.strength} shear."
+            f" {rot.strength.capitalize()} {evidence} {rot_distance_mi} miles {rot_bearing} of the radar"
+            f" in {reference}."
         )
 
     parts.append(f" Covering approximately {area_mi2} square miles.")

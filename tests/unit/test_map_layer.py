@@ -17,6 +17,7 @@ from src.map_layer import (
 from src.parser import SweepData
 from src.qc.classifier import CLASS_CODES
 from src.qc.parameters import GateClass
+from src.velocity import RotationSignature
 
 
 def test_build_storm_geojson_returns_polygon_features():
@@ -91,6 +92,37 @@ def test_build_storm_geojson_returns_polygon_features():
     ring = polygons[0][0]
     assert len(ring) >= 4
     assert ring[0] == ring[-1]
+
+
+def test_storm_description_labels_unconfirmed_base_radial_couplet():
+    reflectivity = np.full((12, 12), np.nan)
+    reflectivity[4:8, 5:9] = 50.0
+    mask = ~np.isnan(reflectivity)
+    rotation = RotationSignature(
+        centroid_lat=35.2, centroid_lon=-96.9, distance_km=30.0,
+        bearing_deg=90.0, max_shear_ms=30.0, max_inbound_ms=-15.0,
+        max_outbound_ms=15.0, diameter_km=2.0, sweep_count=1,
+        elevation_angles=[0.5], strength="moderate", associated_object_id=1,
+    )
+    scan = BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0), site_id="KTLX",
+        reflectivity_data=SweepData(
+            reflectivity=reflectivity, azimuths=np.linspace(80, 100, 12),
+            ranges_m=np.linspace(20000, 40000, 12), radar_lat=35.3331,
+            radar_lon=-97.2778, elevation_angle=0.5, elevations=np.full(12, 0.5),
+            elevation_angles=[0.5], radar_alt_m=390.0, timestamp="2026-04-10T20:00:00Z",
+        ),
+        detected_objects=[DetectedObject(
+            object_id=1, centroid_lat=35.2, centroid_lon=-96.9, distance_km=30.0,
+            bearing_deg=90.0, peak_dbz=50.0, peak_label="intense precipitation",
+            area_km2=24.0, rotation=rotation,
+        )],
+        labeled_grid=mask.astype(int), object_masks={1: mask},
+    )
+    feature = build_storm_geojson(scan)["features"][0]
+    assert "Unconfirmed moderate velocity couplet in base-radial velocity." in feature["properties"]["description"]
+    assert feature["properties"]["rotation_evidence_level"] == "unconfirmed"
+    assert feature["properties"]["rotation_motion_reference"] == "base_radial"
 
 
 def test_build_storm_intensity_geojson_returns_radar_band_features():

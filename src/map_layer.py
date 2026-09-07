@@ -77,15 +77,23 @@ def _storm_name(obj: DetectedObject) -> str:
     return f"{obj.peak_label.capitalize()} storm {distance_mi} miles {bearing}"
 
 
-def _storm_description(obj: DetectedObject, rotation_strength: str | None) -> str:
+def _storm_description(obj: DetectedObject, rotation) -> str:
     area_mi2 = km2_to_mi2(obj.area_km2)
     parts = [
         f"Peak reflectivity {obj.peak_dbz} dBZ.",
         f"Covers about {area_mi2} square miles.",
         f"Centroid is {km_to_miles(obj.distance_km)} miles {degrees_to_bearing(obj.bearing_deg)} of the radar.",
     ]
-    if rotation_strength:
-        parts.append(f"{rotation_strength.capitalize()} rotation detected.")
+    if rotation is not None:
+        reference = "base-radial velocity" if rotation.motion_reference == "base_radial" else rotation.motion_reference
+        if rotation.evidence_level == "persistent":
+            parts.append(f"Persistent {rotation.strength} rotation evidence in {reference}.")
+        elif rotation.evidence_level == "vertically_confirmed":
+            parts.append(f"{rotation.strength.capitalize()} rotation evidence vertically confirmed in {reference}.")
+        elif rotation.evidence_level == "corroborated":
+            parts.append(f"{rotation.strength.capitalize()} corroborated rotation evidence in {reference}.")
+        else:
+            parts.append(f"Unconfirmed {rotation.strength} velocity couplet in {reference}.")
     return " ".join(parts)
 
 
@@ -259,7 +267,7 @@ def _storm_properties(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any]
         "name": _storm_name(obj),
         "ruleName": "Storm polygon",
         "ruleType": _storm_rule_type(obj.peak_dbz),
-        "description": _storm_description(obj, rotation_strength),
+        "description": _storm_description(obj, rotation),
         "passable": True,
         "soundPriority": 500,
         "fill": _storm_fill_color(obj.peak_dbz),
@@ -283,6 +291,8 @@ def _storm_properties(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any]
         "area_mi2": km2_to_mi2(obj.area_km2),
         "heat_value": obj.peak_dbz,
         "rotation_strength": rotation_strength,
+        "rotation_evidence_level": rotation.evidence_level if rotation is not None else None,
+        "rotation_motion_reference": rotation.motion_reference if rotation is not None else None,
         "max_inbound_ms": getattr(obj, "max_inbound_ms", None),
         "max_outbound_ms": getattr(obj, "max_outbound_ms", None),
         "layers": [layer.__dict__ for layer in obj.layers],
@@ -792,6 +802,8 @@ def storm_layer_fields() -> list[dict[str, str]]:
         {"name": "area_km2", "type": "esriFieldTypeDouble", "alias": "Area sq km"},
         {"name": "heat_value", "type": "esriFieldTypeDouble", "alias": "Heat Value"},
         {"name": "rotation_strength", "type": "esriFieldTypeString", "alias": "Rotation"},
+        {"name": "rotation_evidence_level", "type": "esriFieldTypeString", "alias": "Rotation Evidence"},
+        {"name": "rotation_motion_reference", "type": "esriFieldTypeString", "alias": "Velocity Reference"},
     ]
 
 

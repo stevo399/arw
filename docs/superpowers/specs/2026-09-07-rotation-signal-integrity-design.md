@@ -147,6 +147,9 @@ The first two evidence layers are implemented:
 - `persistent` requires a second, distinct volume within fifteen minutes on
   the same already-associated storm track, with a circulation displacement
   compatible with the tracker's existing 120 km/h physical motion bound.
+- Every rotation product currently declares `motion_reference="base_radial"`.
+  Speech and map output say "velocity couplet" for unconfirmed evidence and
+  do not imply storm-relative interpretation.
 
 Remaining work is storm-relative velocity provenance, explicit dual-pol/
 reflectivity corroboration, and a labelled case corpus for calibration. None

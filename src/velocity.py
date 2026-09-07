@@ -172,6 +172,10 @@ class RotationSignature:
     strength: str
     associated_object_id: int | None = None
     evidence_level: str = "unconfirmed"
+    # ARW has not yet derived a validated storm-motion field for this product.
+    # Keep the reference explicit so consumers never mistake base radial
+    # velocity for storm-relative velocity.
+    motion_reference: str = "base_radial"
 
 
 # An assessment needs both a physical storm-cell association and independent

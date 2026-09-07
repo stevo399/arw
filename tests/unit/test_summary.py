@@ -346,7 +346,7 @@ def test_summary_includes_rotation_for_strongest_object():
         site_id="KTLX", site_name="Oklahoma City",
         timestamp="2026-04-10T21:00:00Z", objects=[obj],
     )
-    assert "rotation" in text.lower()
+    assert "unconfirmed moderate velocity couplet in base-radial velocity" in text.lower()
 
 
 def test_summary_includes_rotation_strength():
@@ -355,7 +355,7 @@ def test_summary_includes_rotation_strength():
         site_id="KTLX", site_name="Oklahoma City",
         timestamp="2026-04-10T21:00:00Z", objects=[obj],
     )
-    assert "strong rotation" in text.lower()
+    assert "unconfirmed strong velocity couplet in base-radial velocity" in text.lower()
 
 
 def test_summary_no_rotation_when_none():

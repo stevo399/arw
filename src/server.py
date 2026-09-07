@@ -372,6 +372,8 @@ def get_objects(site_id: str, datetime: str | None = Query(None)):
             max_inbound_ms=getattr(obj, 'max_inbound_ms', None),
             max_outbound_ms=getattr(obj, 'max_outbound_ms', None),
             rotation_strength=obj.rotation.strength if getattr(obj, 'rotation', None) is not None else None,
+            rotation_evidence_level=obj.rotation.evidence_level if getattr(obj, 'rotation', None) is not None else None,
+            rotation_motion_reference=obj.rotation.motion_reference if getattr(obj, 'rotation', None) is not None else None,
             class_fractions=getattr(obj, 'class_fractions', {}) or {},
         )
         for obj in buffered.detected_objects
@@ -571,6 +573,7 @@ def get_velocity(site_id: str, datetime: str | None = Query(None)):
             strength=s.strength,
             associated_object_id=s.associated_object_id,
             evidence_level=s.evidence_level,
+            motion_reference=s.motion_reference,
         )
         for s in buffered.rotation_signatures
     ]
