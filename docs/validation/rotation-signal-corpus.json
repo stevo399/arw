@@ -2,12 +2,14 @@
   "schema_version": 1,
   "purpose": "Evaluation manifest for rotation-signal integrity. Case labels describe documented scan context, not a per-gate tornado or hydrometeor truth label.",
   "calibration_policy": "Do not select a raw-shear, distance, or polarimetric threshold from this manifest alone. Record the population, source, and false-positive/missed-signal trade-off before changing a production threshold.",
+  "evaluator": "scripts/evaluate_rotation_signal_corpus.py",
   "cases": [
     {
       "id": "kiwa-20260712-clear-air-sequence",
       "label": "null_clear_air",
       "site_id": "KIWA",
       "source_type": "local_cached_replay",
+      "evaluation_mode": "tracked_sequence",
       "evidence": "Six consecutive local scans selected for very sparse >=20 dBZ echo and clutter/biological persistence measurement; not a severe-event truth set.",
       "volumes": [
         "cache/KIWA/KIWA20260712_163410_V06",

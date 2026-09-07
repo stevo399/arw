@@ -1,0 +1,36 @@
+{
+  "corpus_schema_version": 1,
+  "generated_by": "scripts/evaluate_rotation_signal_corpus.py",
+  "purpose": "Baseline measurement for rotation-signal integrity; not a threshold calibration result.",
+  "results": {
+    "kiwa-20260712-clear-air-sequence": {
+      "volumes": 6,
+      "raw_rotation_candidates": 755,
+      "evidence_counts": {"unconfirmed": 755, "vertically_confirmed": 0, "persistent": 0},
+      "object_count_range": [0, 1],
+      "quality_advisory_fraction_range": [0.0048944687, 0.0782379609],
+      "interpretation": "The raw detector remains intentionally sensitive, but no clear-air candidate was promoted by cell-footprint and vertical-evidence assessment."
+    },
+    "ktlx-20130520-newcastle-moore-tornado": {
+      "raw_rotation_candidates": 59,
+      "evidence_counts": {"unconfirmed": 51, "vertically_confirmed": 8},
+      "detected_objects": 36,
+      "nearest_object_to_event_km": 5.4381620372,
+      "quality_advisory_fraction": 0.0017649199,
+      "interpretation": "The confirmed tornado context retains cell-associated, vertically confirmed evidence; this is not a tornado-probability or warning claim."
+    },
+    "ktlx-20130520-moore-large-hail": {
+      "raw_rotation_candidates": 63,
+      "evidence_counts": {"unconfirmed": 56, "vertically_confirmed": 7},
+      "detected_objects": 38,
+      "nearest_object_to_event_km": 8.8355339171,
+      "quality_advisory_fraction": 0.0017626456,
+      "interpretation": "The non-tornado severe context retains cell-associated, vertically confirmed evidence; this prevents treating the product as a tornado classifier."
+    }
+  },
+  "limitations": [
+    "The KIWA sequence was replayed through the tracker and produced zero persistent assessments; the two severe contexts are single-volume cases and therefore cannot establish persistence.",
+    "Case labels describe documented event context, not per-gate truth labels.",
+    "No numerical detection threshold was selected from this result."
+  ]
+}

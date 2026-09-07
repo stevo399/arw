@@ -164,3 +164,10 @@ KIWA clear-air null sequence from the two documented Moore severe-context
 volumes and records what each can and cannot support. It is a starting
 evaluation population, not a claim that three contexts are enough to tune a
 warning-like product.
+
+`docs/test_reports/2026-09-07-rotation-corpus-baseline.json` records the
+first evaluator baseline: all 755 clear-air KIWA candidates remained
+unconfirmed, while the two documented severe contexts retained 8 and 7
+vertically confirmed assessments respectively. These measurements verify the
+promotion boundary; they do not calibrate a detection threshold or establish
+warning performance.
