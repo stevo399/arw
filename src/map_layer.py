@@ -74,12 +74,40 @@ def _intensity_rule_type(label: str) -> str:
 def _storm_name(obj: DetectedObject) -> str:
     distance_mi = km_to_miles(obj.distance_km)
     bearing = degrees_to_bearing(obj.bearing_deg)
-    return f"{obj.peak_label.capitalize()} storm {distance_mi} miles {bearing}"
+    phenomenon = _object_phenomenon(obj)
+    intensity = _display_intensity_label(obj.peak_label, phenomenon)
+    return f"{intensity.capitalize()} {phenomenon} {distance_mi} miles {bearing}"
+
+
+def _object_phenomenon(obj: DetectedObject) -> str:
+    """Return the strongest supportable phenomenon label for an object.
+
+    Reflectivity alone is never enough to assert precipitation.  Preserve the
+    echo for analysis, but require a clear QC majority before using that word.
+    """
+    fractions = obj.class_fractions or {}
+    precipitation = fractions.get("precipitation", 0.0)
+    if precipitation >= 0.7:
+        return "precipitation"
+    dominant = max(fractions, key=fractions.get) if fractions else None
+    if dominant == "ground_clutter" and fractions[dominant] >= 0.5:
+        return "ground clutter echo"
+    if dominant == "biological" and fractions[dominant] >= 0.5:
+        return "biological echo"
+    return "uncertain reflectivity echo"
+
+
+def _display_intensity_label(label: str, phenomenon: str) -> str:
+    if phenomenon == "precipitation":
+        return label
+    return label.replace(" precipitation", " reflectivity").replace("severe core", "severe reflectivity core")
 
 
 def _storm_description(obj: DetectedObject, rotation) -> str:
     area_mi2 = km2_to_mi2(obj.area_km2)
+    phenomenon = _object_phenomenon(obj)
     parts = [
+        f"QC interpretation: {phenomenon}.",
         f"Peak reflectivity {obj.peak_dbz} dBZ.",
         f"Covers about {area_mi2} square miles.",
         f"Centroid is {km_to_miles(obj.distance_km)} miles {degrees_to_bearing(obj.bearing_deg)} of the radar.",
@@ -344,15 +372,16 @@ def storm_intensity_layer_to_feature(
     heat_value = _intensity_heat_value(layer)
     area_mi2 = km2_to_mi2(layer.area_km2)
     max_dbz = None if layer.max_dbz == float("inf") else layer.max_dbz
+    display_label = _display_intensity_label(layer.label, _object_phenomenon(obj))
     properties = {
         "object_id": obj.object_id,
         "parent_object_id": obj.object_id,
         "id": f"{scan.site_id}-{obj.object_id}-{layer.label.replace(' ', '-')}",
-        "name": f"{layer.label.capitalize()} band in {_storm_name(obj)}",
+        "name": f"{display_label.capitalize()} band in {_storm_name(obj)}",
         "ruleName": "Radar intensity band",
         "ruleType": _intensity_rule_type(layer.label),
         "description": (
-            f"{layer.label.capitalize()} reflectivity band from {layer.min_dbz} "
+            f"{display_label.capitalize()} band from {layer.min_dbz} "
             f"to {max_dbz if max_dbz is not None else '60+'} dBZ. "
             f"Covers about {area_mi2} square miles."
         ),

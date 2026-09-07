@@ -68,7 +68,7 @@ def test_build_storm_geojson_returns_polygon_features():
     # that the shape comes from contouring rather than a convex hull.
     assert feature["geometry"]["type"] == "MultiPolygon"
     assert feature["properties"]["heat_value"] == 50.0
-    assert feature["properties"]["name"] == "Intense precipitation storm 19 miles E"
+    assert feature["properties"]["name"] == "Intense reflectivity uncertain reflectivity echo 19 miles E"
     assert feature["properties"]["ruleName"] == "Storm polygon"
     assert feature["properties"]["ruleType"] == "storm_intense"
     assert feature["properties"]["passable"] is True
@@ -312,6 +312,7 @@ def test_storm_feature_carries_class_composition():
     geojson = build_storm_geojson(scan)
     feature = geojson["features"][0]
     assert feature["properties"]["class_fractions"] == class_fractions
+    assert "ground clutter echo" in feature["properties"]["name"]
     # Mutating the returned property dict must not alias the object's own
     # field.
     feature["properties"]["class_fractions"]["precipitation"] = 999.0
