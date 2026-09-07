@@ -90,22 +90,18 @@ So this file measures and asserts THREE separate things per case, not one:
         This is reported as the critical finding, not tuned away -- no
         threshold in src/qc/parameters.py was touched to make it pass.
 
-  (iii) The quantified safety margin: what fraction of the event-location
-        gates would protected_mask() save if the classifier HAD condemned
-        every one of them. MEASURED: 100% in both cases. This is what
-        actually explains why (i) passes despite (ii) failing -- protection,
-        not classifier judgement, is what is saving these hazards today.
+  (iii) Raw velocity couplets do not alter the advisory-protection mask.
+        A candidate must first be associated with a reflectivity cell and
+        have independent evidence before it can be eligible. This verifies
+        that a hazard's continued presence is due to the non-destructive QC
+        contract, not a broad, unverified couplet exemption.
 
 Reading (i)+(ii)+(iii) together is the honest picture: the classifier by
 itself is not safe to trust with tornado debris or giant hail -- it
 misclassifies a real, substantial fraction of genuine hazard echo as clutter
-or biological scatter -- but the hard protection rules currently provide a
-complete safety net under it, for these two measured cases. That the safety
-net is currently doing all the work (rather than the classifier sharing the
-load) is itself the same defect test_proof_clutter_persistence.py's (C)
-already found from the opposite direction (clear air, false positives on
-protection). This file adds the true-positive side: real hazards, and
-whether the classifier alone would have kept them.
+or biological scatter. QC therefore remains informational only. The
+rotation-integrity policy prevents raw couplets from concealing that known
+classifier defect behind an indiscriminate advisory exemption.
 """
 
 from dataclasses import dataclass
@@ -173,7 +169,6 @@ SEARCH_RADIUS_KM = 10.0
 # Fraction of event-location gates the classifier condemns (ground_clutter or
 # biological) that protection must rescue. Measured at 100% for both cases;
 # 0.99 leaves a hair of floating-point slack without weakening the claim.
-MIN_PROTECTION_MARGIN = 0.99
 
 NON_METEOROLOGICAL_CODES = {
     CLASS_CODES[GateClass.GROUND_CLUTTER],
@@ -257,23 +252,11 @@ class CaseMeasurement:
         )
         self.n_condemned = int(np.count_nonzero(self.condemned))
 
-        # (iii) SAFETY MARGIN: would protected_mask save these gates if the
-        # classifier condemned them? Measured over ALL event-location gates
-        # (hypothetical -- "if condemned"), not just the ones actually
-        # condemned today, so the margin is visible even in a case where (ii)
-        # happens to pass.
+        # (iii) Raw candidate invariance: unassessed couplets must not change
+        # the advisory-protection mask.  This proof intentionally exercises
+        # the detector output before cell-footprint assessment.
         self.protected = protected_mask(sweep, rotation_signatures)
-        self.protection_margin_all = (
-            float(np.count_nonzero(self.protected & self.near_event_finite))
-            / self.n_near_event_finite
-            if self.n_near_event_finite
-            else float("nan")
-        )
-        self.protection_margin_condemned = (
-            float(np.count_nonzero(self.protected & self.condemned)) / self.n_condemned
-            if self.n_condemned
-            else float("nan")
-        )
+        self.protected_without_raw_candidates = protected_mask(sweep, [])
 
         # (i) FULL PIPELINE: apply_quality_control (classify only, per the
         # 2026-08-26 amendment -- nothing is deleted) + speckle removal,
@@ -324,7 +307,7 @@ def test_hazard_echo_survives_quality_control(case: SevereCase, measurements):
     still guards a real invariant: that despeckling does not erase intense,
     real-world hazard echo. What it no longer demonstrates is that protection
     specifically is what saves this echo; see
-    test_protection_margin_at_event_location's updated docstring for that
+    test_raw_couplets_do_not_change_advisory_protection's assertion for that
     distinction.
     """
     m = measurements[case.name]
@@ -370,10 +353,8 @@ def test_hazard_produces_a_detected_object(case: SevereCase, measurements):
         "marked provenance='arw-tuned-initial', not yet validated against "
         "live cases -- see test_proof_clutter_persistence.py's matching "
         "finding on the clear-air side) does not reliably tell them apart. "
-        "See test_protection_margin_at_event_location below for why (i) "
-        "still passes: protected_mask rescues 100% of these condemned gates "
-        "in both cases -- the safety net, not the classifier, is what keeps "
-        "these hazards in the output today. strict=True: this test fails "
+        "QC now keeps every classified gate, while raw couplets cannot hide "
+        "this defect through advisory protection. strict=True: this test fails "
         "loudly the day the classifier itself, with no protection rule "
         "involved, stops condemning real hazard echo -- the signal that "
         "would mean the safety net is no longer the only thing standing "
@@ -403,41 +384,9 @@ def test_classifier_alone_does_not_condemn_hazard(case: SevereCase, measurements
 
 
 @pytest.mark.parametrize("case", KNOWN_CASES, ids=lambda c: c.name)
-def test_protection_margin_at_event_location(case: SevereCase, measurements):
-    """(iii) Quantify the safety margin: what fraction of event-location
-    gates would protected_mask save if the classifier condemned them all.
-
-    Before the 2026-08-26 amendment, this margin was what actually explained
-    why (i) passed despite (ii) failing -- protection was the only thing
-    standing between the classifier's judgement and deletion. That is no
-    longer the mechanism: (i) now passes unconditionally with respect to QC,
-    because apply_quality_control never deletes anything regardless of this
-    margin. What this test still measures is real and worth keeping: it is
-    the advisory-flagging safety margin -- if ARW (or a future consumer)
-    ever acts on the advisory/class_fractions signal to filter or de-weight
-    echo, this margin is what would determine whether that filtering could
-    have silently discarded this hazard. A margin that dropped to, say, 40%
-    would mean any such downstream filtering built on the advisory signal
-    would need re-examining.
-    """
+def test_raw_couplets_do_not_change_advisory_protection(case: SevereCase, measurements):
+    """(iii) Raw detector output is diagnostic-only until assessed."""
     m = measurements[case.name]
-    print(
-        f"\n{case.name}: protection would save "
-        f"{m.protection_margin_all * 100.0:.1f}% of all {m.n_near_event_finite} "
-        f"event-location gates if the classifier condemned every one of them"
-    )
-    if m.n_condemned:
-        print(
-            f"  of the {m.n_condemned} gates actually condemned by the "
-            f"classifier alone, protection actually saves "
-            f"{m.protection_margin_condemned * 100.0:.1f}% of them"
-        )
-    else:
-        print("  classifier alone condemned zero gates here -- no rescue was needed")
-
-    assert m.protection_margin_all >= MIN_PROTECTION_MARGIN, (
-        f"{case.name}: protection would save only "
-        f"{m.protection_margin_all * 100.0:.1f}% of event-location gates if "
-        f"the classifier condemned them -- not the complete safety net (i) "
-        f"implicitly relies on"
+    assert np.array_equal(m.protected, m.protected_without_raw_candidates), (
+        f"{case.name}: unassessed velocity couplets changed QC protection"
     )

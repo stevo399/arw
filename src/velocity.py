@@ -5,7 +5,7 @@ import numpy as np
 from scipy.ndimage import label
 
 from src.detection import DetectedObject
-from src.geometry import gate_areas_km2, gate_latlon, interpolate_azimuth
+from src.geometry import gate_areas_km2, gate_coordinates, gate_latlon, interpolate_azimuth
 from src.parser import VelocityData
 
 MIN_VELOCITY_MS = 10.0
@@ -149,6 +149,15 @@ ROTATION_MERGE_DISTANCE_KM = 10.0
 
 @dataclass
 class RotationSignature:
+    """A velocity-couplet observation with its assessed signal integrity.
+
+    ``detect_rotation_signatures`` deliberately returns *candidates*: an
+    opposite-signed gate pair is useful diagnostic information, but is not a
+    storm circulation by itself.  ``analyze_velocity`` adds the evidence
+    fields after reflectivity-cell association.  The old class name remains
+    for API compatibility while callers transition to the candidate/assessment
+    terminology in the signal-integrity design.
+    """
     centroid_lat: float
     centroid_lon: float
     distance_km: float
@@ -160,6 +169,22 @@ class RotationSignature:
     sweep_count: int
     elevation_angles: list[float]
     strength: str
+    associated_object_id: int | None = None
+    evidence_level: str = "unconfirmed"
+
+
+# An assessment needs both a physical storm-cell association and independent
+# vertical support before it can exempt a gate from the QC advisory.  This is
+# intentionally a policy predicate, not a strength threshold: raw shear is
+# still exposed for review but cannot create a broad protection region.
+QUALITY_PROTECTION_EVIDENCE = frozenset({"vertically_confirmed", "persistent", "corroborated"})
+
+
+def is_quality_protection_eligible(signature: RotationSignature) -> bool:
+    return (
+        signature.associated_object_id is not None
+        and signature.evidence_level in QUALITY_PROTECTION_EVIDENCE
+    )
 
 
 def _classify_rotation_strength(shear_ms: float) -> str:
@@ -184,8 +209,7 @@ def _detect_shear_single_sweep(
     Returns (signature, centroid_az, centroid_range_m) tuples for cross-sweep merging.
     """
     n_az, n_rng = velocity.shape
-    range_spacing_m = float(ranges_m[1] - ranges_m[0]) if len(ranges_m) > 1 else 250.0
-    az_spacing_deg = float(azimuths[1] - azimuths[0]) if len(azimuths) > 1 else 1.0
+    range_spacing_m = float(np.median(np.diff(ranges_m))) if len(ranges_m) > 1 else 250.0
 
     shear_mask = np.zeros_like(velocity, dtype=bool)
     shear_values = np.full_like(velocity, np.nan)
@@ -200,17 +224,29 @@ def _detect_shear_single_sweep(
             shifted_az = np.roll(velocity, delta_az, axis=0)
             shifted_rng = np.roll(shifted_az, delta_rng, axis=1)
 
-            gate_distance_km = math.sqrt(
-                (delta_az * az_spacing_deg * math.pi / 180 * ranges_m.mean()) ** 2
-                + (delta_rng * range_spacing_m) ** 2
-            ) / 1000.0
-
-            if gate_distance_km > MAX_COUPLET_DISTANCE_KM:
-                continue
-
             v1 = velocity
             v2 = shifted_rng
             both_valid = ~np.isnan(v1) & ~np.isnan(v2)
+            # A rolled range neighbour wraps the last gate onto the first,
+            # which is an array artefact rather than a physical adjacency.
+            if delta_rng > 0:
+                both_valid[:, :delta_rng] = False
+            elif delta_rng < 0:
+                both_valid[:, delta_rng:] = False
+
+            # Couplets are evaluated using the actual local pair geometry.
+            # Operational sweeps are not guaranteed to have uniform ray
+            # spacing, and an azimuthal gate separation grows with range; an
+            # array-wide mean range silently overstates near-radar distances
+            # and understates far-range ones.
+            paired_azimuths = np.roll(azimuths, delta_az)
+            az_delta_deg = np.abs((azimuths - paired_azimuths + 180.0) % 360.0 - 180.0)
+            paired_ranges_m = np.roll(ranges_m, delta_rng)
+            local_range_m = (ranges_m + paired_ranges_m) / 2.0
+            azimuth_distance_m = np.abs(delta_az) * np.radians(az_delta_deg)[:, None] * local_range_m[None, :]
+            range_distance_m = np.abs(ranges_m - paired_ranges_m)[None, :]
+            gate_distance_km = np.hypot(azimuth_distance_m, range_distance_m) / 1000.0
+            both_valid &= gate_distance_km <= MAX_COUPLET_DISTANCE_KM
             sign_change = both_valid & ((v1 < 0) != (v2 < 0))
             shear = np.where(sign_change, np.abs(v1 - v2), np.nan)
             strong_shear = ~np.isnan(shear) & (shear >= MIN_SHEAR_MS)
@@ -255,7 +291,10 @@ def _detect_shear_single_sweep(
             np.interp(centroid_az_idx, range(len(elevations)), elevations)
         )
 
-        az_extent = (float(np.max(az_indices)) - float(np.min(az_indices))) * az_spacing_deg
+        # Use the wrapped angular span rather than index count so irregular
+        # ray spacing does not distort the reported diameter.
+        component_azimuths = np.unwrap(np.radians(azimuths[az_indices]))
+        az_extent = float(np.degrees(component_azimuths.max() - component_azimuths.min()))
         rng_extent = (float(np.max(rng_indices)) - float(np.min(rng_indices))) * range_spacing_m
         diameter_km = math.sqrt(
             (az_extent * math.pi / 180 * centroid_range) ** 2
@@ -411,9 +450,63 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
+def _associate_rotation_candidates(
+    candidates: list[RotationSignature],
+    object_masks: dict[int, np.ndarray],
+    sweep,
+) -> list[RotationSignature]:
+    """Attach each candidate to an overlapping reflectivity-cell footprint.
+
+    This is deliberately footprint-based rather than the former 30 km
+    centroid shortcut.  The candidate radius is its measured diameter only;
+    the wider debris-field allowance belongs to the later QC protection rule,
+    after an assessment has earned it.
+    """
+    if not candidates or not object_masks:
+        return candidates
+
+    lat, lon = gate_coordinates(
+        sweep.azimuths, sweep.ranges_m, sweep.elevation_angle,
+        sweep.radar_lat, sweep.radar_lon,
+    )
+    assessed: list[RotationSignature] = []
+    for candidate in candidates:
+        distance = _haversine_array_km(lat, lon, candidate.centroid_lat, candidate.centroid_lon)
+        # Keep a non-zero radius for a one-gate component whose geometric
+        # extent rounds to 0.0 km in the public product.
+        footprint = distance <= max(candidate.diameter_km / 2.0, 0.25)
+        overlaps = {
+            object_id: int(np.count_nonzero(mask & footprint))
+            for object_id, mask in object_masks.items()
+        }
+        object_id, overlap = max(overlaps.items(), key=lambda item: item[1], default=(None, 0))
+        if not overlap:
+            assessed.append(candidate)
+            continue
+        evidence_level = (
+            "vertically_confirmed" if candidate.sweep_count >= 2 else "unconfirmed"
+        )
+        assessed.append(replace(
+            candidate,
+            associated_object_id=object_id,
+            evidence_level=evidence_level,
+        ))
+    return assessed
+
+
+def _haversine_array_km(lat1, lon1, lat2: float, lon2: float) -> np.ndarray:
+    """Vectorized geographic distance used for cell-footprint association."""
+    dlat = np.radians(lat2 - lat1)
+    dlon = np.radians(lon2 - lon1)
+    a = np.sin(dlat / 2.0) ** 2 + np.cos(np.radians(lat1)) * np.cos(math.radians(lat2)) * np.sin(dlon / 2.0) ** 2
+    return 2.0 * 6371.0 * np.arcsin(np.sqrt(np.clip(a, 0.0, 1.0)))
+
+
 def analyze_velocity(
     vel_data: "VelocityData | None",
     objects: list[DetectedObject],
+    object_masks: dict[int, np.ndarray] | None = None,
+    sweep=None,
 ) -> tuple[list[VelocityRegion], list[RotationSignature], list[DetectedObject]]:
     """Run full velocity analysis and associate results with detected objects.
 
@@ -424,6 +517,8 @@ def analyze_velocity(
 
     regions = detect_velocity_regions(vel_data)
     rotations = detect_rotation_signatures(vel_data)
+    if object_masks is not None and sweep is not None:
+        rotations = _associate_rotation_candidates(rotations, object_masks, sweep)
 
     annotated = list(objects)
     for i, obj in enumerate(annotated):
@@ -447,6 +542,12 @@ def analyze_velocity(
                     best_outbound = region.peak_velocity_ms
 
         for rotation in rotations:
+            # When full grid context is available, only an exact cell
+            # association may annotate the object.  Retain the old centroid
+            # fallback for legacy callers that do not provide a sweep/masks.
+            if object_masks is not None and sweep is not None:
+                if rotation.associated_object_id != obj.object_id:
+                    continue
             dist = _haversine_km(
                 obj.centroid_lat, obj.centroid_lon,
                 rotation.centroid_lat, rotation.centroid_lon,

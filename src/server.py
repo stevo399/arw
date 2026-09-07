@@ -17,9 +17,9 @@ from src.models import (
 from src.sites import geocode_city_state, geocode_zipcode, rank_sites, NEXRAD_SITES
 from src.ingest import fetch_scan
 from src.parser import parse_radar_file, extract_sweep_data, extract_velocity, SweepData, VelocityData
-from src.velocity import analyze_velocity, detect_rotation_signatures
+from src.velocity import analyze_velocity
 from src.detection import detect_objects_with_grid
-from src.preprocess import preprocess_sweep
+from src.preprocess import preprocess_sweep, refresh_quality_advisory
 from src.geometry import align_field_by_azimuth
 from src.summary import generate_summary
 from src.map_layer import (
@@ -157,17 +157,17 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
     raw_sweep = extract_sweep_data(radar)
     vel_data = extract_velocity(radar)
 
-    # Rotation is detected before quality control so protection rule 2 can use
-    # it: a debris signature is only distinguishable from clutter by sitting on
-    # top of a velocity couplet. QC must never run before this.
-    preliminary_rotations = detect_rotation_signatures(vel_data) if vel_data else []
     # The Doppler cut's rays do not share the surveillance cut's azimuth
     # sampling -- align by nearest azimuth before this reaches classify_gates,
     # which pairs abs_velocity with reflectivity elementwise by index.
     lowest_velocity = _velocity_aligned_to_reflectivity(raw_sweep, vel_data)
 
+    # Raw velocity couplets cannot affect QC.  First classify/despeckle and
+    # identify reflectivity cells; velocity analysis then associates evidence
+    # to those exact footprints.  QC is advisory-only, so this ordering never
+    # removes or hides hazard echo.
     ref_data, scan_quality, echo_advisory = preprocess_sweep(
-        raw_sweep, preliminary_rotations, velocity=lowest_velocity
+        raw_sweep, [], velocity=lowest_velocity
     )
 
     result = detect_objects_with_grid(
@@ -180,7 +180,12 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
         elevations=ref_data.elevations,
         gate_classification=ref_data.gate_classification,
     )
-    regions, rotations, annotated_objects = analyze_velocity(vel_data, result.objects)
+    regions, rotations, annotated_objects = analyze_velocity(
+        vel_data, result.objects, result.object_masks, ref_data,
+    )
+    ref_data, scan_quality, echo_advisory = refresh_quality_advisory(
+        ref_data, scan_quality, rotations, velocity=lowest_velocity,
+    )
     scan_timestamp = (
         datetime.fromisoformat(ref_data.timestamp)
         if isinstance(ref_data.timestamp, str)
@@ -540,7 +545,8 @@ def get_velocity(site_id: str, datetime: str | None = Query(None)):
             sweep_count=s.sweep_count,
             elevation_angles=s.elevation_angles,
             strength=s.strength,
-            associated_object_id=None,
+            associated_object_id=s.associated_object_id,
+            evidence_level=s.evidence_level,
         )
         for s in buffered.rotation_signatures
     ]

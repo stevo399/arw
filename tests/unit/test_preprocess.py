@@ -77,7 +77,7 @@ def test_preprocess_blanks_polarimetric_fields_at_removed_speckle_gates():
     assert processed.zdr[0, 0] == 1.5
 
 
-from src.preprocess import preprocess_sweep
+from src.preprocess import preprocess_sweep, refresh_quality_advisory
 
 
 def _sweep(reflectivity, **overrides):
@@ -136,6 +136,19 @@ def test_preprocess_attaches_gate_classification():
     sweep = _sweep(np.full((36, 40), 30.0))
     processed, _quality, _advisory = preprocess_sweep(sweep, [])
     assert processed.gate_classification is not None
+
+
+def test_refresh_advisory_preserves_preprocessed_reflectivity():
+    """Assessment happens after object detection, but it must remain a
+    metadata-only operation: no late QC step may rewrite echo."""
+    sweep = _sweep(np.full((36, 40), 30.0))
+    processed, quality, _advisory = preprocess_sweep(sweep, [])
+    refreshed, refreshed_quality, _refreshed_advisory = refresh_quality_advisory(
+        processed, quality, [],
+    )
+    assert np.array_equal(refreshed.reflectivity, processed.reflectivity, equal_nan=True)
+    assert refreshed.gate_classification is not None
+    assert refreshed_quality.advisory_fraction == quality.advisory_fraction
 
 
 def test_qc_ordering_no_longer_affects_what_speckle_removal_sees():

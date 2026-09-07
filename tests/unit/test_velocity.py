@@ -1,5 +1,5 @@
 import numpy as np
-from src.parser import VelocitySweep, VelocityData
+from src.parser import SweepData, VelocitySweep, VelocityData
 from src.velocity import VelocityRegion, detect_velocity_regions, RotationSignature, detect_rotation_signatures
 
 RADAR_LAT = 35.3331
@@ -232,6 +232,46 @@ def test_analyze_velocity_leaves_distant_objects_unannotated():
     regions, rotations, annotated = analyze_velocity(vel_data, objects)
     assert annotated[0].rotation is None
     assert annotated[0].max_inbound_ms is None
+
+
+def test_cell_footprint_assessment_requires_overlap_and_vertical_support():
+    """A candidate earns QC-eligible evidence only from the cell it actually
+    overlaps, not from a nearby centroid."""
+    from src.geometry import gate_coordinates
+    from src.velocity import _associate_rotation_candidates, is_quality_protection_eligible
+
+    shape = (72, 60)
+    sweep = SweepData(
+        reflectivity=np.full(shape, 35.0),
+        azimuths=np.linspace(0.0, 355.0, shape[0]),
+        ranges_m=np.arange(2125.0, 2125.0 + 250.0 * shape[1], 250.0),
+        elevation_angle=0.5, elevations=np.full(shape[0], 0.5),
+        elevation_angles=[0.5], radar_lat=RADAR_LAT, radar_lon=RADAR_LON,
+        radar_alt_m=390.0, timestamp="2026-08-23T00:00:00Z",
+    )
+    lat, lon = gate_coordinates(
+        sweep.azimuths, sweep.ranges_m, sweep.elevation_angle,
+        sweep.radar_lat, sweep.radar_lon,
+    )
+    mask = np.zeros(shape, dtype=bool)
+    mask[10:14, 28:32] = True
+    candidate = RotationSignature(
+        centroid_lat=float(lat[12, 30]), centroid_lon=float(lon[12, 30]),
+        distance_km=10.0, bearing_deg=0.0, max_shear_ms=30.0,
+        max_inbound_ms=-15.0, max_outbound_ms=15.0, diameter_km=1.0,
+        sweep_count=2, elevation_angles=[0.48, 0.88], strength="moderate",
+    )
+    assessed = _associate_rotation_candidates([candidate], {9: mask}, sweep)[0]
+    assert assessed.associated_object_id == 9
+    assert assessed.evidence_level == "vertically_confirmed"
+    assert is_quality_protection_eligible(assessed)
+
+    far_mask = np.zeros(shape, dtype=bool)
+    far_mask[40:44, 40:44] = True
+    no_overlap = _associate_rotation_candidates([candidate], {9: far_mask}, sweep)[0]
+    assert no_overlap.associated_object_id is None
+    assert no_overlap.evidence_level == "unconfirmed"
+    assert not is_quality_protection_eligible(no_overlap)
 
 
 import pyart

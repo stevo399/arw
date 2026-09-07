@@ -72,6 +72,7 @@ class RotationSignatureModel(BaseModel):
     elevation_angles: list[float]
     strength: str
     associated_object_id: int | None = None
+    evidence_level: str = "unconfirmed"
 
 
 class VelocityResponse(BaseModel):

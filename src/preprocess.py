@@ -146,3 +146,32 @@ def preprocess_sweep(sweep: SweepData, rotation_signatures, velocity=None):
     quality.degraded_modes = qc_report.degraded_modes
 
     return replace(qc_sweep, reflectivity=despeckled), quality, advisory
+
+
+def refresh_quality_advisory(
+    sweep: SweepData,
+    quality: ScanQuality,
+    rotation_assessments,
+    velocity=None,
+) -> tuple[SweepData, ScanQuality, object]:
+    """Recompute advisory metadata after rotation evidence is assessed.
+
+    Reflectivity has already been classified and despeckled before storm-cell
+    detection.  This second, metadata-only pass lets a *vetted* assessment
+    affect the advisory without ever changing that reflectivity field or
+    letting a raw candidate affect it.  It is deliberately separate from
+    ``preprocess_sweep`` to make the ordering visible at the call site.
+    """
+    from src.qc.apply import apply_quality_control
+
+    classified, advisory, report = apply_quality_control(
+        sweep, rotation_assessments, velocity=velocity,
+    )
+    refreshed_quality = replace(
+        quality,
+        class_fractions=report.class_fractions,
+        advisory_fraction=report.advisory_fraction,
+        mean_confidence=report.mean_confidence,
+        degraded_modes=report.degraded_modes,
+    )
+    return classified, refreshed_quality, advisory

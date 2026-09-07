@@ -107,6 +107,30 @@ def test_rotation_collocation_protects_weak_debris_gates():
         sweep_count=2,
         elevation_angles=[0.48, 0.88],
         strength="strong",
+        associated_object_id=7,
+        evidence_level="vertically_confirmed",
     )
     mask = protected_mask(sweep, [signature])
     assert mask[10:14, 28:32].all()
+
+
+def test_raw_couplet_cannot_protect_a_weak_echo_component():
+    """A strong one-sweep couplet is diagnostic-only until it has cell and
+    independent vertical/temporal evidence."""
+    from src.geometry import gate_coordinates
+    from src.velocity import RotationSignature
+
+    reflectivity = np.full((72, 60), np.nan)
+    reflectivity[10:14, 28:32] = 42.0
+    sweep = _sweep(reflectivity)
+    lat, lon = gate_coordinates(
+        sweep.azimuths, sweep.ranges_m, sweep.elevation_angle,
+        sweep.radar_lat, sweep.radar_lon,
+    )
+    raw = RotationSignature(
+        centroid_lat=float(lat[12, 30]), centroid_lon=float(lon[12, 30]),
+        distance_km=10.0, bearing_deg=0.0, max_shear_ms=40.0,
+        max_inbound_ms=-25.0, max_outbound_ms=25.0, diameter_km=2.0,
+        sweep_count=1, elevation_angles=[0.48], strength="strong",
+    )
+    assert not protected_mask(sweep, [raw]).any()

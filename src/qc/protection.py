@@ -20,6 +20,7 @@ import numpy as np
 
 from src.geometry import label_periodic_azimuth
 from src.qc.collocation import rotation_proximity_mask
+from src.velocity import is_quality_protection_eligible
 
 # ARW-tuned. Above this, echo is too intense to be biological or ground clutter
 # in any operationally meaningful case.
@@ -36,14 +37,20 @@ def protected_mask(
     """Gates that quality control may never discard.
 
     Rule 1: reflectivity at or above keep_dbz.
-    Rule 2: within a rotation signature's radius plus margin.
+    Rule 2: within an assessed, cell-associated and independently supported
+    rotation signature's radius plus margin. Raw/unconfirmed couplets are
+    diagnostic data, never QC-advisory exemptions.
     Rule 3: any connected component containing a gate protected by 1 or 2.
     """
     reflectivity = np.asarray(sweep.reflectivity, dtype=float)
     finite = np.isfinite(reflectivity)
 
     seeds = (finite & (reflectivity >= keep_dbz))
-    seeds |= rotation_proximity_mask(sweep, rotation_signatures) & finite
+    eligible_rotations = [
+        signature for signature in rotation_signatures
+        if is_quality_protection_eligible(signature)
+    ]
+    seeds |= rotation_proximity_mask(sweep, eligible_rotations) & finite
 
     if not seeds.any():
         return np.zeros_like(seeds, dtype=bool)

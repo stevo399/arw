@@ -341,20 +341,17 @@ def test_velocity_aligned_to_reflectivity_remaps_by_azimuth():
     assert not np.any(aligned[100, :] == 42.0)
 
 
-def test_ingest_detects_rotation_before_quality_control():
-    """Rotation signatures must be computed before quality control runs, and
-    passed into it -- protection rule 2 can only keep a debris gate near a
-    rotation signature if it knows where that signature is. If the pipeline
-    called preprocess_sweep before detect_rotation_signatures (or without
-    forwarding the result), this test would still pass with an empty/default
-    rotation list -- so it asserts the exact signatures object was forwarded,
-    not just that something non-empty exists.
+def test_ingest_keeps_raw_couplets_out_of_initial_quality_control():
+    """QC must not use raw couplets before cell-footprint assessment.
+
+    This preserves the signal-integrity boundary: only ``analyze_velocity``,
+    which receives the detected object masks and reflectivity sweep, can
+    produce an assessment eligible for later advisory protection.
     """
     from src.preprocess import ScanQuality
     from src.qc.report import EchoAdvisory
 
     mock_ref = _make_reflectivity_data(np.nan)
-    sentinel_rotation = [object()]
     # A real VelocityData/VelocitySweep, not a bare MagicMock: with
     # _velocity_aligned_to_reflectivity and analyze_velocity both now running
     # for real against it (only preprocess_sweep is mocked below), it needs
@@ -375,7 +372,6 @@ def test_ingest_detects_rotation_before_quality_control():
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
          patch("src.server.extract_sweep_data", return_value=mock_ref), \
          patch("src.server.extract_velocity", return_value=mock_vel_data), \
-         patch("src.server.detect_rotation_signatures", return_value=sentinel_rotation) as mock_detect, \
          patch(
              "src.server.preprocess_sweep",
              return_value=(mock_ref, fake_quality, fake_advisory),
@@ -383,12 +379,9 @@ def test_ingest_detects_rotation_before_quality_control():
         resp = client.get("/objects/KTLX")
 
     assert resp.status_code == 200
-    mock_detect.assert_called_once_with(mock_vel_data)
-    # preprocess_sweep must receive the rotation signatures detect_rotation_signatures
-    # produced -- not an empty list, and not something computed independently.
     call_args = mock_preprocess.call_args
     passed_rotations = call_args.args[1] if len(call_args.args) > 1 else call_args.kwargs["rotation_signatures"]
-    assert passed_rotations is sentinel_rotation
+    assert passed_rotations == []
 
 
 def test_velocity_endpoint_returns_200():
