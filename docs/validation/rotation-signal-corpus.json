@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "purpose": "Evaluation manifest for rotation-signal integrity. Case labels describe documented scan context, not a per-gate tornado or hydrometeor truth label.",
+  "calibration_policy": "Do not select a raw-shear, distance, or polarimetric threshold from this manifest alone. Record the population, source, and false-positive/missed-signal trade-off before changing a production threshold.",
+  "cases": [
+    {
+      "id": "kiwa-20260712-clear-air-sequence",
+      "label": "null_clear_air",
+      "site_id": "KIWA",
+      "source_type": "local_cached_replay",
+      "evidence": "Six consecutive local scans selected for very sparse >=20 dBZ echo and clutter/biological persistence measurement; not a severe-event truth set.",
+      "volumes": [
+        "cache/KIWA/KIWA20260712_163410_V06",
+        "cache/KIWA/KIWA20260712_164255_V06",
+        "cache/KIWA/KIWA20260712_165142_V06",
+        "cache/KIWA/KIWA20260712_170029_V06",
+        "cache/KIWA/KIWA20260712_170914_V06",
+        "cache/KIWA/KIWA20260712_171800_V06"
+      ],
+      "use_for": ["raw-candidate false-positive measurement", "QC-advisory effectiveness", "persistence expiry"],
+      "must_not_use_for": ["tornado probability", "dual-pol debris calibration"]
+    },
+    {
+      "id": "ktlx-20130520-newcastle-moore-tornado",
+      "label": "confirmed_tornado_context",
+      "site_id": "KTLX",
+      "source_type": "SPC_report_and_NWS_survey",
+      "volume": "cache/KTLX/KTLX20130520_195527_V06.gz",
+      "event": {"latitude": 35.25, "longitude": -97.60, "search_radius_km": 10.0},
+      "evidence": "SPC 2013-05-20 tornado report, 19:56 UTC, Newcastle/Moore, OK; later confirmed EF5 by NWS Norman damage survey. Volume timestamp 19:55:27 UTC.",
+      "references": [
+        "https://www.spc.noaa.gov/climo/reports/130520_rpts_torn.csv"
+      ],
+      "use_for": ["hazard echo survival", "cell-association retention", "dual-pol context inspection"],
+      "must_not_use_for": ["single-case threshold calibration", "tornado-warning inference"]
+    },
+    {
+      "id": "ktlx-20130520-moore-large-hail",
+      "label": "confirmed_hail_context",
+      "site_id": "KTLX",
+      "source_type": "SPC_report",
+      "volume": "cache/KTLX/KTLX20130520_200356_V06.gz",
+      "event": {"latitude": 35.38, "longitude": -97.50, "search_radius_km": 10.0},
+      "evidence": "SPC 2013-05-20 hail report, 20:06 UTC, 3 NNW Moore, OK, 2.50 in hail. Volume timestamp 20:03:56 UTC.",
+      "references": [
+        "https://www.spc.noaa.gov/climo/reports/130520_rpts_hail.csv"
+      ],
+      "use_for": ["hazard echo survival", "non-tornado severe context"],
+      "must_not_use_for": ["rotation threshold calibration", "tornado-warning inference"]
+    }
+  ]
+}

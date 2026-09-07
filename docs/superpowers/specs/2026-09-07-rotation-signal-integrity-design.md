@@ -157,3 +157,10 @@ The first two evidence layers are implemented:
 Remaining work is storm-relative velocity provenance, explicit dual-pol/
 reflectivity corroboration, and a labelled case corpus for calibration. None
 of those should be replaced with a stronger raw-shear cutoff.
+
+The initial evaluation manifest is
+`docs/validation/rotation-signal-corpus.json`. It deliberately separates the
+KIWA clear-air null sequence from the two documented Moore severe-context
+volumes and records what each can and cannot support. It is a starting
+evaluation population, not a claim that three contexts are enough to tune a
+warning-like product.
