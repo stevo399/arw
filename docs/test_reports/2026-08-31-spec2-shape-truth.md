@@ -1,5 +1,21 @@
 # Spec 2, Task 7: storm shapes tell the truth when walked on
 
+**Restoration validation (2026-09-07, pending commit):** commit `6017bac`
+accidentally replaced the Sep 2 contour implementation in `src/contours.py` with
+an older version while adding precipitation-omission metadata. The working tree
+restores the gate-edge, range-padding, exact-level-membership, and
+coverage-simplification safeguards. All focused tests, the real cached-volume
+proof, and the full suite were re-run against that restored code. The current
+measurements below under **2026-09-07 restoration measurements** supersede any
+conflicting Sep 1 figure; the prior fix-round narrative is retained as an audit
+trail for the calibration investigation that preceded this regression.
+
+Proof test: `tests/e2e/test_proof_shape_truth.py` -- **10 passed** in 266.47s.
+Full suite: `.venv/Scripts/python.exe -m pytest -q` -- **390 passed, 4 xfailed**
+in 592.81s. The four Spec 1 expected failures remain strict; there were no
+unexpected failures. All runs used the three existing local reference volumes;
+no radar data was downloaded.
+
 **Fix round 1 (2026-09-01):** this report was corrected after review found the vertex-count
 table measured the wrong unit (per polygon fragment instead of per GeoJSON Feature) and stated
 its conclusion backwards, and after commit `1803346` landed a 0.5 km² minimum-fragment-area
@@ -298,6 +314,56 @@ median 11,844 -- roughly 300x the storm layer's median) despite emitting far few
 because it has no 4 km2 area floor and each Feature is one whole intensity band's entire MultiPolygon rather than
 one object. Whether this vertex density is workable for keyboard/spatial-audio exploration in Audiom is not
 something this report decides -- it is the number the project owner asked for so he can decide it himself.
+
+## 2026-09-07 restoration measurements
+
+The restored implementation expands no-data boundaries to the physical gate edge,
+extends the range axis at both ends, and treats a gate exactly at a level as
+inside that level. This changes geometry that had been inset or omitted, most
+visibly in the precipitation field. The following values are current and
+replace conflicting values above.
+
+The proof's fidelity results are otherwise stable: pooled contour false-positive
+rate remains **0.31%** (hull: 20.58%); KTLX/KEMX union false-negative rates remain
+0.05% / 0.56%; holes retain 0.89% / 1.52% unclaimed echo; and the synthetic seam
+remains one polygon at 214.1194 km2 versus 213.4122 km2 of gates (0.33%).
+
+| Site | Contour area (km2) | Gate-summed area (km2) | Contour ratio |
+|---|---:|---:|---:|
+| KTLX (Moore) | 11,532.1 | 11,446.2 | **1.0075** |
+| KEMX | 22,513.7 | 21,802.9 | **1.0326** |
+| KIWA (clear air) | 5.4 | 5.4 | **0.9867** |
+
+The resolution-floor guard still has zero edges below half the local floor. The
+literal-floor diagnostic is KTLX contour 1,686/8,374 (20.1%), KEMX contour
+2,430/14,537 (16.7%), and KIWA contour 9/65 (13.8%); the hull figures are
+unchanged. As documented above, this is a one-sided guard rather than a contour
+versus hull discriminator.
+
+**Per-Feature vertex counts -- current shipped geometry:**
+
+| Layer | Site | n Features | min | median | p95 | max | total |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Storm footprint | KTLX (Moore) | 36 | 10 | 80 | 1,002 | 2,228 | 9,173 |
+| Storm footprint | KEMX | 81 | 12 | 35 | 759 | 3,535 | 15,510 |
+| Storm footprint | KIWA (clear air) | 1 | 67 | 67 | 67 | 67 | 67 |
+| Storm footprint | **POOLED** | **118** | **10** | **40** | **823** | **3,535** | **24,750** |
+| Precipitation band | KTLX (Moore) | 6 | 43 | 20,094 | 24,641 | 25,270 | 91,527 |
+| Precipitation band | KEMX | 6 | 20 | 15,669 | 53,836 | 56,049 | 135,951 |
+| Precipitation band | KIWA (clear air) | 2 | 738 | 1,181 | 1,580 | 1,624 | 2,362 |
+| Precipitation band | **POOLED** | **14** | **20** | **12,425** | **50,294** | **56,049** | **229,840** |
+
+The precipitation layer remains materially heavier: 229,840 total vertices,
+about 9.3x the storm layer's 24,750, despite only 14 Features. Its largest
+Feature is 56,049 vertices, about 15.9x the storm layer maximum.
+
+At the 0.5 km2 precipitation-fragment floor, the current pipeline contours
+19,693 pre-filter fragments / 315,889 vertices and 2,553 post-filter fragments
+/ 229,840 vertices: a 27.2% vertex reduction. It records 17,140 omitted
+fragments totalling 1,004.0 km2 (KTLX 8,449 / 368.6122 km2; KEMX 6,579 /
+539.8334 km2; KIWA 2,112 / 95.5897 km2). KTLX alone has 9,369 pre-filter
+pieces and 134,123 vertices. These omissions are visible in layer metadata;
+`6017bac` additionally records any whole omitted band and its reason.
 
 ## What failed or could not be established
 

@@ -120,16 +120,19 @@
     would require
   - Rotation detection produces **121–132 signatures per clear-air scan** — spurious, and it
     over-protects
-  - Storm shapes are still `ConvexHull`, which does not represent true extent (Spec 2)
-- Full test suite: 324 passing, 4 strict expected-failures documenting the above
+  - The classifier remains miscalibrated; its strict expected-failure proofs still document this limitation
+- Full test suite at the latest Spec 2 restoration validation: 390 passing, 4 strict expected-failures
+
+## Spec 2 restoration validation (2026-09-07)
+- Contour-based storm footprints, exclusive intensity bands, and the independent 15 dBZ precipitation-field layer are implemented on branch `spec2-shapes`
+- Restored the Sep 2 contour safeguards that `6017bac` accidentally replaced: gate-edge no-data boundaries, range-edge padding, exact `>=` level membership, and safe fallback when coverage simplification loses a band
+- Cache-backed proof: 10 passing checks across KTLX Moore, KEMX, and KIWA; full suite: 390 passed, 4 strict xfailed
+- Current measurements and remaining limits are recorded in `docs/test_reports/2026-08-31-spec2-shape-truth.md`
 
 ## In Progress
-- None — Spec 1 complete, awaiting merge decision
+- Spec 2 restoration is validated and documented; commit/merge decision pending
 
 ## Next
-- Spec 2: contour-based storm shapes. Convex hulls bridge every concavity — a crescent of
-  rain around a city renders as a solid disc covering it. This is the largest remaining gap
-  against the "true shape and extent" goal
 - Classifier calibration. The membership parameters need deriving from data, not from a design
   document. The two strict xfails are the measure: they start passing when it works
 - Spec 3 (SCIT cell identification), Spec 4 (hail/mesocyclone, needs volumetric parsing)

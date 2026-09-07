@@ -10,16 +10,30 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-29-storm-shape-contours-design.md`
 
+## Current status (2026-09-07)
+
+Implementation and validation are complete in the `spec2-shapes` working tree,
+pending the restoration commit. The Sep 2 contour safeguards were restored after
+`6017bac` accidentally replaced them with older code: no-data boundaries use
+gate edges, range-axis ends are padded, level membership matches `>=`, and a
+failed coverage-simplification pass falls back to raw geometry. Cache-backed
+proof: 10 passed; full suite: 390 passed, 4 strict xfailed. The proof report
+contains the current measurements and its two explicit limitations (the
+resolution-floor guard is one-sided, and KIWA's single-object union FN is
+reported rather than asserted). The task checkboxes below are retained as the
+historical execution log rather than rewritten as though every original success
+criterion had been established literally.
+
 ## Global Constraints
 
 - **Every new test must be proven to FAIL against the convex-hull implementation before acceptance.** The hull is the known-broken version and is available in git history. Spec 1 shipped nine tests that passed against the very bug they claimed to cover; this is the guard against a tenth.
-- **`DEFAULT_SIMPLIFY_M = 250.0`** — the radar's finest real resolution. Simplification tolerance is always expressed in ground metres, never in index space or degrees.
+- **`DEFAULT_SIMPLIFY_M = 100.0`** — deliberately below one full 250 m gate so simplification cannot swallow a gate-wide notch. Simplification tolerance is always expressed in ground metres, never in index space or degrees.
 - **Never invent geometry.** If a mask yields no valid contour, omit the feature and record why. `_fallback_square` (a square drawn at a centroid when hulling failed) is deleted, not ported.
 - **Never decimate vertices by index.** To reduce vertex count, raise the tolerance and re-simplify. Index decimation biases the boundary.
 - **Success is measured by whether the map lies when walked on:** false-positive rate below 5%, false-negative rate below 5%, on every cached volume tested. If a target cannot be met, report the measured value — do not relax the threshold.
 - **Preserve the four strict xfails from Spec 1.** They remain strict.
 - **Test runner:** `.venv/Scripts/python.exe -m pytest`
-- **Baseline at plan start:** 324 passed, 4 xfailed.
+- **Baseline at plan start:** 324 passed, 4 xfailed. **Current restoration validation:** 390 passed, 4 xfailed.
 - **Reference volumes:** `cache/KTLX/KTLX20130520_195527_V06.gz` (Newcastle–Moore EF5, dense convection), `cache/KEMX/KEMX20260712_022646_V06` (spec 1 evidence volume), `cache/KIWA/KIWA20260712_170029_V06` (clear air).
 
 ---
