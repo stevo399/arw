@@ -1,6 +1,7 @@
 # src/server.py
 from datetime import datetime, date as date_type
 from dataclasses import replace
+from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 import logging
 import math
@@ -73,6 +74,7 @@ _tracker = StormTracker()
 # Keep that completed work in memory.  Raw files in ``cache/`` only avoid a
 # download; without this cache every visitor still repeated all of that work.
 _processed_scans: dict[tuple[str, str], BufferedScan] = {}
+_map_layers: dict[tuple[str, str], dict[str, dict]] = {}
 _live_scans: dict[str, BufferedScan] = {}
 _refreshing_sites: set[str] = set()
 _refresh_started_at: dict[str, datetime] = {}
@@ -234,6 +236,7 @@ def _process_scan_file(site_id: str, filepath: str) -> BufferedScan:
         labeled_grid=result.labeled_grid,
         object_masks=result.object_masks,
         scan_quality=scan_quality,
+        source_path=str(Path(filepath).resolve()),
         velocity_data=vel_data,
         velocity_regions=regions,
         rotation_signatures=rotations,
@@ -275,7 +278,40 @@ def _process_scan_file(site_id: str, filepath: str) -> BufferedScan:
     return buffered
 
 
-def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
+def _map_layer_cache_key(buffered: BufferedScan) -> tuple[str, str] | None:
+    source_path = getattr(buffered, "source_path", None)
+    if not source_path or not Path(source_path).is_file():
+        # Synthetic scans and test doubles are deliberately not shared.
+        return None
+    return buffered.site_id.upper(), source_path
+
+
+def _prepared_map_layers(buffered: BufferedScan) -> dict[str, dict]:
+    """Build each public map representation once per completed scan."""
+    cache_key = _map_layer_cache_key(buffered)
+    with _ingest_lock:
+        if cache_key is not None:
+            with _state_lock:
+                cached = _map_layers.get(cache_key)
+            if cached is not None:
+                return cached
+        footprints = build_storm_geojson(buffered)
+        layers = {
+            "footprints": footprints,
+            "intensity": build_storm_intensity_geojson(buffered),
+            "audiom": build_storm_audiom_geojson(buffered),
+            "centroids": build_storm_centroid_geojson(buffered),
+            "precipitation": build_precipitation_field_geojson(buffered),
+        }
+        if cache_key is not None:
+            with _state_lock:
+                _map_layers[cache_key] = layers
+        return layers
+
+
+def _ingest_to_buffer(
+    site_id: str, dt: datetime | None = None, *, publish_live: bool = True,
+) -> BufferedScan:
     """Return a completed interpretation, analyzing each local volume once.
 
     The lock also protects the shared replay buffer and storm tracker.  It is
@@ -294,14 +330,15 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
             if cached is not None:
                 if dt is None:
                     with _state_lock:
-                        _live_scans[normalized_site] = cached
+                        if publish_live:
+                            _live_scans[normalized_site] = cached
                 return cached
 
         buffered = _process_scan_file(normalized_site, filepath)
         if Path(filepath).is_file():
             with _state_lock:
                 _processed_scans[cache_key] = buffered
-                if dt is None:
+                if dt is None and publish_live:
                     _live_scans[normalized_site] = buffered
         return buffered
 
@@ -310,8 +347,10 @@ def _refresh_live_scan(site_id: str) -> None:
     """Refresh a live site off the request path; errors leave prior data live."""
     normalized_site = site_id.upper()
     try:
-        _ingest_to_buffer(normalized_site)
+        buffered = _ingest_to_buffer(normalized_site, publish_live=False)
+        _prepared_map_layers(buffered)
         with _state_lock:
+            _live_scans[normalized_site] = buffered
             _refresh_errors.pop(normalized_site, None)
     except Exception as exc:  # pragma: no cover - exercised by deployment failures
         _logger.exception("Unable to refresh live radar scan for %s", normalized_site)
@@ -619,10 +658,11 @@ def get_storm_map_layer(
 
     site = ranked_sites[0]
     buffered, _ = _live_or_ingest(site["site_id"], dt)
-    geojson = build_storm_geojson(buffered)
-    intensity_geojson = build_storm_intensity_geojson(buffered)
-    audiom_geojson = build_storm_audiom_geojson(buffered)
-    centroid_geojson = build_storm_centroid_geojson(buffered)
+    layers = _prepared_map_layers(buffered)
+    geojson = deepcopy(layers["footprints"])
+    intensity_geojson = deepcopy(layers["intensity"])
+    audiom_geojson = deepcopy(layers["audiom"])
+    centroid_geojson = deepcopy(layers["centroids"])
     return StormMapLayerResponse(
         layer_name="ARW storm polygons",
         layer_type="FeatureLayer",
@@ -666,12 +706,13 @@ def get_storm_map_geojson(
         raise HTTPException(status_code=404, detail="No radar site found for that location")
 
     buffered, _ = _live_or_ingest(ranked_sites[0]["site_id"], dt)
+    layers = _prepared_map_layers(buffered)
     if mode == "footprints":
-        geojson = build_storm_geojson(buffered)
+        geojson = deepcopy(layers["footprints"])
     elif mode == "intensity":
-        geojson = build_storm_intensity_geojson(buffered)
+        geojson = deepcopy(layers["intensity"])
     elif mode == "audiom":
-        geojson = build_storm_audiom_geojson(buffered)
+        geojson = deepcopy(layers["audiom"])
     else:
         raise HTTPException(
             status_code=422,
@@ -708,7 +749,7 @@ def get_precipitation_map_geojson(
         raise HTTPException(status_code=404, detail="No radar site found for that location")
 
     buffered, _ = _live_or_ingest(ranked_sites[0]["site_id"], dt)
-    geojson = build_precipitation_field_geojson(buffered)
+    geojson = deepcopy(_prepared_map_layers(buffered)["precipitation"])
     return _map_geojson_response(geojson, buffered)
 
 

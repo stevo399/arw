@@ -20,6 +20,10 @@ class BufferedScan:
     labeled_grid: np.ndarray
     object_masks: dict[int, np.ndarray]
     scan_quality: ScanQuality | None = None
+    # Local Level II volume this interpretation came from.  It lets the API
+    # cache rendered map layers by immutable scan identity rather than merely
+    # by timestamp.
+    source_path: str | None = None
     velocity_data: VelocityData | None = None
     velocity_regions: list[VelocityRegion] = field(default_factory=list)
     rotation_signatures: list[RotationSignature] = field(default_factory=list)
