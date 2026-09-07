@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 from types import SimpleNamespace
+from threading import Event, Thread
 
 import src.server as server
 
@@ -63,7 +64,6 @@ def test_prepared_map_layers_are_built_once_per_real_volume(monkeypatch, tmp_pat
         "build_storm_intensity_geojson",
         "build_storm_audiom_geojson",
         "build_storm_centroid_geojson",
-        "build_precipitation_field_geojson",
     ]
     mocks = []
     for name in builders:
@@ -77,4 +77,36 @@ def test_prepared_map_layers_are_built_once_per_real_volume(monkeypatch, tmp_pat
         assert first is second
         assert all(mock.call_count == 1 for mock in mocks)
     finally:
+        _clear_live_state()
+
+
+def test_completed_map_layer_does_not_wait_for_another_site_ingest(tmp_path):
+    _clear_live_state()
+    source = tmp_path / "KIWA20260907_222941_V06"
+    source.write_bytes(b"radar")
+    scan = SimpleNamespace(
+        site_id="KIWA",
+        source_path=str(source),
+        reflectivity_data=SimpleNamespace(timestamp="2026-09-07T22:29:41Z"),
+    )
+    expected = {"audiom": {"type": "FeatureCollection", "features": []}}
+    with server._state_lock:
+        server._map_layers[server._map_layer_cache_key(scan)] = expected
+
+    finished = Event()
+    result = []
+
+    def read_cached_layer():
+        result.append(server._prepared_map_layers(scan))
+        finished.set()
+
+    server._ingest_lock.acquire()
+    worker = Thread(target=read_cached_layer)
+    try:
+        worker.start()
+        assert finished.wait(0.5), "cached map layer waited for an unrelated ingest"
+        assert result == [expected]
+    finally:
+        server._ingest_lock.release()
+        worker.join(timeout=1)
         _clear_live_state()

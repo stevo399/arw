@@ -81,6 +81,9 @@ _refresh_started_at: dict[str, datetime] = {}
 _refresh_errors: dict[str, str] = {}
 _state_lock = RLock()
 _ingest_lock = RLock()
+# Rendering an already-completed immutable GeoJSON layer must never wait for a
+# different site's slow Level II ingest/tracker update.
+_map_build_lock = RLock()
 _refresh_interval_seconds = int(os.getenv("ARW_REFRESH_INTERVAL_SECONDS", "120"))
 _refresh_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="arw-radar")
 _prewarm_sites = tuple(
@@ -289,7 +292,16 @@ def _map_layer_cache_key(buffered: BufferedScan) -> tuple[str, str] | None:
 def _prepared_map_layers(buffered: BufferedScan) -> dict[str, dict]:
     """Build each public map representation once per completed scan."""
     cache_key = _map_layer_cache_key(buffered)
-    with _ingest_lock:
+    if cache_key is not None:
+        with _state_lock:
+            cached = _map_layers.get(cache_key)
+        if cached is not None:
+            return cached
+
+    # Only one caller builds uncached contour layers.  This is intentionally
+    # separate from _ingest_lock: completed map layers are immutable and safe
+    # to serve while another site's radar volume is being parsed and tracked.
+    with _map_build_lock:
         if cache_key is not None:
             with _state_lock:
                 cached = _map_layers.get(cache_key)
@@ -301,12 +313,33 @@ def _prepared_map_layers(buffered: BufferedScan) -> dict[str, dict]:
             "intensity": build_storm_intensity_geojson(buffered),
             "audiom": build_storm_audiom_geojson(buffered),
             "centroids": build_storm_centroid_geojson(buffered),
-            "precipitation": build_precipitation_field_geojson(buffered),
         }
         if cache_key is not None:
             with _state_lock:
                 _map_layers[cache_key] = layers
         return layers
+
+
+def _prepared_precipitation_layer(buffered: BufferedScan) -> dict:
+    """Build the much larger whole-field layer only when it is requested."""
+    cache_key = _map_layer_cache_key(buffered)
+    if cache_key is not None:
+        with _state_lock:
+            cached = _map_layers.get(cache_key, {}).get("precipitation")
+        if cached is not None:
+            return cached
+
+    with _map_build_lock:
+        if cache_key is not None:
+            with _state_lock:
+                cached = _map_layers.get(cache_key, {}).get("precipitation")
+            if cached is not None:
+                return cached
+        precipitation = build_precipitation_field_geojson(buffered)
+        if cache_key is not None:
+            with _state_lock:
+                _map_layers.setdefault(cache_key, {})["precipitation"] = precipitation
+        return precipitation
 
 
 def _ingest_to_buffer(
@@ -749,7 +782,7 @@ def get_precipitation_map_geojson(
         raise HTTPException(status_code=404, detail="No radar site found for that location")
 
     buffered, _ = _live_or_ingest(ranked_sites[0]["site_id"], dt)
-    geojson = deepcopy(_prepared_map_layers(buffered)["precipitation"])
+    geojson = deepcopy(_prepared_precipitation_layer(buffered))
     return _map_geojson_response(geojson, buffered)
 
 
