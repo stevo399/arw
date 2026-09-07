@@ -164,6 +164,11 @@ must be high and its heading non-null before it can be used as a reference.
 Until then, every candidate remains explicitly `base_radial`; no inferred
 motion may silently change the detection input.
 
+The implementation now contains a tested per-sweep translation-removal
+primitive gated at tracker confidence >=0.90. It is deliberately not yet
+wired into volume-wide candidate detection: applying one storm's motion to
+another storm in the same volume would create a false storm-relative product.
+
 The initial evaluation manifest is
 `docs/validation/rotation-signal-corpus.json`. It deliberately separates the
 KIWA clear-air null sequence from the two documented Moore severe-context

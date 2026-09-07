@@ -12,6 +12,7 @@ from src.parser import VelocityData
 MIN_VELOCITY_MS = 10.0
 MIN_REGION_AREA_KM2 = 4.0
 CROSS_SWEEP_OVERLAP_THRESHOLD = 0.3
+MIN_STORM_RELATIVE_MOTION_CONFIDENCE = 0.9
 
 
 @dataclass
@@ -199,6 +200,44 @@ def is_quality_protection_eligible(signature: RotationSignature) -> bool:
         signature.associated_object_id is not None
         and signature.evidence_level in QUALITY_PROTECTION_EVIDENCE
     )
+
+
+def storm_relative_velocity(
+    velocity: np.ndarray,
+    azimuths: np.ndarray,
+    motion,
+) -> np.ndarray | None:
+    """Return radial velocity with trusted storm translation removed.
+
+    ``motion`` must provide ``speed_kmh``, ``heading_deg``, and a confidence
+    with score >= ``MIN_STORM_RELATIVE_MOTION_CONFIDENCE``.  A heading is
+    essential: speed without direction cannot be projected onto a radar ray.
+    The caller receives ``None`` rather than an invented correction when the
+    tracker is not sufficiently certain.
+
+    The translation component along an outbound-positive ray is
+    ``speed * cos(storm_heading - ray_azimuth)``.  This primitive is kept
+    separate from the current volume-wide detector because a different storm
+    can require a different vector within the same radar volume.
+    """
+    confidence = getattr(motion, "confidence", None)
+    confidence_score = getattr(confidence, "score", None)
+    heading_deg = getattr(motion, "heading_deg", None)
+    speed_kmh = getattr(motion, "speed_kmh", None)
+    if (
+        heading_deg is None
+        or speed_kmh is None
+        or confidence_score is None
+        or confidence_score < MIN_STORM_RELATIVE_MOTION_CONFIDENCE
+    ):
+        return None
+    field = np.asarray(velocity, dtype=float)
+    rays = np.asarray(azimuths, dtype=float)
+    if field.ndim != 2 or field.shape[0] != rays.size:
+        raise ValueError("velocity must be (ray, gate) with one azimuth per ray")
+    translation_ms = float(speed_kmh) / 3.6
+    radial_translation = translation_ms * np.cos(np.radians(float(heading_deg) - rays))
+    return field - radial_translation[:, None]
 
 
 def _classify_rotation_strength(shear_ms: float) -> str:

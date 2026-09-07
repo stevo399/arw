@@ -314,6 +314,34 @@ def test_persistence_requires_distinct_nearby_scan_on_same_tracked_cell():
     assert same_scan.evidence_level == "unconfirmed"
 
 
+def test_storm_relative_velocity_removes_projected_trusted_translation():
+    from src.tracking.types import MotionConfidence
+    from src.tracking.motion import MotionVector
+    from src.velocity import storm_relative_velocity
+
+    motion = MotionVector(
+        speed_kmh=36.0, speed_mph=22, heading_deg=90.0, heading_label="E",
+        confidence=MotionConfidence(label="high", score=0.95),
+    )
+    # A 10 m/s eastward translation projects +10 m/s on an eastward ray,
+    # 0 on north, and -10 on west. The correction must remove it exactly.
+    velocity = np.array([[0.0], [10.0], [0.0], [-10.0]])
+    corrected = storm_relative_velocity(velocity, np.array([0.0, 90.0, 180.0, 270.0]), motion)
+    assert np.allclose(corrected, 0.0, atol=1e-9)
+
+
+def test_storm_relative_velocity_refuses_low_confidence_motion():
+    from src.tracking.types import MotionConfidence
+    from src.tracking.motion import MotionVector
+    from src.velocity import storm_relative_velocity
+
+    motion = MotionVector(
+        speed_kmh=36.0, speed_mph=22, heading_deg=90.0, heading_label="E",
+        confidence=MotionConfidence(label="medium", score=0.89),
+    )
+    assert storm_relative_velocity(np.zeros((2, 2)), np.array([0.0, 90.0]), motion) is None
+
+
 import pyart
 import pytest
 
