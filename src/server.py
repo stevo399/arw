@@ -108,7 +108,19 @@ def _resolve_map_location(
     city: str | None,
     state: str | None,
     zipcode: str | None,
+    latitude: float | None,
+    longitude: float | None,
 ) -> tuple[float, float, str]:
+    if latitude is not None or longitude is not None:
+        if latitude is None or longitude is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Provide both latitude and longitude.",
+            )
+        if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+            raise HTTPException(status_code=422, detail="Latitude or longitude is out of range.")
+        label = f"{city}, {state}" if city and state else f"{latitude:.4f}, {longitude:.4f}"
+        return latitude, longitude, label
     if zipcode:
         lat, lon = geocode_zipcode(zipcode)
         return lat, lon, zipcode
@@ -117,7 +129,7 @@ def _resolve_map_location(
         return lat, lon, f"{city}, {state}"
     raise HTTPException(
         status_code=422,
-        detail="Provide either zipcode or both city and state.",
+        detail="Provide latitude and longitude, a zipcode, or both city and state.",
     )
 
 
@@ -396,12 +408,14 @@ def get_storm_map_layer(
     city: str | None = Query(None),
     state: str | None = Query(None),
     zipcode: str | None = Query(None),
+    latitude: float | None = Query(None),
+    longitude: float | None = Query(None),
     datetime: str | None = Query(None),
     date: date_type | None = Query(None),
     time: str | None = Query(None),
 ):
     try:
-        lat, lon, label = _resolve_map_location(city, state, zipcode)
+        lat, lon, label = _resolve_map_location(city, state, zipcode, latitude, longitude)
         dt = _parse_layer_datetime(datetime, date, time)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -441,13 +455,15 @@ def get_storm_map_geojson(
     city: str | None = Query(None),
     state: str | None = Query(None),
     zipcode: str | None = Query(None),
+    latitude: float | None = Query(None),
+    longitude: float | None = Query(None),
     datetime: str | None = Query(None),
     date: date_type | None = Query(None),
     time: str | None = Query(None),
     mode: str = Query("audiom"),
 ):
     try:
-        lat, lon, _label = _resolve_map_location(city, state, zipcode)
+        lat, lon, _label = _resolve_map_location(city, state, zipcode, latitude, longitude)
         dt = _parse_layer_datetime(datetime, date, time)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -476,6 +492,8 @@ def get_precipitation_map_geojson(
     city: str | None = Query(None),
     state: str | None = Query(None),
     zipcode: str | None = Query(None),
+    latitude: float | None = Query(None),
+    longitude: float | None = Query(None),
     datetime: str | None = Query(None),
     date: date_type | None = Query(None),
     time: str | None = Query(None),
@@ -487,7 +505,7 @@ def get_precipitation_map_geojson(
     since this layer has only one representation.
     """
     try:
-        lat, lon, _label = _resolve_map_location(city, state, zipcode)
+        lat, lon, _label = _resolve_map_location(city, state, zipcode, latitude, longitude)
         dt = _parse_layer_datetime(datetime, date, time)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
