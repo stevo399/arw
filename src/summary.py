@@ -119,14 +119,20 @@ def _format_rotation(obj: DetectedObject, track=None) -> str:
             if len(recent) > 0 and track.rotation_history[-1].rotation is None:
                 return " Rotation weakening."
         return ""
-    reference = "base-radial velocity" if rotation.motion_reference == "base_radial" else rotation.motion_reference
+    reference = "base-radial velocity" if rotation.motion_reference.startswith("base_radial") else rotation.motion_reference
     if rotation.evidence_level == "persistent":
         return f" Persistent {rotation.strength} rotation evidence in {reference}."
     if rotation.evidence_level == "vertically_confirmed":
         return f" {rotation.strength.capitalize()} rotation evidence, vertically confirmed in {reference}."
     if rotation.evidence_level == "corroborated":
         return f" {rotation.strength.capitalize()} corroborated rotation evidence in {reference}."
-    return f" Unconfirmed {rotation.strength} velocity couplet in {reference}."
+    context = ""
+    if rotation.storm_relative_max_inbound_ms is not None:
+        context = (
+            f" Trusted storm-relative extrema: inbound {rotation.storm_relative_max_inbound_ms}"
+            f" and outbound {rotation.storm_relative_max_outbound_ms} meters per second."
+        )
+    return f" Unconfirmed {rotation.strength} velocity couplet in {reference}.{context}"
 
 
 def _format_motion(motion: MotionVector | None, track=None, events: list[dict] | None = None) -> str:

@@ -168,6 +168,9 @@ The implementation now contains a tested per-sweep translation-removal
 primitive gated at tracker confidence >=0.90. It is deliberately not yet
 wired into volume-wide candidate detection: applying one storm's motion to
 another storm in the same volume would create a false storm-relative product.
+For a cell-associated signature, ARW now exposes trusted storm-relative
+inbound/outbound context at the signature centroid while retaining the
+explicit `base_radial_detection_with_storm_relative_context` provenance.
 
 The initial evaluation manifest is
 `docs/validation/rotation-signal-corpus.json`. It deliberately separates the

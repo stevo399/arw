@@ -342,6 +342,30 @@ def test_storm_relative_velocity_refuses_low_confidence_motion():
     assert storm_relative_velocity(np.zeros((2, 2)), np.array([0.0, 90.0]), motion) is None
 
 
+def test_storm_relative_context_preserves_base_detection_and_evidence():
+    from src.tracking.motion import MotionVector
+    from src.tracking.types import MotionConfidence
+    from src.velocity import add_storm_relative_context
+
+    assessment = RotationSignature(
+        centroid_lat=35.0, centroid_lon=-97.0, distance_km=20.0, bearing_deg=90.0,
+        max_shear_ms=30.0, max_inbound_ms=-20.0, max_outbound_ms=20.0,
+        diameter_km=2.0, sweep_count=2, elevation_angles=[0.48, 0.88],
+        strength="moderate", associated_object_id=4, evidence_level="vertically_confirmed",
+    )
+    motion = MotionVector(
+        speed_kmh=36.0, speed_mph=22, heading_deg=90.0, heading_label="E",
+        confidence=MotionConfidence(label="high", score=0.95),
+    )
+    contextualized = add_storm_relative_context([assessment], {4: motion})[0]
+    assert contextualized.evidence_level == "vertically_confirmed"
+    assert contextualized.max_inbound_ms == -20.0
+    assert contextualized.max_outbound_ms == 20.0
+    assert contextualized.storm_relative_max_inbound_ms == -30.0
+    assert contextualized.storm_relative_max_outbound_ms == 10.0
+    assert contextualized.motion_reference == "base_radial_detection_with_storm_relative_context"
+
+
 import pyart
 import pytest
 

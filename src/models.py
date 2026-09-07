@@ -78,6 +78,10 @@ class RotationSignatureModel(BaseModel):
     dual_pol_available: bool = False
     evidence_level: str = "unconfirmed"
     motion_reference: str = "base_radial"
+    storm_relative_max_inbound_ms: float | None = None
+    storm_relative_max_outbound_ms: float | None = None
+    storm_motion_speed_kmh: float | None = None
+    storm_motion_heading_deg: float | None = None
 
 
 class VelocityResponse(BaseModel):

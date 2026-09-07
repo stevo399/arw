@@ -18,7 +18,7 @@ from src.models import (
 from src.sites import geocode_city_state, geocode_zipcode, rank_sites, NEXRAD_SITES
 from src.ingest import fetch_scan
 from src.parser import parse_radar_file, extract_sweep_data, extract_velocity, SweepData, VelocityData
-from src.velocity import analyze_velocity, promote_persistent_rotation_assessments
+from src.velocity import add_storm_relative_context, analyze_velocity, promote_persistent_rotation_assessments
 from src.detection import detect_objects_with_grid
 from src.preprocess import preprocess_sweep, refresh_quality_advisory
 from src.geometry import align_field_by_azimuth
@@ -208,6 +208,11 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
         obj.object_id: _tracker.rotation_history_for_current_object(obj.object_id)
         for obj in annotated_objects
     }
+    motions = {
+        obj.object_id: _tracker.motion_for_current_object(obj.object_id)
+        for obj in annotated_objects
+    }
+    rotations = add_storm_relative_context(rotations, motions)
     rotations = promote_persistent_rotation_assessments(
         rotations, histories, scan_timestamp,
     )
@@ -576,6 +581,10 @@ def get_velocity(site_id: str, datetime: str | None = Query(None)):
             dual_pol_available=s.dual_pol_available,
             evidence_level=s.evidence_level,
             motion_reference=s.motion_reference,
+            storm_relative_max_inbound_ms=s.storm_relative_max_inbound_ms,
+            storm_relative_max_outbound_ms=s.storm_relative_max_outbound_ms,
+            storm_motion_speed_kmh=s.storm_motion_speed_kmh,
+            storm_motion_heading_deg=s.storm_motion_heading_deg,
         )
         for s in buffered.rotation_signatures
     ]

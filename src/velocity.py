@@ -179,6 +179,10 @@ class RotationSignature:
     # Keep the reference explicit so consumers never mistake base radial
     # velocity for storm-relative velocity.
     motion_reference: str = "base_radial"
+    storm_relative_max_inbound_ms: float | None = None
+    storm_relative_max_outbound_ms: float | None = None
+    storm_motion_speed_kmh: float | None = None
+    storm_motion_heading_deg: float | None = None
 
 
 # An assessment needs both a physical storm-cell association and independent
@@ -238,6 +242,42 @@ def storm_relative_velocity(
     translation_ms = float(speed_kmh) / 3.6
     radial_translation = translation_ms * np.cos(np.radians(float(heading_deg) - rays))
     return field - radial_translation[:, None]
+
+
+def add_storm_relative_context(
+    assessments: list[RotationSignature],
+    motion_by_object: dict[int, object],
+) -> list[RotationSignature]:
+    """Attach trusted storm-relative extrema without relabeling detection.
+
+    Candidate extraction remains base radial.  Applying a vector only at an
+    already-associated signature's centroid is safe for the reported
+    inbound/outbound extrema and makes the reference visible, but it does not
+    recalculate shear or evidence level.  A future local per-cell detector may
+    consume the same primitive without changing this public contract.
+    """
+    contextualized: list[RotationSignature] = []
+    for assessment in assessments:
+        motion = motion_by_object.get(assessment.associated_object_id)
+        if motion is None:
+            contextualized.append(assessment)
+            continue
+        pair = np.array([[assessment.max_inbound_ms, assessment.max_outbound_ms]])
+        corrected = storm_relative_velocity(
+            pair, np.array([assessment.bearing_deg]), motion,
+        )
+        if corrected is None:
+            contextualized.append(assessment)
+            continue
+        contextualized.append(replace(
+            assessment,
+            motion_reference="base_radial_detection_with_storm_relative_context",
+            storm_relative_max_inbound_ms=round(float(corrected[0, 0]), 1),
+            storm_relative_max_outbound_ms=round(float(corrected[0, 1]), 1),
+            storm_motion_speed_kmh=round(float(motion.speed_kmh), 1),
+            storm_motion_heading_deg=round(float(motion.heading_deg), 1),
+        ))
+    return contextualized
 
 
 def _classify_rotation_strength(shear_ms: float) -> str:

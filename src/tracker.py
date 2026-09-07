@@ -684,5 +684,11 @@ class StormTracker:
         track = self.get_track(track_id) if track_id is not None else None
         return list(track.rotation_history) if track is not None else []
 
+    def motion_for_current_object(self, object_id: int):
+        """Return the matched track's current motion, if one exists."""
+        track_id = self._obj_to_track.get(object_id)
+        track = self.get_track(track_id) if track_id is not None else None
+        return track.last_motion if track is not None else None
+
 
 Track.get_motion = _get_track_motion
