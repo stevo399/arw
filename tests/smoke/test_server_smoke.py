@@ -47,6 +47,15 @@ def test_radar_config_returns_non_secret_settings():
     assert "api_key" not in data
 
 
+def test_live_status_reports_machine_readable_freshness():
+    resp = client.get("/live/KIWA/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["site_id"] == "KIWA"
+    assert "available" in data
+    assert data["refresh_state"] in {"ready", "updating"}
+
+
 def test_cors_allows_audiom_origin():
     resp = client.options(
         "/map/storms.geojson",
@@ -159,6 +168,9 @@ def test_storm_map_geojson_endpoint_returns_raw_feature_collection():
     assert data["type"] == "FeatureCollection"
     assert data["metadata"]["mapType"] == "heatmap"
     assert data["metadata"]["currentStat"] == "heat_value"
+    assert data["metadata"]["scanTimestamp"] == "2026-04-08T18:30:00Z"
+    assert data["metadata"]["refreshState"] == "ready"
+    assert resp.headers["x-arw-refresh-state"] == "ready"
     # contour_mask always returns a MultiPolygon, even for one contiguous blob.
     assert data["features"][0]["geometry"]["type"] == "MultiPolygon"
     rule_types = {feature["properties"]["ruleType"] for feature in data["features"]}

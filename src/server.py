@@ -1,8 +1,12 @@
 # src/server.py
 from datetime import datetime, date as date_type
 from dataclasses import replace
+from concurrent.futures import ThreadPoolExecutor
+import logging
 import math
 import os
+from pathlib import Path
+from threading import RLock, Timer
 
 import numpy as np
 from fastapi import FastAPI, Query, HTTPException
@@ -63,6 +67,28 @@ app.add_middleware(
 # Module-level state for buffer and tracker
 _buffer = ReplayBuffer()
 _tracker = StormTracker()
+
+# A Level II volume is expensive to turn into an accessibility-ready map: it
+# must be parsed, quality-controlled, segmented, and paired with velocity.
+# Keep that completed work in memory.  Raw files in ``cache/`` only avoid a
+# download; without this cache every visitor still repeated all of that work.
+_processed_scans: dict[tuple[str, str], BufferedScan] = {}
+_live_scans: dict[str, BufferedScan] = {}
+_refreshing_sites: set[str] = set()
+_refresh_started_at: dict[str, datetime] = {}
+_refresh_errors: dict[str, str] = {}
+_state_lock = RLock()
+_ingest_lock = RLock()
+_refresh_interval_seconds = int(os.getenv("ARW_REFRESH_INTERVAL_SECONDS", "120"))
+_refresh_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="arw-radar")
+_prewarm_sites = tuple(
+    site.strip().upper()
+    for site in os.getenv("ARW_PREWARM_SITES", "").split(",")
+    if site.strip()
+)
+_refresh_timers: dict[str, Timer] = {}
+_background_refresh_enabled = False
+_logger = logging.getLogger(__name__)
 
 
 def _find_site_name(site_id: str) -> str:
@@ -163,9 +189,8 @@ def _velocity_aligned_to_reflectivity(
     )
 
 
-def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
-    """Fetch a scan, quality control it, detect objects, and buffer the result."""
-    filepath = fetch_scan(site_id.upper(), dt)
+def _process_scan_file(site_id: str, filepath: str) -> BufferedScan:
+    """Run the full analysis pipeline for one already-selected volume."""
     radar = parse_radar_file(filepath)
     raw_sweep = extract_sweep_data(radar)
     vel_data = extract_velocity(radar)
@@ -248,6 +273,148 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
     buffered.rotation_signatures = rotations
     buffered.echo_advisory = echo_advisory
     return buffered
+
+
+def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
+    """Return a completed interpretation, analyzing each local volume once.
+
+    The lock also protects the shared replay buffer and storm tracker.  It is
+    deliberately held while selecting the scan so two simultaneous map
+    requests cannot both choose, parse, and track the same new volume.
+    """
+    normalized_site = site_id.upper()
+    with _ingest_lock:
+        filepath = fetch_scan(normalized_site, dt)
+        cache_key = (normalized_site, str(Path(filepath).resolve()))
+        # Test doubles do not point to files.  Requiring a real file here
+        # prevents one mocked scan from leaking into a later test/request.
+        if Path(filepath).is_file():
+            with _state_lock:
+                cached = _processed_scans.get(cache_key)
+            if cached is not None:
+                if dt is None:
+                    with _state_lock:
+                        _live_scans[normalized_site] = cached
+                return cached
+
+        buffered = _process_scan_file(normalized_site, filepath)
+        if Path(filepath).is_file():
+            with _state_lock:
+                _processed_scans[cache_key] = buffered
+                if dt is None:
+                    _live_scans[normalized_site] = buffered
+        return buffered
+
+
+def _refresh_live_scan(site_id: str) -> None:
+    """Refresh a live site off the request path; errors leave prior data live."""
+    normalized_site = site_id.upper()
+    try:
+        _ingest_to_buffer(normalized_site)
+        with _state_lock:
+            _refresh_errors.pop(normalized_site, None)
+    except Exception as exc:  # pragma: no cover - exercised by deployment failures
+        _logger.exception("Unable to refresh live radar scan for %s", normalized_site)
+        with _state_lock:
+            _refresh_errors[normalized_site] = str(exc)
+    finally:
+        with _state_lock:
+            _refreshing_sites.discard(normalized_site)
+        _schedule_recurring_refresh(normalized_site)
+
+
+def _schedule_live_refresh(site_id: str) -> bool:
+    """Queue at most one, rate-limited latest-scan check for a radar site."""
+    normalized_site = site_id.upper()
+    now = datetime.now()
+    with _state_lock:
+        if normalized_site in _refreshing_sites:
+            return True
+        last_started = _refresh_started_at.get(normalized_site)
+        if last_started is not None and (
+            now - last_started
+        ).total_seconds() < _refresh_interval_seconds:
+            return False
+        _refreshing_sites.add(normalized_site)
+        _refresh_started_at[normalized_site] = now
+    _refresh_executor.submit(_refresh_live_scan, normalized_site)
+    return True
+
+
+def _schedule_recurring_refresh(site_id: str) -> None:
+    """Keep configured local sites warm between visitors' map requests."""
+    normalized_site = site_id.upper()
+    with _state_lock:
+        if not _background_refresh_enabled or normalized_site not in _prewarm_sites:
+            return
+        prior_timer = _refresh_timers.get(normalized_site)
+        if prior_timer is not None:
+            prior_timer.cancel()
+        timer = Timer(_refresh_interval_seconds, _schedule_live_refresh, (normalized_site,))
+        timer.daemon = True
+        _refresh_timers[normalized_site] = timer
+        timer.start()
+
+
+def _live_or_ingest(site_id: str, dt: datetime | None = None) -> tuple[BufferedScan, bool]:
+    """Serve the latest completed live scan and refresh it in the background.
+
+    Historical queries remain exact and synchronous.  A first-ever live
+    request has no honest completed result to serve, so it performs one ingest;
+    every later live request returns immediately while a refresh is queued.
+    """
+    normalized_site = site_id.upper()
+    if dt is not None:
+        return _ingest_to_buffer(normalized_site, dt), False
+    with _state_lock:
+        completed = _live_scans.get(normalized_site)
+    if completed is None:
+        return _ingest_to_buffer(normalized_site), False
+    return completed, _schedule_live_refresh(normalized_site)
+
+
+def _live_scan_state(site_id: str) -> str:
+    with _state_lock:
+        return "updating" if site_id.upper() in _refreshing_sites else "ready"
+
+
+def _map_geojson_response(geojson: dict, buffered: BufferedScan) -> JSONResponse:
+    """Expose scan freshness without changing the GeoJSON feature contract."""
+    metadata = geojson.setdefault("metadata", {})
+    timestamp = buffered.reflectivity_data.timestamp
+    metadata["scanTimestamp"] = (
+        timestamp.isoformat() if isinstance(timestamp, datetime) else str(timestamp)
+    )
+    metadata["refreshState"] = _live_scan_state(buffered.site_id)
+    return JSONResponse(
+        _json_safe(geojson),
+        headers={
+            "Cache-Control": "no-store",
+            "X-ARW-Scan-Timestamp": metadata["scanTimestamp"],
+            "X-ARW-Refresh-State": metadata["refreshState"],
+        },
+    )
+
+
+@app.on_event("startup")
+def start_live_refresh_workers() -> None:
+    """Begin prewarming explicitly configured radar sites after server start."""
+    global _background_refresh_enabled
+    _background_refresh_enabled = True
+    for site_id in _prewarm_sites:
+        _schedule_live_refresh(site_id)
+
+
+@app.on_event("shutdown")
+def stop_live_refresh_workers() -> None:
+    """Cancel timers and allow the process to release its refresh worker."""
+    global _background_refresh_enabled
+    with _state_lock:
+        _background_refresh_enabled = False
+        for timer in _refresh_timers.values():
+            timer.cancel()
+        _refresh_timers.clear()
+    _refresh_executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _motion_to_model(motion) -> TrackMotion:
@@ -345,6 +512,32 @@ def radar_config():
     }
 
 
+@app.get("/live/{site_id}/status")
+def get_live_scan_status(site_id: str):
+    """Report whether a completed live interpretation is ready or updating."""
+    normalized_site = site_id.upper()
+    with _state_lock:
+        completed = _live_scans.get(normalized_site)
+        refresh_started = _refresh_started_at.get(normalized_site)
+        error = _refresh_errors.get(normalized_site)
+        refreshing = normalized_site in _refreshing_sites
+    timestamp = None if completed is None else completed.reflectivity_data.timestamp
+    return {
+        "site_id": normalized_site,
+        "available": completed is not None,
+        "scan_timestamp": (
+            timestamp.isoformat() if isinstance(timestamp, datetime) else timestamp
+        ),
+        "refresh_state": "updating" if refreshing else "ready",
+        "refresh_started_at": (
+            refresh_started.isoformat() if refresh_started is not None else None
+        ),
+        # An old completed scan remains usable if a refresh fails.  The error
+        # is explicit for accessible clients instead of becoming a blank map.
+        "last_refresh_error": error,
+    }
+
+
 @app.get("/sites", response_model=list[RadarSite])
 def get_sites(city: str = Query(...), state: str = Query(...)):
     lat, lon = geocode_city_state(city, state)
@@ -355,7 +548,7 @@ def get_sites(city: str = Query(...), state: str = Query(...)):
 @app.get("/scan/{site_id}", response_model=ScanMeta)
 def get_scan(site_id: str, datetime: str | None = Query(None)):
     dt = _parse_datetime(datetime)
-    buffered = _ingest_to_buffer(site_id, dt)
+    buffered, _ = _live_or_ingest(site_id, dt)
     return ScanMeta(
         site_id=site_id.upper(),
         timestamp=buffered.reflectivity_data.timestamp,
@@ -366,7 +559,7 @@ def get_scan(site_id: str, datetime: str | None = Query(None)):
 @app.get("/objects/{site_id}", response_model=ObjectsResponse)
 def get_objects(site_id: str, datetime: str | None = Query(None)):
     dt = _parse_datetime(datetime)
-    buffered = _ingest_to_buffer(site_id, dt)
+    buffered, _ = _live_or_ingest(site_id, dt)
     rain_objects = [
         RainObject(
             object_id=obj.object_id,
@@ -425,7 +618,7 @@ def get_storm_map_layer(
         raise HTTPException(status_code=404, detail="No radar site found for that location")
 
     site = ranked_sites[0]
-    buffered = _ingest_to_buffer(site["site_id"], dt)
+    buffered, _ = _live_or_ingest(site["site_id"], dt)
     geojson = build_storm_geojson(buffered)
     intensity_geojson = build_storm_intensity_geojson(buffered)
     audiom_geojson = build_storm_audiom_geojson(buffered)
@@ -472,7 +665,7 @@ def get_storm_map_geojson(
     if not ranked_sites:
         raise HTTPException(status_code=404, detail="No radar site found for that location")
 
-    buffered = _ingest_to_buffer(ranked_sites[0]["site_id"], dt)
+    buffered, _ = _live_or_ingest(ranked_sites[0]["site_id"], dt)
     if mode == "footprints":
         geojson = build_storm_geojson(buffered)
     elif mode == "intensity":
@@ -484,7 +677,7 @@ def get_storm_map_geojson(
             status_code=422,
             detail="mode must be one of: audiom, intensity, footprints",
         )
-    return JSONResponse(_json_safe(geojson))
+    return _map_geojson_response(geojson, buffered)
 
 
 @app.get("/map/precipitation.geojson")
@@ -514,15 +707,15 @@ def get_precipitation_map_geojson(
     if not ranked_sites:
         raise HTTPException(status_code=404, detail="No radar site found for that location")
 
-    buffered = _ingest_to_buffer(ranked_sites[0]["site_id"], dt)
+    buffered, _ = _live_or_ingest(ranked_sites[0]["site_id"], dt)
     geojson = build_precipitation_field_geojson(buffered)
-    return JSONResponse(_json_safe(geojson))
+    return _map_geojson_response(geojson, buffered)
 
 
 @app.get("/summary/{site_id}", response_model=SummaryResponse)
 def get_summary(site_id: str, datetime: str | None = Query(None)):
     dt = _parse_datetime(datetime)
-    buffered = _ingest_to_buffer(site_id, dt)
+    buffered, _ = _live_or_ingest(site_id, dt)
     site_name = _find_site_name(site_id)
     text = generate_summary(
         site_id=site_id.upper(),
@@ -542,7 +735,7 @@ def get_summary(site_id: str, datetime: str | None = Query(None)):
 @app.get("/tracks/{site_id}", response_model=TracksResponse)
 def get_tracks(site_id: str, datetime: str | None = Query(None)):
     dt = _parse_datetime(datetime)
-    buffered = _ingest_to_buffer(site_id, dt)
+    buffered, _ = _live_or_ingest(site_id, dt)
     active = _tracker.active_tracks
     events = _tracker.recent_events
     return TracksResponse(
@@ -565,7 +758,7 @@ def get_tracks(site_id: str, datetime: str | None = Query(None)):
 @app.get("/velocity/{site_id}", response_model=VelocityResponse)
 def get_velocity(site_id: str, datetime: str | None = Query(None)):
     dt = _parse_datetime(datetime)
-    buffered = _ingest_to_buffer(site_id, dt)
+    buffered, _ = _live_or_ingest(site_id, dt)
     regions = [
         VelocityRegionModel(
             region_type=r.region_type,

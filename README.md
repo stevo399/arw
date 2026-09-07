@@ -78,6 +78,22 @@ uv run pytest tests/ -q
 uv run python scripts/live_replay.py KTLX --date 2026-04-10 --scans 8 --local-only
 ```
 
+### Live map prewarming
+
+Map visitors receive the most recent completed interpretation immediately while
+ARW checks for a newer volume in the background. Configure the radar sites to
+keep warm when starting the server; use a comma-separated list of NEXRAD IDs.
+
+```powershell
+$env:ARW_PREWARM_SITES = "KIWA"
+$env:ARW_REFRESH_INTERVAL_SECONDS = "120" # optional; default is 120 seconds
+uv run uvicorn src.server:app --host 127.0.0.1 --port 8000
+```
+
+`GET /live/KIWA/status` reports whether a completed interpretation is
+available, its scan timestamp, and whether a refresh is running. Map GeoJSON
+also includes `metadata.scanTimestamp` and `metadata.refreshState`.
+
 ## License
 
 This project is not yet licensed. All rights reserved.
