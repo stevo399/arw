@@ -150,6 +150,9 @@ The first two evidence layers are implemented:
 - Every rotation product currently declares `motion_reference="base_radial"`.
   Speech and map output say "velocity couplet" for unconfirmed evidence and
   do not imply storm-relative interpretation.
+- Cell-associated assessments expose their colocated object's peak
+  reflectivity and whether RhoHV/ZDR were available. These are context and
+  provenance only; no debris/tornado inference is made from them.
 
 Remaining work is storm-relative velocity provenance, explicit dual-pol/
 reflectivity corroboration, and a labelled case corpus for calibration. None

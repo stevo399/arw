@@ -74,6 +74,8 @@ class RotationSignatureModel(BaseModel):
     elevation_angles: list[float]
     strength: str
     associated_object_id: int | None = None
+    associated_object_peak_dbz: float | None = None
+    dual_pol_available: bool = False
     evidence_level: str = "unconfirmed"
     motion_reference: str = "base_radial"
 

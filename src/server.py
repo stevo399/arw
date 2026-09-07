@@ -572,6 +572,8 @@ def get_velocity(site_id: str, datetime: str | None = Query(None)):
             elevation_angles=s.elevation_angles,
             strength=s.strength,
             associated_object_id=s.associated_object_id,
+            associated_object_peak_dbz=s.associated_object_peak_dbz,
+            dual_pol_available=s.dual_pol_available,
             evidence_level=s.evidence_level,
             motion_reference=s.motion_reference,
         )

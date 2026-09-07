@@ -123,6 +123,8 @@ def test_storm_description_labels_unconfirmed_base_radial_couplet():
     assert "Unconfirmed moderate velocity couplet in base-radial velocity." in feature["properties"]["description"]
     assert feature["properties"]["rotation_evidence_level"] == "unconfirmed"
     assert feature["properties"]["rotation_motion_reference"] == "base_radial"
+    assert feature["properties"]["rotation_context_peak_dbz"] is None
+    assert feature["properties"]["rotation_dual_pol_available"] is False
 
 
 def test_build_storm_intensity_geojson_returns_radar_band_features():

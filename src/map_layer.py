@@ -293,6 +293,8 @@ def _storm_properties(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any]
         "rotation_strength": rotation_strength,
         "rotation_evidence_level": rotation.evidence_level if rotation is not None else None,
         "rotation_motion_reference": rotation.motion_reference if rotation is not None else None,
+        "rotation_context_peak_dbz": rotation.associated_object_peak_dbz if rotation is not None else None,
+        "rotation_dual_pol_available": rotation.dual_pol_available if rotation is not None else None,
         "max_inbound_ms": getattr(obj, "max_inbound_ms", None),
         "max_outbound_ms": getattr(obj, "max_outbound_ms", None),
         "layers": [layer.__dict__ for layer in obj.layers],
@@ -804,6 +806,8 @@ def storm_layer_fields() -> list[dict[str, str]]:
         {"name": "rotation_strength", "type": "esriFieldTypeString", "alias": "Rotation"},
         {"name": "rotation_evidence_level", "type": "esriFieldTypeString", "alias": "Rotation Evidence"},
         {"name": "rotation_motion_reference", "type": "esriFieldTypeString", "alias": "Velocity Reference"},
+        {"name": "rotation_context_peak_dbz", "type": "esriFieldTypeDouble", "alias": "Rotation Cell Peak dBZ"},
+        {"name": "rotation_dual_pol_available", "type": "esriFieldTypeString", "alias": "Rotation Dual-Pol Available"},
     ]
 
 

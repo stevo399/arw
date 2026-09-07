@@ -263,8 +263,13 @@ def test_cell_footprint_assessment_requires_overlap_and_vertical_support():
         max_inbound_ms=-15.0, max_outbound_ms=15.0, diameter_km=1.0,
         sweep_count=2, elevation_angles=[0.48, 0.88], strength="moderate",
     )
-    assessed = _associate_rotation_candidates([candidate], {9: mask}, sweep)[0]
+    associated_object = _make_object(9, 35.0, -97.0, 10.0, 90.0)
+    assessed = _associate_rotation_candidates(
+        [candidate], {9: mask}, sweep, {9: associated_object},
+    )[0]
     assert assessed.associated_object_id == 9
+    assert assessed.associated_object_peak_dbz == 55.0
+    assert not assessed.dual_pol_available
     assert assessed.evidence_level == "vertically_confirmed"
     assert is_quality_protection_eligible(assessed)
 

@@ -171,6 +171,8 @@ class RotationSignature:
     elevation_angles: list[float]
     strength: str
     associated_object_id: int | None = None
+    associated_object_peak_dbz: float | None = None
+    dual_pol_available: bool = False
     evidence_level: str = "unconfirmed"
     # ARW has not yet derived a validated storm-motion field for this product.
     # Keep the reference explicit so consumers never mistake base radial
@@ -466,6 +468,7 @@ def _associate_rotation_candidates(
     candidates: list[RotationSignature],
     object_masks: dict[int, np.ndarray],
     sweep,
+    objects_by_id: dict[int, DetectedObject] | None = None,
 ) -> list[RotationSignature]:
     """Attach each candidate to an overlapping reflectivity-cell footprint.
 
@@ -501,6 +504,11 @@ def _associate_rotation_candidates(
         assessed.append(replace(
             candidate,
             associated_object_id=object_id,
+            associated_object_peak_dbz=(
+                objects_by_id[object_id].peak_dbz
+                if objects_by_id is not None and object_id in objects_by_id else None
+            ),
+            dual_pol_available=(sweep.rhohv is not None and sweep.zdr is not None),
             evidence_level=evidence_level,
         ))
     return assessed
@@ -580,7 +588,10 @@ def analyze_velocity(
     regions = detect_velocity_regions(vel_data)
     rotations = detect_rotation_signatures(vel_data)
     if object_masks is not None and sweep is not None:
-        rotations = _associate_rotation_candidates(rotations, object_masks, sweep)
+        rotations = _associate_rotation_candidates(
+            rotations, object_masks, sweep,
+            {obj.object_id: obj for obj in objects},
+        )
 
     annotated = list(objects)
     for i, obj in enumerate(annotated):
