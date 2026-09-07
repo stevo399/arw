@@ -1,5 +1,6 @@
 # src/server.py
 from datetime import datetime, date as date_type
+from dataclasses import replace
 import math
 import os
 
@@ -17,7 +18,7 @@ from src.models import (
 from src.sites import geocode_city_state, geocode_zipcode, rank_sites, NEXRAD_SITES
 from src.ingest import fetch_scan
 from src.parser import parse_radar_file, extract_sweep_data, extract_velocity, SweepData, VelocityData
-from src.velocity import analyze_velocity
+from src.velocity import analyze_velocity, promote_persistent_rotation_assessments
 from src.detection import detect_objects_with_grid
 from src.preprocess import preprocess_sweep, refresh_quality_advisory
 from src.geometry import align_field_by_azimuth
@@ -183,9 +184,6 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
     regions, rotations, annotated_objects = analyze_velocity(
         vel_data, result.objects, result.object_masks, ref_data,
     )
-    ref_data, scan_quality, echo_advisory = refresh_quality_advisory(
-        ref_data, scan_quality, rotations, velocity=lowest_velocity,
-    )
     scan_timestamp = (
         datetime.fromisoformat(ref_data.timestamp)
         if isinstance(ref_data.timestamp, str)
@@ -206,6 +204,32 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
     )
     _buffer.add_scan(buffered)
     _tracker.update(buffered)
+    histories = {
+        obj.object_id: _tracker.rotation_history_for_current_object(obj.object_id)
+        for obj in annotated_objects
+    }
+    rotations = promote_persistent_rotation_assessments(
+        rotations, histories, scan_timestamp,
+    )
+    annotated_objects = [
+        replace(
+            obj,
+            rotation=next(
+                (rotation for rotation in rotations
+                 if rotation.associated_object_id == obj.object_id),
+                None,
+            ),
+        )
+        for obj in annotated_objects
+    ]
+    ref_data, scan_quality, echo_advisory = refresh_quality_advisory(
+        ref_data, scan_quality, rotations, velocity=lowest_velocity,
+    )
+    buffered.reflectivity_data = ref_data
+    buffered.detected_objects = annotated_objects
+    buffered.scan_quality = scan_quality
+    buffered.rotation_signatures = rotations
+    buffered.echo_advisory = echo_advisory
     return buffered
 
 

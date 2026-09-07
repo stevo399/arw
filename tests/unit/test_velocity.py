@@ -1,4 +1,6 @@
 import numpy as np
+from datetime import datetime, timedelta
+from types import SimpleNamespace
 from src.parser import SweepData, VelocitySweep, VelocityData
 from src.velocity import VelocityRegion, detect_velocity_regions, RotationSignature, detect_rotation_signatures
 
@@ -272,6 +274,39 @@ def test_cell_footprint_assessment_requires_overlap_and_vertical_support():
     assert no_overlap.associated_object_id is None
     assert no_overlap.evidence_level == "unconfirmed"
     assert not is_quality_protection_eligible(no_overlap)
+
+
+def test_persistence_requires_distinct_nearby_scan_on_same_tracked_cell():
+    from src.velocity import (
+        is_quality_protection_eligible,
+        promote_persistent_rotation_assessments,
+    )
+
+    current_time = datetime(2026, 8, 23, 0, 5)
+    prior = RotationSignature(
+        centroid_lat=35.1000, centroid_lon=-97.1000, distance_km=20.0,
+        bearing_deg=100.0, max_shear_ms=28.0, max_inbound_ms=-14.0,
+        max_outbound_ms=14.0, diameter_km=2.0, sweep_count=1,
+        elevation_angles=[0.48], strength="moderate", associated_object_id=3,
+    )
+    current = RotationSignature(
+        centroid_lat=35.1010, centroid_lon=-97.1010, distance_km=20.2,
+        bearing_deg=101.0, max_shear_ms=30.0, max_inbound_ms=-15.0,
+        max_outbound_ms=15.0, diameter_km=2.0, sweep_count=1,
+        elevation_angles=[0.48], strength="moderate", associated_object_id=3,
+    )
+    history = {3: [SimpleNamespace(timestamp=current_time - timedelta(minutes=5), rotation=prior)]}
+    promoted = promote_persistent_rotation_assessments([current], history, current_time)[0]
+    assert promoted.evidence_level == "persistent"
+    assert is_quality_protection_eligible(promoted)
+
+    stale_history = {3: [SimpleNamespace(timestamp=current_time - timedelta(minutes=16), rotation=prior)]}
+    stale = promote_persistent_rotation_assessments([current], stale_history, current_time)[0]
+    assert stale.evidence_level == "unconfirmed"
+
+    same_scan_history = {3: [SimpleNamespace(timestamp=current_time, rotation=prior)]}
+    same_scan = promote_persistent_rotation_assessments([current], same_scan_history, current_time)[0]
+    assert same_scan.evidence_level == "unconfirmed"
 
 
 import pyart

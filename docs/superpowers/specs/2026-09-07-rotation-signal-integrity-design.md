@@ -133,3 +133,21 @@ case corpus and recorded with source, population, and failure trade-off.
 - Issuing a tornado warning or labeling a velocity couplet a tornado.
 - Treating a low rhohv area as debris without co-located circulation and storm
   context.
+
+## Implementation status
+
+The first two evidence layers are implemented:
+
+- Candidate geometry now uses local gate-pair range and actual ray spacing.
+- Assessment follows reflectivity-cell detection and uses the detected cell
+  footprint, not a 30 km centroid shortcut.
+- `vertically_confirmed` requires both cell association and at least two
+  distinct elevation slices; raw/unconfirmed candidates cannot affect the QC
+  advisory.
+- `persistent` requires a second, distinct volume within fifteen minutes on
+  the same already-associated storm track, with a circulation displacement
+  compatible with the tracker's existing 120 km/h physical motion bound.
+
+Remaining work is storm-relative velocity provenance, explicit dual-pol/
+reflectivity corroboration, and a labelled case corpus for calibration. None
+of those should be replaced with a stronger raw-shear cutoff.

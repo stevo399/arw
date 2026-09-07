@@ -1,5 +1,6 @@
 import math
 from dataclasses import dataclass, replace
+from datetime import datetime
 
 import numpy as np
 from scipy.ndimage import label
@@ -178,6 +179,13 @@ class RotationSignature:
 # intentionally a policy predicate, not a strength threshold: raw shear is
 # still exposed for review but cannot create a broad protection region.
 QUALITY_PROTECTION_EVIDENCE = frozenset({"vertically_confirmed", "persistent", "corroborated"})
+# The NWS warning-forecaster task analysis treats 2--3 volume scans (about
+# fifteen minutes) as meaningful persistence.  This is an evidence-window
+# limit, not a rotation-strength calibration parameter.
+MAX_PERSISTENCE_GAP_MINUTES = 15.0
+# Keep the same physically reasonable advection bound used by storm-track
+# association.  It is applied in addition to both circulation footprints.
+MAX_PERSISTENCE_SPEED_KMH = 120.0
 
 
 def is_quality_protection_eligible(signature: RotationSignature) -> bool:
@@ -500,6 +508,56 @@ def _haversine_array_km(lat1, lon1, lat2: float, lon2: float) -> np.ndarray:
     dlon = np.radians(lon2 - lon1)
     a = np.sin(dlat / 2.0) ** 2 + np.cos(np.radians(lat1)) * np.cos(math.radians(lat2)) * np.sin(dlon / 2.0) ** 2
     return 2.0 * 6371.0 * np.arcsin(np.sqrt(np.clip(a, 0.0, 1.0)))
+
+
+def promote_persistent_rotation_assessments(
+    assessments: list[RotationSignature],
+    rotation_history_by_object: dict[int, list],
+    timestamp: datetime,
+) -> list[RotationSignature]:
+    """Promote eligible assessments observed on the same tracked cell.
+
+    ``rotation_history_by_object`` comes from the existing storm tracker, so
+    an object must already have survived its footprint/motion association
+    between scans.  We additionally require a distinct timestamp, a bounded
+    gap, and a circulation-centre displacement compatible with the tracked
+    storm's maximum plausible motion and both measured circulation sizes.
+    """
+    promoted: list[RotationSignature] = []
+    for assessment in assessments:
+        object_id = assessment.associated_object_id
+        if object_id is None:
+            promoted.append(assessment)
+            continue
+        history = rotation_history_by_object.get(object_id, [])
+        prior_entries = [
+            entry for entry in history
+            if getattr(entry, "rotation", None) is not None
+            and getattr(entry, "timestamp", None) is not None
+            and entry.timestamp < timestamp
+        ]
+        if not prior_entries:
+            promoted.append(assessment)
+            continue
+        prior_entry = max(prior_entries, key=lambda entry: entry.timestamp)
+        gap_minutes = (timestamp - prior_entry.timestamp).total_seconds() / 60.0
+        if gap_minutes <= 0.0 or gap_minutes > MAX_PERSISTENCE_GAP_MINUTES:
+            promoted.append(assessment)
+            continue
+        prior = prior_entry.rotation
+        allowed_displacement_km = (
+            (assessment.diameter_km + prior.diameter_km) / 2.0
+            + MAX_PERSISTENCE_SPEED_KMH * (gap_minutes / 60.0)
+        )
+        separation_km = _haversine_km(
+            assessment.centroid_lat, assessment.centroid_lon,
+            prior.centroid_lat, prior.centroid_lon,
+        )
+        if separation_km <= allowed_displacement_km:
+            promoted.append(replace(assessment, evidence_level="persistent"))
+        else:
+            promoted.append(assessment)
+    return promoted
 
 
 def analyze_velocity(

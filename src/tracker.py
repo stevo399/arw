@@ -673,5 +673,16 @@ class StormTracker:
                 return t
         return None
 
+    def rotation_history_for_current_object(self, object_id: int):
+        """Return the matched storm track's rotation history for this scan.
+
+        This is intentionally a read-only bridge for rotation evidence: the
+        velocity product relies on the tracker's established cell identity
+        rather than inventing a second cross-scan proximity association.
+        """
+        track_id = self._obj_to_track.get(object_id)
+        track = self.get_track(track_id) if track_id is not None else None
+        return list(track.rotation_history) if track is not None else []
+
 
 Track.get_motion = _get_track_motion
