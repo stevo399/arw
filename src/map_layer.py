@@ -82,24 +82,34 @@ def _storm_name(obj: DetectedObject) -> str:
 def _object_phenomenon(obj: DetectedObject) -> str:
     """Return the strongest supportable phenomenon label for an object.
 
-    Reflectivity alone is never enough to assert precipitation.  Preserve the
-    echo for analysis, but require a clear QC majority before using that word.
+    The classifier operates on radar gates, not observations at the surface.
+    Keep every echo available for analysis, but make the spoken map label
+    describe the confidence and scope of the classification rather than state
+    that precipitation is occurring at the ground.
     """
     fractions = obj.class_fractions or {}
     precipitation = fractions.get("precipitation", 0.0)
-    if precipitation >= 0.7:
-        return "precipitation"
     dominant = max(fractions, key=fractions.get) if fractions else None
     if dominant == "ground_clutter" and fractions[dominant] >= 0.5:
         return "ground clutter echo"
     if dominant == "biological" and fractions[dominant] >= 0.5:
         return "biological echo"
+    # A large, internally consistent majority supports a radar-gate
+    # classification, but it still does not establish phase or that hydrometeors
+    # are reaching the surface.  Any appreciable competing classification keeps
+    # the wording explicitly unconfirmed.
+    competing = 1.0 - precipitation
+    if precipitation >= 0.9 and competing < 0.1:
+        return "QC-classified precipitation echo"
+    if precipitation >= 0.7:
+        return "unconfirmed precipitation-classified echo"
     return "uncertain reflectivity echo"
 
 
 def _display_intensity_label(label: str, phenomenon: str) -> str:
-    if phenomenon == "precipitation":
-        return label
+    # The intensity buckets were historically named for precipitation.  They
+    # are reflectivity ranges, so spoken labels must remain phase-neutral even
+    # when QC finds precipitation-like gates.
     return label.replace(" precipitation", " reflectivity").replace("severe core", "severe reflectivity core")
 
 
@@ -112,6 +122,12 @@ def _storm_description(obj: DetectedObject, rotation) -> str:
         f"Covers about {area_mi2} square miles.",
         f"Centroid is {km_to_miles(obj.distance_km)} miles {degrees_to_bearing(obj.bearing_deg)} of the radar.",
     ]
+    if "precipitation" in phenomenon:
+        precipitation = (obj.class_fractions or {}).get("precipitation", 0.0)
+        parts.append(
+            f"{round(precipitation * 100)} percent of classified radar gates were precipitation-like; "
+            "this does not confirm precipitation at the surface."
+        )
     if rotation is not None:
         reference = "base-radial velocity" if rotation.motion_reference == "base_radial" else rotation.motion_reference
         if rotation.evidence_level == "persistent":

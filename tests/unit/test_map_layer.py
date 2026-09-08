@@ -319,6 +319,76 @@ def test_storm_feature_carries_class_composition():
     assert scan.detected_objects[0].class_fractions["precipitation"] == 0.2
 
 
+def test_precipitation_classification_is_qualified_not_a_surface_claim():
+    """A QC gate majority is useful evidence, but is not a rain observation."""
+    reflectivity = np.full((12, 12), np.nan)
+    reflectivity[4:8, 5:9] = 29.0
+    mask = ~np.isnan(reflectivity)
+    scan = BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0),
+        site_id="KTLX",
+        reflectivity_data=SweepData(
+            reflectivity=reflectivity,
+            azimuths=np.linspace(80, 100, 12),
+            ranges_m=np.linspace(20000, 40000, 12),
+            radar_lat=35.3331,
+            radar_lon=-97.2778,
+            elevation_angle=0.5,
+            elevations=np.full(12, 0.5),
+            elevation_angles=[0.5],
+            radar_alt_m=390.0,
+            timestamp="2026-04-10T20:00:00Z",
+        ),
+        detected_objects=[
+            DetectedObject(
+                object_id=1,
+                centroid_lat=35.2,
+                centroid_lon=-96.9,
+                distance_km=30.0,
+                bearing_deg=90.0,
+                peak_dbz=29.0,
+                peak_label="light precipitation",
+                area_km2=24.0,
+                layers=[IntensityLayerData("light precipitation", 20, 30, 24.0)],
+                class_fractions={"precipitation": 0.87, "debris": 0.10, "biological": 0.03},
+            )
+        ],
+        labeled_grid=mask.astype(int),
+        object_masks={1: mask},
+    )
+
+    feature = build_storm_geojson(scan)["features"][0]["properties"]
+
+    assert feature["name"] == "Light reflectivity unconfirmed precipitation-classified echo 19 miles E"
+    assert "87 percent of classified radar gates were precipitation-like" in feature["description"]
+    assert "does not confirm precipitation at the surface" in feature["description"]
+    assert "precipitation precipitation" not in feature["name"]
+
+
+def test_clean_precipitation_classification_remains_an_echo():
+    """Even a clean QC result must not be rendered as a surface report."""
+    obj = DetectedObject(
+        object_id=1,
+        centroid_lat=35.2,
+        centroid_lon=-96.9,
+        distance_km=30.0,
+        bearing_deg=90.0,
+        peak_dbz=35.0,
+        peak_label="moderate precipitation",
+        area_km2=24.0,
+        layers=[],
+        class_fractions={"precipitation": 0.96, "biological": 0.04},
+    )
+
+    # Exercise the public label directly; the complete feature path is covered
+    # above and avoids duplicating a synthetic scan for this threshold boundary.
+    from src.map_layer import _object_phenomenon, _storm_description, _storm_name
+
+    assert _object_phenomenon(obj) == "QC-classified precipitation echo"
+    assert _storm_name(obj) == "Moderate reflectivity QC-classified precipitation echo 19 miles E"
+    assert "does not confirm precipitation at the surface" in _storm_description(obj, None)
+
+
 def test_intensity_rule_type_stability():
     """Verify all ruleType values are stable external contracts with Audiom.
 
