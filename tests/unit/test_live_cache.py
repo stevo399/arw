@@ -50,6 +50,54 @@ def test_live_refresh_is_coalesced(monkeypatch):
         _clear_live_state()
 
 
+def test_location_relevance_filter_hides_remote_interpretations_but_records_them():
+    near = {
+        "type": "Feature",
+        "properties": {
+            "object_id": 1, "centroid_lat": 33.5, "centroid_lon": -112.1,
+            "distance_km": 20.0, "description": "Nearby echo.", "soundPriority": 500,
+        },
+    }
+    remote_band = {
+        "type": "Feature",
+        "properties": {
+            "object_id": 2, "centroid_lat": 31.7415, "centroid_lon": -113.344,
+            "distance_km": 233.0, "description": "Remote echo.", "soundPriority": 650,
+        },
+    }
+    geojson = {"type": "FeatureCollection", "metadata": {}, "features": [near, remote_band]}
+
+    filtered = server._filter_map_features_by_relevance(
+        geojson, 33.4484, -112.0741, 75.0, 0.5
+    )
+
+    assert [feature["properties"]["object_id"] for feature in filtered["features"]] == [1]
+    assert filtered["metadata"]["relevanceRadiusMiles"] == 75.0
+    assert filtered["metadata"]["relevanceOmittedObjectCount"] == 1
+    assert filtered["metadata"]["relevanceOmittedFeatureCount"] == 1
+
+
+def test_relevance_filter_demotes_elevated_beam_when_a_wide_radius_is_requested():
+    feature = {
+        "type": "Feature",
+        "properties": {
+            "object_id": 2, "centroid_lat": 31.7415, "centroid_lon": -113.344,
+            "distance_km": 233.0, "description": "Remote echo.", "soundPriority": 650,
+        },
+    }
+    geojson = {"type": "FeatureCollection", "metadata": {}, "features": [feature]}
+
+    filtered = server._filter_map_features_by_relevance(
+        geojson, 33.4484, -112.0741, 200.0, 0.5
+    )
+
+    properties = filtered["features"][0]["properties"]
+    assert properties["beamHeightKmAboveRadar"] == 5.2
+    assert properties["surfacePrecipitationObservable"] is False
+    assert properties["soundPriority"] == 250
+    assert "elevated evidence" in properties["description"]
+
+
 def test_prepared_map_layers_are_built_once_per_real_volume(monkeypatch, tmp_path):
     _clear_live_state()
     source = tmp_path / "KIWA20260907_222941_V06"

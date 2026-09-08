@@ -117,7 +117,7 @@ def test_storm_map_layer_endpoint_returns_geojson_layer():
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
          patch("src.server.extract_sweep_data", return_value=mock_ref), \
          patch("src.server.extract_velocity", return_value=None):
-        resp = client.get("/map/storms?city=Oklahoma+City&state=OK&date=2026-04-10")
+        resp = client.get("/map/storms?city=Oklahoma+City&state=OK&date=2026-04-10&radius_miles=250")
     assert resp.status_code == 200
     data = resp.json()
     assert data["layer_type"] == "FeatureLayer"
@@ -162,12 +162,13 @@ def test_storm_map_geojson_endpoint_returns_raw_feature_collection():
          patch("src.server.parse_radar_file", return_value=MagicMock()), \
          patch("src.server.extract_sweep_data", return_value=mock_ref), \
          patch("src.server.extract_velocity", return_value=None):
-        resp = client.get("/map/storms.geojson?city=Oklahoma+City&state=OK")
+        resp = client.get("/map/storms.geojson?city=Oklahoma+City&state=OK&radius_miles=250")
     assert resp.status_code == 200
     data = resp.json()
     assert data["type"] == "FeatureCollection"
     assert data["metadata"]["mapType"] == "heatmap"
     assert data["metadata"]["currentStat"] == "heat_value"
+    assert data["metadata"]["relevanceRadiusMiles"] == 250.0
     assert data["metadata"]["scanTimestamp"] == "2026-04-08T18:30:00Z"
     assert data["metadata"]["refreshState"] == "ready"
     assert resp.headers["x-arw-refresh-state"] == "ready"

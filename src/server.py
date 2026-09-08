@@ -95,6 +95,13 @@ _refresh_timers: dict[str, Timer] = {}
 _background_refresh_enabled = False
 _logger = logging.getLogger(__name__)
 
+# A location-led radar request should describe conditions near that location,
+# not every small echo in the selected radar's full coverage. Clients can
+# deliberately widen this, but the default keeps an accessible map from
+# announcing an unrelated echo hundreds of miles away.
+DEFAULT_MAP_RELEVANCE_RADIUS_MILES = 75.0
+ELEVATED_BEAM_HEIGHT_KM = 3.0
+
 
 def _find_site_name(site_id: str) -> str:
     """Look up the display name for a NEXRAD site."""
@@ -468,6 +475,117 @@ def _map_geojson_response(geojson: dict, buffered: BufferedScan) -> JSONResponse
     )
 
 
+def _great_circle_distance_miles(
+    latitude_a: float, longitude_a: float, latitude_b: float, longitude_b: float
+) -> float:
+    """Great-circle distance without making a geocoder/network call."""
+    lat_a, lon_a, lat_b, lon_b = map(
+        math.radians, (latitude_a, longitude_a, latitude_b, longitude_b)
+    )
+    haversine = (
+        math.sin((lat_b - lat_a) / 2) ** 2
+        + math.cos(lat_a) * math.cos(lat_b) * math.sin((lon_b - lon_a) / 2) ** 2
+    )
+    return 3958.7613 * 2 * math.asin(math.sqrt(haversine))
+
+
+def _beam_height_above_radar_km(distance_km: float, elevation_deg: float) -> float:
+    """Approximate the center of a 4/3-Earth radar beam above its antenna."""
+    distance_m = max(0.0, distance_km) * 1000.0
+    effective_earth_radius_m = 4.0 / 3.0 * 6_371_000.0
+    elevation_rad = math.radians(elevation_deg)
+    height_m = (
+        math.sqrt(
+            distance_m ** 2
+            + effective_earth_radius_m ** 2
+            + 2 * distance_m * effective_earth_radius_m * math.sin(elevation_rad)
+        )
+        - effective_earth_radius_m
+    )
+    return height_m / 1000.0
+
+
+def _filter_map_features_by_relevance(
+    geojson: dict,
+    request_latitude: float,
+    request_longitude: float,
+    radius_miles: float,
+    elevation_deg: float,
+) -> dict:
+    """Limit interpreted map features to the requested location's vicinity.
+
+    This works on a request-local copy of the completed layer. It never
+    removes a scan, detected object, or whole-field reflectivity from ARW's
+    underlying data; it only keeps remote interpretations out of this map.
+    """
+    kept_features = []
+    omitted_object_ids: set[str] = set()
+    omitted_feature_count = 0
+    unlocated_feature_count = 0
+
+    for feature in geojson.get("features", []):
+        properties = feature.get("properties", {})
+        centroid_lat = properties.get("centroid_lat")
+        centroid_lon = properties.get("centroid_lon")
+        if centroid_lat is None or centroid_lon is None:
+            # Do not make an unlocated record silently disappear. This should
+            # be impossible for detected storms, but keeping it is safer.
+            unlocated_feature_count += 1
+            kept_features.append(feature)
+            continue
+
+        distance_miles = _great_circle_distance_miles(
+            request_latitude, request_longitude, centroid_lat, centroid_lon
+        )
+        if distance_miles > radius_miles:
+            omitted_feature_count += 1
+            omitted_object_ids.add(str(properties.get("object_id", properties.get("id", "unknown"))))
+            continue
+
+        properties = dict(properties)
+        radar_distance_km = properties.get("distance_km")
+        if radar_distance_km is not None:
+            beam_height_km = _beam_height_above_radar_km(radar_distance_km, elevation_deg)
+            properties["beamHeightKmAboveRadar"] = round(beam_height_km, 1)
+            if beam_height_km >= ELEVATED_BEAM_HEIGHT_KM:
+                properties["surfacePrecipitationObservable"] = False
+                properties["soundPriority"] = min(properties.get("soundPriority", 500), 250)
+                properties["description"] = (
+                    f"{properties.get('description', '')} At this range the radar beam is about "
+                    f"{beam_height_km:.1f} km above the radar; this is elevated evidence and cannot "
+                    "determine precipitation at the surface."
+                ).strip()
+            else:
+                properties["surfacePrecipitationObservable"] = True
+        feature = dict(feature)
+        feature["properties"] = properties
+        kept_features.append(feature)
+
+    metadata = geojson.setdefault("metadata", {})
+    metadata["relevanceRadiusMiles"] = radius_miles
+    metadata["relevanceOmittedObjectCount"] = len(omitted_object_ids)
+    metadata["relevanceOmittedFeatureCount"] = omitted_feature_count
+    metadata["relevanceUnlocatedFeatureCount"] = unlocated_feature_count
+    geojson["features"] = kept_features
+    return geojson
+
+
+def _map_layer_for_location(
+    layer: dict,
+    buffered: BufferedScan,
+    latitude: float,
+    longitude: float,
+    radius_miles: float,
+) -> dict:
+    return _filter_map_features_by_relevance(
+        layer,
+        latitude,
+        longitude,
+        radius_miles,
+        float(buffered.reflectivity_data.elevation_angle),
+    )
+
+
 @app.on_event("startup")
 def start_live_refresh_workers() -> None:
     """Begin prewarming explicitly configured radar sites after server start."""
@@ -678,6 +796,7 @@ def get_storm_map_layer(
     datetime: str | None = Query(None),
     date: date_type | None = Query(None),
     time: str | None = Query(None),
+    radius_miles: float = Query(DEFAULT_MAP_RELEVANCE_RADIUS_MILES, ge=1, le=250),
 ):
     try:
         lat, lon, label = _resolve_map_location(city, state, zipcode, latitude, longitude)
@@ -692,10 +811,10 @@ def get_storm_map_layer(
     site = ranked_sites[0]
     buffered, _ = _live_or_ingest(site["site_id"], dt)
     layers = _prepared_map_layers(buffered)
-    geojson = deepcopy(layers["footprints"])
-    intensity_geojson = deepcopy(layers["intensity"])
-    audiom_geojson = deepcopy(layers["audiom"])
-    centroid_geojson = deepcopy(layers["centroids"])
+    geojson = _map_layer_for_location(deepcopy(layers["footprints"]), buffered, lat, lon, radius_miles)
+    intensity_geojson = _map_layer_for_location(deepcopy(layers["intensity"]), buffered, lat, lon, radius_miles)
+    audiom_geojson = _map_layer_for_location(deepcopy(layers["audiom"]), buffered, lat, lon, radius_miles)
+    centroid_geojson = _map_layer_for_location(deepcopy(layers["centroids"]), buffered, lat, lon, radius_miles)
     return StormMapLayerResponse(
         layer_name="ARW storm polygons",
         layer_type="FeatureLayer",
@@ -727,6 +846,7 @@ def get_storm_map_geojson(
     date: date_type | None = Query(None),
     time: str | None = Query(None),
     mode: str = Query("audiom"),
+    radius_miles: float = Query(DEFAULT_MAP_RELEVANCE_RADIUS_MILES, ge=1, le=250),
 ):
     try:
         lat, lon, _label = _resolve_map_location(city, state, zipcode, latitude, longitude)
@@ -751,7 +871,9 @@ def get_storm_map_geojson(
             status_code=422,
             detail="mode must be one of: audiom, intensity, footprints",
         )
-    return _map_geojson_response(geojson, buffered)
+    return _map_geojson_response(
+        _map_layer_for_location(geojson, buffered, lat, lon, radius_miles), buffered
+    )
 
 
 @app.get("/map/precipitation.geojson")
