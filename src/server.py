@@ -505,6 +505,54 @@ def _beam_height_above_radar_km(distance_km: float, elevation_deg: float) -> flo
     return height_m / 1000.0
 
 
+def _location_bbox(
+    latitude: float, longitude: float, radius_miles: float
+) -> list[float]:
+    """A geographic request extent, including when no storms are drawable.
+
+    Audiom uses a GeoJSON bbox as the projection anchor. Without one, an empty
+    local result falls back to [0, 0], which turns otherwise valid Phoenix
+    camera coordinates into nonsensical walking coordinates.
+    """
+    latitude_delta = radius_miles / 69.0
+    longitude_scale = max(69.172 * math.cos(math.radians(latitude)), 0.001)
+    longitude_delta = radius_miles / longitude_scale
+    return [
+        max(-180.0, longitude - longitude_delta),
+        max(-90.0, latitude - latitude_delta),
+        min(180.0, longitude + longitude_delta),
+        min(90.0, latitude + latitude_delta),
+    ]
+
+
+def _empty_local_result_anchor(latitude: float, longitude: float) -> dict:
+    """A truthful geographic anchor for an otherwise empty local map.
+
+    Audiom's empty-source path uses a non-geographic world origin. A point at
+    the requested location keeps its projection geographic and tells the user
+    why the storm interpretation layer has no weather objects.
+    """
+    return {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [longitude, latitude]},
+        "properties": {
+            "id": "arw-request-location",
+            "name": "Requested radar location: no nearby interpreted echoes",
+            "ruleName": "Radar request location",
+            "ruleType": "radar_echo",
+            "description": (
+                "No interpreted storm features are within the selected local radar range. "
+                "Remote and raw radar data remain available separately."
+            ),
+            "passable": True,
+            "soundPriority": 100,
+            "centroid_lat": latitude,
+            "centroid_lon": longitude,
+            "isLocationAnchor": True,
+        },
+    }
+
+
 def _filter_map_features_by_relevance(
     geojson: dict,
     request_latitude: float,
@@ -566,6 +614,20 @@ def _filter_map_features_by_relevance(
     metadata["relevanceOmittedObjectCount"] = len(omitted_object_ids)
     metadata["relevanceOmittedFeatureCount"] = omitted_feature_count
     metadata["relevanceUnlocatedFeatureCount"] = unlocated_feature_count
+    # This is not a claim about storm geometry: it is the requested local map
+    # extent. It keeps an empty, dry local result centered where the user asked.
+    geojson["bbox"] = _location_bbox(
+        request_latitude, request_longitude, radius_miles
+    )
+    if not kept_features:
+        kept_features.append(
+            _empty_local_result_anchor(request_latitude, request_longitude)
+        )
+        metadata["relevanceEmpty"] = True
+        metadata["relevanceLocationAnchor"] = True
+    else:
+        metadata["relevanceEmpty"] = False
+        metadata["relevanceLocationAnchor"] = False
     geojson["features"] = kept_features
     return geojson
 

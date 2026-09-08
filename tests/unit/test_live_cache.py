@@ -75,6 +75,9 @@ def test_location_relevance_filter_hides_remote_interpretations_but_records_them
     assert filtered["metadata"]["relevanceRadiusMiles"] == 75.0
     assert filtered["metadata"]["relevanceOmittedObjectCount"] == 1
     assert filtered["metadata"]["relevanceOmittedFeatureCount"] == 1
+    assert [round(value, 4) for value in filtered["bbox"]] == [
+        -113.3736, 32.3614, -110.7746, 34.5354
+    ]
 
 
 def test_relevance_filter_demotes_elevated_beam_when_a_wide_radius_is_requested():
@@ -96,6 +99,24 @@ def test_relevance_filter_demotes_elevated_beam_when_a_wide_radius_is_requested(
     assert properties["surfacePrecipitationObservable"] is False
     assert properties["soundPriority"] == 250
     assert "elevated evidence" in properties["description"]
+
+
+def test_empty_local_result_has_a_truthful_geographic_location_anchor():
+    geojson = {"type": "FeatureCollection", "metadata": {}, "features": []}
+
+    filtered = server._filter_map_features_by_relevance(
+        geojson, 33.4484, -112.0741, 75.0, 0.5
+    )
+
+    assert filtered["metadata"]["relevanceEmpty"] is True
+    assert filtered["metadata"]["relevanceLocationAnchor"] is True
+    anchor = filtered["features"]
+    assert len(anchor) == 1
+    assert anchor[0]["geometry"] == {
+        "type": "Point", "coordinates": [-112.0741, 33.4484]
+    }
+    assert anchor[0]["properties"]["isLocationAnchor"] is True
+    assert "no nearby interpreted echoes" in anchor[0]["properties"]["name"]
 
 
 def test_prepared_map_layers_are_built_once_per_real_volume(monkeypatch, tmp_path):
