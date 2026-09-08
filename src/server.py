@@ -1,5 +1,5 @@
 # src/server.py
-from datetime import datetime, date as date_type
+from datetime import datetime, date as date_type, timedelta
 from dataclasses import replace
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
@@ -101,6 +101,7 @@ _logger = logging.getLogger(__name__)
 # announcing an unrelated echo hundreds of miles away.
 DEFAULT_MAP_RELEVANCE_RADIUS_MILES = 75.0
 ELEVATED_BEAM_HEIGHT_KM = 3.0
+LIVE_REFRESH_FAILURE_RETRY_SECONDS = 5
 
 
 def _find_site_name(site_id: str) -> str:
@@ -396,6 +397,12 @@ def _refresh_live_scan(site_id: str) -> None:
         _logger.exception("Unable to refresh live radar scan for %s", normalized_site)
         with _state_lock:
             _refresh_errors[normalized_site] = str(exc)
+            # Do not leave a cold site rate-limited for the full normal refresh
+            # interval after one transient ingest failure. The readiness client
+            # may retry in a few seconds and recover without a new session.
+            _refresh_started_at[normalized_site] = datetime.now() - timedelta(
+                seconds=_refresh_interval_seconds - LIVE_REFRESH_FAILURE_RETRY_SECONDS
+            )
     finally:
         with _state_lock:
             _refreshing_sites.discard(normalized_site)
@@ -787,6 +794,43 @@ def get_live_scan_status(site_id: str):
         # An old completed scan remains usable if a refresh fails.  The error
         # is explicit for accessible clients instead of becoming a blank map.
         "last_refresh_error": error,
+    }
+
+
+@app.get("/map/status")
+def get_map_status(
+    city: str | None = Query(None),
+    state: str | None = Query(None),
+    zipcode: str | None = Query(None),
+    latitude: float | None = Query(None),
+    longitude: float | None = Query(None),
+):
+    """Queue and report readiness for a location-led latest radar map.
+
+    This endpoint deliberately never performs a cold ingest in the HTTP
+    request. A caller can poll it before constructing an Audiom source URL,
+    avoiding a source timeout that would otherwise persist in the viewer.
+    """
+    lat, lon, label = _resolve_map_location(city, state, zipcode, latitude, longitude)
+    ranked_sites = rank_sites(lat, lon)
+    if not ranked_sites:
+        raise HTTPException(status_code=404, detail="No radar site found for that location")
+    site_id = ranked_sites[0]["site_id"].upper()
+    queued = _schedule_live_refresh(site_id)
+    with _state_lock:
+        completed = _live_scans.get(site_id)
+        refreshing = site_id in _refreshing_sites
+        error = _refresh_errors.get(site_id)
+    timestamp = None if completed is None else completed.reflectivity_data.timestamp
+    return {
+        "site_id": site_id,
+        "location": {"latitude": lat, "longitude": lon, "label": label},
+        "available": completed is not None,
+        "refresh_state": "updating" if refreshing else "ready",
+        "queued": queued,
+        "scan_timestamp": timestamp.isoformat() if isinstance(timestamp, datetime) else timestamp,
+        "last_refresh_error": error,
+        "poll_after_seconds": LIVE_REFRESH_FAILURE_RETRY_SECONDS,
     }
 
 

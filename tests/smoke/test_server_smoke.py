@@ -56,6 +56,20 @@ def test_live_status_reports_machine_readable_freshness():
     assert data["refresh_state"] in {"ready", "updating"}
 
 
+def test_map_status_queues_a_location_without_synchronously_ingesting(monkeypatch):
+    monkeypatch.setattr("src.server.rank_sites", lambda _lat, _lon: [{"site_id": "KTLX"}])
+    scheduled = []
+    monkeypatch.setattr(
+        "src.server._schedule_live_refresh", lambda site_id: scheduled.append(site_id) or True
+    )
+    resp = client.get("/map/status?latitude=35.4676&longitude=-97.5164")
+
+    assert resp.status_code == 200
+    assert resp.json()["site_id"] == "KTLX"
+    assert resp.json()["available"] is False
+    assert scheduled == ["KTLX"]
+
+
 def test_cors_allows_audiom_origin():
     resp = client.options(
         "/map/storms.geojson",

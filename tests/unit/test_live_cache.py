@@ -50,6 +50,20 @@ def test_live_refresh_is_coalesced(monkeypatch):
         _clear_live_state()
 
 
+def test_failed_live_refresh_can_be_retried_without_waiting_the_normal_interval(monkeypatch):
+    _clear_live_state()
+    monkeypatch.setattr(server, "_schedule_recurring_refresh", lambda _site_id: None)
+    monkeypatch.setattr(server, "_ingest_to_buffer", MagicMock(side_effect=RuntimeError("temporary fetch failure")))
+    try:
+        server._refresh_live_scan("KOHX")
+        with server._state_lock:
+            last_started = server._refresh_started_at["KOHX"]
+        elapsed = (server.datetime.now() - last_started).total_seconds()
+        assert elapsed >= server._refresh_interval_seconds - server.LIVE_REFRESH_FAILURE_RETRY_SECONDS
+    finally:
+        _clear_live_state()
+
+
 def test_location_relevance_filter_hides_remote_interpretations_but_records_them():
     near = {
         "type": "Feature",
