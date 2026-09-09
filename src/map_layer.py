@@ -6,7 +6,7 @@ from shapely.geometry import MultiPolygon, mapping
 from shapely.ops import transform
 
 from src.buffer import BufferedScan
-from src.contours import contour_mask, exclusive_bands
+from src.contours import DEFAULT_SIMPLIFY_M, contour_mask, exclusive_bands
 from src.detection import DetectedObject, IntensityLayerData, classify_intensity, degrees_to_bearing
 from src.geometry import gate_areas_km2
 from src.qc.classifier import CODE_TO_CLASS
@@ -128,6 +128,15 @@ def _storm_description(obj: DetectedObject, rotation) -> str:
             f"{round(precipitation * 100)} percent of classified radar gates were precipitation-like; "
             "this does not confirm precipitation at the surface."
         )
+    temporal_status = getattr(obj, "temporal_status", "not_checked")
+    if temporal_status == "persistent":
+        parts.append("Echo persisted across two consecutive radar scans.")
+    elif temporal_status == "new_or_unconfirmed":
+        parts.append(
+            "No association with the immediately preceding scan; this echo may be new or unconfirmed."
+        )
+    else:
+        parts.append("Persistence was not checked because no prior scan was available.")
     if rotation is not None:
         reference = "base-radial velocity" if rotation.motion_reference == "base_radial" else rotation.motion_reference
         if rotation.evidence_level == "persistent":
@@ -147,7 +156,9 @@ def _timestamp_to_str(timestamp) -> str:
     return str(timestamp)
 
 
-def _object_footprint(scan: BufferedScan, obj: DetectedObject):
+def _object_footprint(
+    scan: BufferedScan, obj: DetectedObject, simplify_m: float = DEFAULT_SIMPLIFY_M
+):
     """Shapely geometry of this object's own footprint, or None.
 
     Shared by `object_geometry` (which maps it to GeoJSON) and
@@ -158,7 +169,7 @@ def _object_footprint(scan: BufferedScan, obj: DetectedObject):
     mask = scan.object_masks.get(obj.object_id)
     if mask is None:
         return None
-    geom = contour_mask(mask, scan.reflectivity_data)
+    geom = contour_mask(mask, scan.reflectivity_data, simplify_m=simplify_m)
     if geom.is_empty:
         return None
     return geom
@@ -197,7 +208,9 @@ def _object_footprint_raw(scan: BufferedScan, obj: DetectedObject):
     return geom
 
 
-def object_geometry(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any] | None:
+def object_geometry(
+    scan: BufferedScan, obj: DetectedObject, simplify_m: float = DEFAULT_SIMPLIFY_M
+) -> dict[str, Any] | None:
     """GeoJSON geometry for a detected object, or None if it has no valid shape.
 
     Returns None rather than inventing a placeholder. The previous
@@ -205,7 +218,7 @@ def object_geometry(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any] |
     presented a fabricated shape as measurement to a user who explores it by
     walking its surface.
     """
-    geom = _object_footprint(scan, obj)
+    geom = _object_footprint(scan, obj, simplify_m=simplify_m)
     if geom is None:
         return None
     return mapping(geom)
@@ -239,7 +252,7 @@ def _as_multipolygon(geom) -> MultiPolygon:
 
 
 def _object_bands(
-    scan: BufferedScan, obj: DetectedObject
+    scan: BufferedScan, obj: DetectedObject, simplify_m: float = DEFAULT_SIMPLIFY_M
 ) -> dict[tuple[float, float], MultiPolygon]:
     """This object's intensity bands: exclusive, and clipped to its own footprint.
 
@@ -280,7 +293,12 @@ def _object_bands(
         if layer.max_dbz != float("inf"):
             levels.add(float(layer.max_dbz))
 
-    raw_bands = exclusive_bands(scan.reflectivity_data.reflectivity, levels, scan.reflectivity_data)
+    raw_bands = exclusive_bands(
+        scan.reflectivity_data.reflectivity,
+        levels,
+        scan.reflectivity_data,
+        simplify_m=simplify_m,
+    )
     return {
         key: _as_multipolygon(geom.intersection(footprint))
         for key, geom in raw_bands.items()
@@ -347,10 +365,13 @@ def _storm_properties(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any]
         # (2026-08-26 amendment), so this is how Audiom and the speech layer
         # tell a mostly-clutter polygon apart from a mostly-precipitation one.
         "class_fractions": dict(getattr(obj, "class_fractions", None) or {}),
+        "temporal_status": getattr(obj, "temporal_status", "not_checked"),
     }
 
 
-def storm_object_to_feature(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any] | None:
+def storm_object_to_feature(
+    scan: BufferedScan, obj: DetectedObject, simplify_m: float = DEFAULT_SIMPLIFY_M
+) -> dict[str, Any] | None:
     """A GeoJSON Feature for this object, or None if it has no valid shape.
 
     Returning None (rather than a fabricated placeholder) means callers must
@@ -358,7 +379,7 @@ def storm_object_to_feature(scan: BufferedScan, obj: DetectedObject) -> dict[str
     which count what they skip so the omission is visible in the layer
     metadata instead of silently vanishing.
     """
-    geometry = object_geometry(scan, obj)
+    geometry = object_geometry(scan, obj, simplify_m=simplify_m)
     if geometry is None:
         return None
     return {
@@ -469,11 +490,13 @@ def _storm_metadata(name: str = "ARW storm polygons") -> dict[str, Any]:
     }
 
 
-def build_storm_geojson(scan: BufferedScan) -> dict[str, Any]:
+def build_storm_geojson(
+    scan: BufferedScan, simplify_m: float = DEFAULT_SIMPLIFY_M
+) -> dict[str, Any]:
     features = []
     omitted = 0
     for obj in scan.detected_objects:
-        feature = storm_object_to_feature(scan, obj)
+        feature = storm_object_to_feature(scan, obj, simplify_m=simplify_m)
         if feature is None:
             omitted += 1
             continue
@@ -490,11 +513,13 @@ def build_storm_geojson(scan: BufferedScan) -> dict[str, Any]:
     }
 
 
-def build_storm_intensity_geojson(scan: BufferedScan) -> dict[str, Any]:
+def build_storm_intensity_geojson(
+    scan: BufferedScan, simplify_m: float = DEFAULT_SIMPLIFY_M
+) -> dict[str, Any]:
     features = []
     omitted = 0
     for obj in scan.detected_objects:
-        bands = _object_bands(scan, obj)
+        bands = _object_bands(scan, obj, simplify_m=simplify_m)
         for layer in obj.layers:
             feature = storm_intensity_layer_to_feature(scan, obj, layer, bands)
             if feature is None:
@@ -510,9 +535,20 @@ def build_storm_intensity_geojson(scan: BufferedScan) -> dict[str, Any]:
     }
 
 
+# Audiom indexes every individual polygon vertex in the browser.  The normal
+# 100 m contour tolerance is appropriate for ARW's detailed GeoJSON API, but
+# makes a regional map needlessly slow to become usable.  At Audiom's default
+# one-mile movement step, a 750 m ground tolerance preserves the meaningful
+# storm outline while cutting vertex density enough for interactive loading.
+# This is intentionally applied only to the Audiom presentation layer; ARW's
+# analysis, detailed footprints, and precipitation field retain their normal
+# resolution.
+AUDIOM_SIMPLIFY_M = 750.0
+
+
 def build_storm_audiom_geojson(scan: BufferedScan) -> dict[str, Any]:
-    intensity_geojson = build_storm_intensity_geojson(scan)
-    footprint_geojson = build_storm_geojson(scan)
+    intensity_geojson = build_storm_intensity_geojson(scan, simplify_m=AUDIOM_SIMPLIFY_M)
+    footprint_geojson = build_storm_geojson(scan, simplify_m=AUDIOM_SIMPLIFY_M)
     footprint_features = []
     for feature in footprint_geojson["features"]:
         feature = dict(feature)
@@ -533,6 +569,35 @@ def build_storm_audiom_geojson(scan: BufferedScan) -> dict[str, Any]:
         "metadata": metadata,
         "features": footprint_features + intensity_geojson["features"],
     }
+
+
+def build_storm_audiom_centroid_geojson(scan: BufferedScan) -> dict[str, Any]:
+    """Compact, truthful live-map representation for Audiom.
+
+    A Level II object centroid is a measured result of ARW's detection, unlike
+    a fabricated fallback shape.  It preserves the full object attributes and
+    spoken interpretation while avoiding the costly polygon contour work that
+    made a first live map wait for minutes.  Clients needing detailed outlines
+    can request ARW's footprint or intensity endpoints explicitly.
+    """
+    features = []
+    for obj in scan.detected_objects:
+        feature = storm_object_to_centroid_feature(scan, obj)
+        properties = feature["properties"]
+        feature["properties"] = {
+            **properties,
+            "ruleName": "Radar interpretation centroid",
+            "ruleType": _storm_rule_type(obj.peak_dbz),
+            "fill": _storm_fill_color(obj.peak_dbz),
+            "fill-opacity": 0.8,
+            "stroke-width": 2,
+            "soundPriority": 450,
+        }
+        features.append(feature)
+    metadata = _storm_metadata("ARW live radar interpretations")
+    metadata["geometryDetail"] = "detected-object centroids"
+    metadata["detailedGeometryEndpoint"] = "/map/storms.geojson?mode=footprints"
+    return {"type": "FeatureCollection", "metadata": metadata, "features": features}
 
 
 def build_storm_centroid_geojson(scan: BufferedScan) -> dict[str, Any]:

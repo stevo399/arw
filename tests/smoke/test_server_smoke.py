@@ -186,11 +186,12 @@ def test_storm_map_geojson_endpoint_returns_raw_feature_collection():
     assert data["metadata"]["scanTimestamp"] == "2026-04-08T18:30:00Z"
     assert data["metadata"]["refreshState"] == "ready"
     assert resp.headers["x-arw-refresh-state"] == "ready"
-    # contour_mask always returns a MultiPolygon, even for one contiguous blob.
-    assert data["features"][0]["geometry"]["type"] == "MultiPolygon"
+    # The default Audiom source is the compact measured centroid; detailed
+    # polygon geometry remains available through mode=footprints.
+    assert data["metadata"]["geometryDetail"] == "detected-object centroids"
+    assert data["features"][0]["geometry"]["type"] == "Point"
     rule_types = {feature["properties"]["ruleType"] for feature in data["features"]}
-    assert "storm_heavy_footprint" in rule_types
-    assert "radar_heavy_rain" in rule_types
+    assert "storm_heavy" in rule_types
 
 
 def test_precipitation_map_geojson_endpoint_shows_echo_below_object_threshold():

@@ -92,6 +92,7 @@ def test_tracker_second_scan_updates_tracks():
     assert len(tracker.active_tracks) == 1
     track = tracker.active_tracks[0]
     assert len(track.positions) == 2
+    assert tracker.temporal_status_for_current_object(obj2.object_id) == "persistent"
 
 
 def test_tracker_unmatched_object_creates_new_track():
@@ -111,6 +112,22 @@ def test_tracker_unmatched_object_creates_new_track():
     # Original track should be active (1 missed scan), new track created
     all_tracks = tracker.all_tracks
     assert len(all_tracks) >= 2
+    assert tracker.temporal_status_for_current_object(obj2.object_id) == "new_or_unconfirmed"
+
+
+def test_tracker_does_not_claim_persistence_across_a_long_scan_gap():
+    tracker = StormTracker()
+    t1 = datetime(2026, 4, 8, 18, 30)
+    obj1 = _make_object(1, 35.5, -97.3)
+    obj2 = _make_object(1, 35.5, -97.3)
+    mask = np.zeros((360, 500), dtype=bool)
+    mask[85:95, 195:205] = True
+    tracker.update(_make_scan("KTLX", t1, [obj1], masks={1: mask}))
+    tracker.update(_make_scan("KTLX", t1 + timedelta(hours=8), [obj2], masks={1: mask}))
+
+    assert tracker.temporal_status_for_current_object(obj2.object_id) == "not_checked"
+    assert len(tracker.active_tracks) == 1
+    assert len(tracker.active_tracks[0].positions) == 1
 
 
 def test_tracker_lost_after_missed_scans():

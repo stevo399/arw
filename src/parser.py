@@ -40,9 +40,20 @@ class SweepData:
     gate_classification: np.ndarray | None = None
 
 
-def parse_radar_file(filepath: str):
-    """Read a NEXRAD Level II file and return the pyart Radar object."""
-    return pyart.io.read_nexrad_archive(filepath)
+def parse_radar_file(
+    filepath: str,
+    scans: list[int] | None = None,
+    include_fields: list[str] | None = None,
+):
+    """Read a NEXRAD Level II file and return the pyart Radar object.
+
+    ``scans`` and ``include_fields`` are deliberately optional: callers that
+    need a full volume keep the original behavior, while an interactive
+    current map can load only the low elevation cuts and moments it analyzes.
+    """
+    return pyart.io.read_nexrad_archive(
+        filepath, scans=scans, include_fields=include_fields
+    )
 
 
 def _extract_field(
@@ -140,7 +151,9 @@ class VelocityData:
     radar_lon: float
 
 
-def extract_velocity(radar, max_sweeps: int = 3) -> VelocityData | None:
+def extract_velocity(
+    radar, max_sweeps: int = 3, *, dealias: bool = True
+) -> VelocityData | None:
     """Extract velocity from the lowest sweeps that actually carry it.
 
     Split-cut VCPs pair a surveillance cut and a Doppler cut at each low
@@ -159,12 +172,16 @@ def extract_velocity(radar, max_sweeps: int = 3) -> VelocityData | None:
     if not sweep_indices:
         return None
 
-    try:
-        dealiased = pyart.correct.dealias_region_based(radar, field="velocity")
-        radar.add_field("dealiased_velocity", dealiased, replace_existing=True)
-        velocity_field = "dealiased_velocity"
-    except Exception:
-        velocity_field = "velocity"
+    velocity_field = "velocity"
+    if dealias:
+        try:
+            dealiased = pyart.correct.dealias_region_based(radar, field="velocity")
+            radar.add_field("dealiased_velocity", dealiased, replace_existing=True)
+            velocity_field = "dealiased_velocity"
+        except Exception:
+            # A raw base-radial field is still useful evidence; callers retain
+            # its provenance rather than suppressing all velocity context.
+            velocity_field = "velocity"
 
     sweeps: list[VelocitySweep] = []
     for sweep_index in sweep_indices:

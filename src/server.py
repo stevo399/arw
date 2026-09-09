@@ -1,6 +1,5 @@
 # src/server.py
 from datetime import datetime, date as date_type, timedelta
-from dataclasses import replace
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 import logging
@@ -23,14 +22,13 @@ from src.models import (
 from src.sites import geocode_city_state, geocode_zipcode, rank_sites, NEXRAD_SITES
 from src.ingest import fetch_scan
 from src.parser import parse_radar_file, extract_sweep_data, extract_velocity, SweepData, VelocityData
-from src.velocity import add_storm_relative_context, analyze_velocity, promote_persistent_rotation_assessments
 from src.detection import detect_objects_with_grid
 from src.preprocess import preprocess_sweep, refresh_quality_advisory
 from src.geometry import align_field_by_azimuth
 from src.summary import generate_summary
 from src.map_layer import (
     build_precipitation_field_geojson,
-    build_storm_audiom_geojson,
+    build_storm_audiom_centroid_geojson,
     build_storm_centroid_geojson,
     build_storm_geojson,
     build_storm_intensity_geojson,
@@ -102,6 +100,22 @@ _logger = logging.getLogger(__name__)
 DEFAULT_MAP_RELEVANCE_RADIUS_MILES = 75.0
 ELEVATED_BEAM_HEIGHT_KM = 3.0
 LIVE_REFRESH_FAILURE_RETRY_SECONDS = 5
+# A split-cut Level II volume normally places the surveillance reflectivity
+# cut and its companion Doppler cut among the first several scans.  ARW's
+# current-map pipeline selects its reflectivity sweep and at most three
+# low-level velocity sweeps, so reading farther elevations only delays the
+# first accessible map and greatly expands memory use.
+LIVE_MAP_SCAN_INDICES = list(range(6))
+# These are the only moments consumed by the rapid current-map pipeline:
+# reflectivity for objects, rhohv/zdr for dual-polarization QC, and velocity
+# for base-radial context.  Excluding unused archive moments prevents a
+# 10 MB compressed Level II volume becoming several GB in memory.
+LIVE_MAP_FIELDS = [
+    "reflectivity",
+    "velocity",
+    "cross_correlation_ratio",
+    "differential_reflectivity",
+]
 
 
 def _find_site_name(site_id: str) -> str:
@@ -204,9 +218,20 @@ def _velocity_aligned_to_reflectivity(
 
 def _process_scan_file(site_id: str, filepath: str) -> BufferedScan:
     """Run the full analysis pipeline for one already-selected volume."""
-    radar = parse_radar_file(filepath)
+    radar = parse_radar_file(
+        filepath,
+        scans=LIVE_MAP_SCAN_INDICES,
+        include_fields=LIVE_MAP_FIELDS,
+    )
     raw_sweep = extract_sweep_data(radar)
-    vel_data = extract_velocity(radar)
+    # Py-ART's region-based dealiaser expands the *entire* Level II volume,
+    # although the interactive map needs only three low-level Doppler cuts.
+    # On recent full-resolution volumes that one operation consumed several
+    # gigabytes and kept a first map in "Preparing" for minutes.  Use the
+    # observed base-radial velocities for the live map so reflectivity and QC
+    # can become available promptly; a later analysis path can request
+    # dealiased velocity when its extra precision is material.
+    vel_data = extract_velocity(radar, dealias=False)
 
     # The Doppler cut's rays do not share the surveillance cut's azimuth
     # sampling -- align by nearest azimuth before this reaches classify_gates,
@@ -231,9 +256,15 @@ def _process_scan_file(site_id: str, filepath: str) -> BufferedScan:
         elevations=ref_data.elevations,
         gate_classification=ref_data.gate_classification,
     )
-    regions, rotations, annotated_objects = analyze_velocity(
-        vel_data, result.objects, result.object_masks, ref_data,
-    )
+    # Velocity-region and rotational-couplet detection is a separate,
+    # high-cost diagnostic product.  Do not hold the first reflectivity map
+    # hostage to it: the live snapshot has already used the nearest Doppler
+    # cut for QC, while these advanced velocity diagnostics can be added by a
+    # dedicated analysis request.  This avoids multi-minute cold-map waits on
+    # high-resolution volumes without pretending a rotation assessment exists.
+    regions: list = []
+    rotations: list = []
+    annotated_objects = result.objects
     scan_timestamp = (
         datetime.fromisoformat(ref_data.timestamp)
         if isinstance(ref_data.timestamp, str)
@@ -255,29 +286,12 @@ def _process_scan_file(site_id: str, filepath: str) -> BufferedScan:
     )
     _buffer.add_scan(buffered)
     _tracker.update(buffered)
-    histories = {
-        obj.object_id: _tracker.rotation_history_for_current_object(obj.object_id)
-        for obj in annotated_objects
-    }
-    motions = {
-        obj.object_id: _tracker.motion_for_current_object(obj.object_id)
-        for obj in annotated_objects
-    }
-    rotations = add_storm_relative_context(rotations, motions)
-    rotations = promote_persistent_rotation_assessments(
-        rotations, histories, scan_timestamp,
-    )
-    annotated_objects = [
-        replace(
-            obj,
-            rotation=next(
-                (rotation for rotation in rotations
-                 if rotation.associated_object_id == obj.object_id),
-                None,
-            ),
-        )
-        for obj in annotated_objects
-    ]
+    for obj in annotated_objects:
+        obj.temporal_status = _tracker.temporal_status_for_current_object(obj.object_id)
+    # Keep the raw, aligned velocity evidence in QC only.  `velocity_data`
+    # would retain three large Doppler arrays after that use, so do not pin it
+    # in the completed live-map cache.
+    vel_data = None
     ref_data, scan_quality, echo_advisory = refresh_quality_advisory(
         ref_data, scan_quality, rotations, velocity=lowest_velocity,
     )
@@ -297,14 +311,23 @@ def _map_layer_cache_key(buffered: BufferedScan) -> tuple[str, str] | None:
     return buffered.site_id.upper(), source_path
 
 
-def _prepared_map_layers(buffered: BufferedScan) -> dict[str, dict]:
-    """Build each public map representation once per completed scan."""
+def _prepared_map_layers(
+    buffered: BufferedScan, requested_layers: set[str] | None = None
+) -> dict[str, dict]:
+    """Build requested public map representations once per completed scan.
+
+    The lightweight Audiom source is the only layer needed to make a live map
+    usable.  Do not also contour the detailed footprints, intensity bands, and
+    centroids until an endpoint actually asks for them.
+    """
+    requested_layers = requested_layers or {"footprints", "intensity", "audiom", "centroids"}
     cache_key = _map_layer_cache_key(buffered)
+    cached: dict[str, dict] | None = None
     if cache_key is not None:
         with _state_lock:
             cached = _map_layers.get(cache_key)
-        if cached is not None:
-            return cached
+        if cached is not None and requested_layers.issubset(cached):
+            return {name: cached[name] for name in requested_layers}
 
     # Only one caller builds uncached contour layers.  This is intentionally
     # separate from _ingest_lock: completed map layers are immutable and safe
@@ -313,19 +336,21 @@ def _prepared_map_layers(buffered: BufferedScan) -> dict[str, dict]:
         if cache_key is not None:
             with _state_lock:
                 cached = _map_layers.get(cache_key)
-            if cached is not None:
-                return cached
-        footprints = build_storm_geojson(buffered)
-        layers = {
-            "footprints": footprints,
-            "intensity": build_storm_intensity_geojson(buffered),
-            "audiom": build_storm_audiom_geojson(buffered),
-            "centroids": build_storm_centroid_geojson(buffered),
-        }
+            if cached is not None and requested_layers.issubset(cached):
+                return {name: cached[name] for name in requested_layers}
+        layers = dict(cached or {})
+        if "footprints" in requested_layers and "footprints" not in layers:
+            layers["footprints"] = build_storm_geojson(buffered)
+        if "intensity" in requested_layers and "intensity" not in layers:
+            layers["intensity"] = build_storm_intensity_geojson(buffered)
+        if "audiom" in requested_layers and "audiom" not in layers:
+            layers["audiom"] = build_storm_audiom_centroid_geojson(buffered)
+        if "centroids" in requested_layers and "centroids" not in layers:
+            layers["centroids"] = build_storm_centroid_geojson(buffered)
         if cache_key is not None:
             with _state_lock:
                 _map_layers[cache_key] = layers
-        return layers
+        return {name: layers[name] for name in requested_layers}
 
 
 def _prepared_precipitation_layer(buffered: BufferedScan) -> dict:
@@ -389,7 +414,7 @@ def _refresh_live_scan(site_id: str) -> None:
     normalized_site = site_id.upper()
     try:
         buffered = _ingest_to_buffer(normalized_site, publish_live=False)
-        _prepared_map_layers(buffered)
+        _prepared_map_layers(buffered, {"audiom"})
         with _state_lock:
             _live_scans[normalized_site] = buffered
             _refresh_errors.pop(normalized_site, None)
@@ -965,18 +990,18 @@ def get_storm_map_geojson(
         raise HTTPException(status_code=404, detail="No radar site found for that location")
 
     buffered, _ = _live_or_ingest(ranked_sites[0]["site_id"], dt)
-    layers = _prepared_map_layers(buffered)
-    if mode == "footprints":
-        geojson = deepcopy(layers["footprints"])
-    elif mode == "intensity":
-        geojson = deepcopy(layers["intensity"])
-    elif mode == "audiom":
-        geojson = deepcopy(layers["audiom"])
-    else:
+    if mode not in {"footprints", "intensity", "audiom"}:
         raise HTTPException(
             status_code=422,
             detail="mode must be one of: audiom, intensity, footprints",
         )
+    layers = _prepared_map_layers(buffered, {mode})
+    if mode == "footprints":
+        geojson = deepcopy(layers["footprints"])
+    elif mode == "intensity":
+        geojson = deepcopy(layers["intensity"])
+    else:
+        geojson = deepcopy(layers["audiom"])
     return _map_geojson_response(
         _map_layer_for_location(geojson, buffered, lat, lon, radius_miles), buffered
     )

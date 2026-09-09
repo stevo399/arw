@@ -56,6 +56,9 @@ class DetectedObject:
     # mostly precipitation. Empty when gate_classification was not supplied
     # to compute_object_properties (e.g. legacy/synthetic callers).
     class_fractions: dict[str, float] = field(default_factory=dict)
+    # Set by live cross-scan association. This describes repeat detection,
+    # never confirmation of precipitation at the surface.
+    temporal_status: str = "not_checked"
 
 
 def classify_intensity(dbz: float) -> str:

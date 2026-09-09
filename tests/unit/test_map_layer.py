@@ -9,6 +9,7 @@ from src.map_layer import (
     PRECIP_FIELD_LEVELS,
     build_precipitation_field_geojson,
     build_storm_audiom_geojson,
+    build_storm_audiom_centroid_geojson,
     build_storm_centroid_geojson,
     build_storm_geojson,
     build_storm_intensity_geojson,
@@ -75,6 +76,8 @@ def test_build_storm_geojson_returns_polygon_features():
     assert "Peak reflectivity 50.0 dBZ." in feature["properties"]["description"]
     assert feature["properties"]["fill"] == "#e69f00"
     assert feature["properties"]["class_fractions"] == {}
+    assert feature["properties"]["temporal_status"] == "not_checked"
+    assert "Persistence was not checked because no prior scan was available." in feature["properties"]["description"]
     assert geojson["metadata"]["mapType"] == "heatmap"
     assert geojson["metadata"]["suggestedMapType"] == "heatmap"
     assert geojson["metadata"]["currentStat"] == "heat_value"
@@ -220,6 +223,34 @@ def test_build_storm_audiom_geojson_combines_footprints_and_intensity_bands():
     assert len(geojson["features"]) == 2
     assert geojson["features"][0]["properties"]["ruleName"] == "Storm footprint"
     assert geojson["features"][1]["properties"]["ruleName"] == "Radar intensity band"
+
+
+def test_build_storm_audiom_centroid_geojson_preserves_interpretation_without_contours():
+    reflectivity = np.full((12, 12), np.nan)
+    reflectivity[4:8, 5:9] = 45.0
+    mask = ~np.isnan(reflectivity)
+    scan = BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0), site_id="KTLX",
+        reflectivity_data=SweepData(
+            reflectivity=reflectivity, azimuths=np.linspace(80, 100, 12),
+            ranges_m=np.linspace(20000, 40000, 12), radar_lat=35.3331,
+            radar_lon=-97.2778, elevation_angle=0.5, elevations=np.full(12, 0.5),
+            elevation_angles=[0.5], radar_alt_m=390.0, timestamp="2026-04-10T20:00:00Z",
+        ),
+        detected_objects=[DetectedObject(
+            object_id=1, centroid_lat=35.2, centroid_lon=-96.9, distance_km=30.0,
+            bearing_deg=90.0, peak_dbz=45.0, peak_label="heavy precipitation",
+            area_km2=24.0,
+        )],
+        labeled_grid=mask.astype(int), object_masks={1: mask},
+    )
+
+    geojson = build_storm_audiom_centroid_geojson(scan)
+
+    assert geojson["metadata"]["geometryDetail"] == "detected-object centroids"
+    assert geojson["features"][0]["geometry"]["type"] == "Point"
+    assert geojson["features"][0]["properties"]["name"]
+    assert geojson["features"][0]["properties"]["ruleName"] == "Radar interpretation centroid"
 
 
 def test_build_storm_centroid_geojson_returns_point_features():

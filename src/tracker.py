@@ -11,6 +11,9 @@ MAX_MISSED_SCANS = 2
 FOCUS_SWITCH_MARGIN = 2.0
 HIGH_CONFIDENCE = 0.75
 MEDIUM_CONFIDENCE = 0.45
+# Consecutive Level II volumes normally arrive about 4–10 minutes apart.  A
+# longer gap is not valid evidence of temporal persistence.
+MAX_TEMPORAL_CONTINUITY_MINUTES = 20
 
 
 def _scan_quality_factor(scan: BufferedScan | None) -> float:
@@ -504,6 +507,16 @@ class StormTracker:
         if self._prev_scan is not None and self._prev_scan.site_id != scan.site_id:
             self._reset_for_site()
 
+        if self._prev_scan is not None:
+            gap_minutes = (timestamp - self._prev_scan.timestamp).total_seconds() / 60.0
+            # Cross-scan association is evidence only over adjacent operational
+            # radar volumes.  Retaining a track across a long outage or a
+            # historical jump could falsely make an unrelated echo appear
+            # persistent, particularly because its motion search radius grows
+            # with elapsed time.
+            if gap_minutes <= 0 or gap_minutes > MAX_TEMPORAL_CONTINUITY_MINUTES:
+                self._reset_for_site()
+
         if self._prev_scan is None:
             # First scan: create a track for each object
             self._obj_to_track.clear()
@@ -689,6 +702,19 @@ class StormTracker:
         track_id = self._obj_to_track.get(object_id)
         track = self.get_track(track_id) if track_id is not None else None
         return track.last_motion if track is not None else None
+
+    def temporal_status_for_current_object(self, object_id: int) -> str:
+        """Report only the repeat-detection evidence the tracker has earned."""
+        track_id = self._obj_to_track.get(object_id)
+        track = self.get_track(track_id) if track_id is not None else None
+        if track is None:
+            return "not_checked"
+        if len(track.positions) >= 2:
+            return "persistent"
+        diagnostics = track.identity_diagnostics
+        if diagnostics is not None and diagnostics.event_context == "new_track":
+            return "new_or_unconfirmed"
+        return "not_checked"
 
 
 Track.get_motion = _get_track_motion
