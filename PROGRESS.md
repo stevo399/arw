@@ -189,7 +189,11 @@
   one. Only unmatched tracks can merge and only unmatched objects can be split children. Benchmark:
   merges down 40-60%, new tracks after the first scan down (131 -> 100 dense), fragmentation proxy
   down in every window; active tracks now equal objects every scan. Report section 7b
-- Found, not yet fixed: intensity-band layer takes about 136 s on a busy scan
+- **Intensity-band layer speed (`0f71747`, `4717565`, branch `intensity-layer-speed`):** the layer
+  contoured and simplified the whole radar field once per storm (166 of 169 s on KTLX). Whole-field
+  bands are now shared per distinct level set (4 per scan) and raw level contours per level.
+  Byte-identical to the original on real volumes; KTLX 53 storms 123.5 s -> 8.0 s, KEMX 81 storms
+  327.1 s -> 14.0 s. The rest is joint coverage simplification (about half) and raw contouring
 - Full suite after both fixes: 539 passed, 3 xfailed (the pre-existing expected failures)
 
 ## In Progress
@@ -197,7 +201,8 @@
 - Spec 2 restoration is validated and documented; commit/merge decision pending
 
 ## Next
-- Intensity-band layer speed (about 136 s on a busy scan)
+- Intensity-band layer still takes 8-14 s on busy scans; further gains need changes inside coverage
+  simplification or contour georeferencing
 - Reduce the Level II parse peak (356 MB) and rendered-layer retention (up to ~6.7 MB per busy scan)
 - Issue #1: window the motion fit
 - Classifier calibration. The membership parameters need deriving from data, not from a design

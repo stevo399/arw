@@ -208,9 +208,9 @@ identity scores instead of being replaced by new tracks, which was not verified 
 - Reacquisition has not yet been observed on real data (section 2).
 - Peak memory while processing and rendering is 546 MB (measured; section 3), led by the 356 MB
   Level II parse. Detection's multi-gigabyte peak is fixed.
-- The intensity-band layer is slow on busy scans: 135.6 s untraced for KTLX 22:47:37Z (measured
-  while a benchmark ran concurrently), against 1.7 s for footprints and 8.2 s for the
-  precipitation field.
+- The intensity-band layer took 123.5 s (KTLX, 53 storms) and 327.1 s (KEMX, 81 storms) because it
+  contoured the whole field once per storm. Fixed 2026-09-13 with byte-identical output: 8.0 s and
+  14.0 s, now dominated by joint coverage simplification per level set.
 - Rendered layers dominate retained memory on busy days (section 3).
 - `Track.positions` is uncapped, so motion fits span a track's lifetime (issue #1).
 - Lost and merged tracks accumulate in tracker state for the life of a site's tracker, so
