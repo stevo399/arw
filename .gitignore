@@ -36,3 +36,6 @@ htmlcov/
 
 # Distribution
 *.spec
+
+# Radar history (regenerable runtime state)
+cache/*/history/

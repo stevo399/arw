@@ -88,9 +88,6 @@ keep warm when starting the server; use a comma-separated list of NEXRAD IDs.
 $env:ARW_PREWARM_SITES = "KIWA"
 $env:ARW_REFRESH_INTERVAL_SECONDS = "120" # optional; default is 120 seconds
 $env:ARW_REFRESH_WORKERS = "2" # independent sites may prepare in parallel
-$env:ARW_PROCESSED_SCANS_PER_SITE = "2" # bounded in-memory analysis cache
-$env:ARW_MAX_PROCESSED_SCANS = "12" # global cap across all sites
-$env:ARW_REPLAY_SCANS_PER_SITE = "2" # current + prior scan for continuity tracking
 uv run uvicorn src.server:app --host 127.0.0.1 --port 8000
 ```
 
@@ -101,6 +98,33 @@ also includes `metadata.scanTimestamp` and `metadata.refreshState`.
 Prewarming is optional. Without it, any requested location is prepared on
 demand; duplicate requests for one radar site share work, while unrelated
 sites can prepare concurrently.
+
+### Radar scan history
+
+Each radar keeps its most recent tracked scans as compact, lossless records
+(reflectivity in its Level II 0.5 dBZ encoding, one object label grid, and the
+objects, evidence and tracking state from that scan's own time). They are held
+in memory and written to `cache/<SITE>/history/`, so storm identities, ages and
+reacquisition survive switching radars and restarting the server.
+
+```powershell
+$env:ARW_HISTORY_ROOT = "cache"          # where per-radar history is written
+$env:ARW_SCANS_PER_RADAR = "5"           # retained tracked scans per radar
+$env:ARW_MAX_RADARS_IN_MEMORY = "20"     # idle radars beyond this reload from disk
+$env:ARW_MAX_HISTORICAL_SCANS = "12"     # specific-time scans kept compactly, never tracked
+$env:ARW_MAX_RENDERED_SCANS = "10"       # rendered map layers kept besides each radar's newest
+```
+
+`GET /map/history?latitude=..&longitude=..` (or `city`/`state`, or `zipcode`)
+lists the retained scans for the radar ARW selects, newest first. Each
+timestamp can be passed back unchanged as `datetime=` to the map, status,
+objects, tracks and summary endpoints to select exactly that scan, served with
+its own tracking context. `/map/status?datetime=` is ready immediately for a
+retained scan and prepares any other time in the background.
+
+A storm that is not detected in a scan becomes `missing`: it is not described
+or listed, but can be reacquired for up to 20 minutes while its last-seen scan
+is retained, and is marked `lost` after that.
 
 ## License
 

@@ -1,0 +1,91 @@
+{
+  "identical_tracking": {
+    "scans": [
+      {
+        "scan": "KTLX20260410_224209_V06",
+        "objects": 63,
+        "active_tracks": 63,
+        "reacquired": []
+      },
+      {
+        "scan": "KTLX20260410_224737_V06",
+        "objects": 53,
+        "active_tracks": 50,
+        "reacquired": []
+      },
+      {
+        "scan": "KTLX20260410_225255_V06",
+        "objects": 51,
+        "active_tracks": 49,
+        "reacquired": []
+      },
+      {
+        "scan": "KTLX20260410_225805_V06",
+        "objects": 49,
+        "active_tracks": 47,
+        "reacquired": []
+      },
+      {
+        "scan": "KTLX20260410_230332_V06",
+        "objects": 50,
+        "active_tracks": 48,
+        "reacquired": []
+      },
+      {
+        "scan": "KTLX20260410_230850_V06",
+        "objects": 61,
+        "active_tracks": 57,
+        "reacquired": []
+      },
+      {
+        "scan": "KTLX20260410_231407_V06",
+        "objects": 57,
+        "active_tracks": 54,
+        "reacquired": []
+      }
+    ],
+    "first_reacquisition_divergence": null
+  },
+  "memory": {
+    "compact_scan_bytes": [
+      280228,
+      279304,
+      278157,
+      278813,
+      276841,
+      148491,
+      148933,
+      150643,
+      151555,
+      149335
+    ],
+    "retained_compact_bytes": 2142300,
+    "compact_limit_bytes": 3082508.0000000005,
+    "rendered_scan_bytes": [
+      6688865,
+      6520936,
+      6162782,
+      6035991,
+      5866384,
+      140978,
+      142953,
+      173029,
+      215479,
+      162861
+    ],
+    "retained_rendered_bytes": 32110448,
+    "rendered_limit_bytes": 88293018.0,
+    "old_pipeline_largest_scan_array_bytes": 98928000,
+    "old_pipeline_two_scans_two_radars_bytes": 395712000,
+    "transient_peak_traced_bytes": 2654713371,
+    "retained_full_grids": []
+  },
+  "restart": {
+    "restart_before_scan": 4,
+    "identical": true
+  },
+  "browsing": {
+    "historical_volume": "KTLX20260410_214929_V06",
+    "live_tracking_unchanged": true
+  }
+}
