@@ -1,7 +1,6 @@
 # src/buffer.py
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from collections import deque
+from datetime import datetime
 from typing import Any
 import numpy as np
 from src.parser import SweepData, VelocityData
@@ -53,61 +52,3 @@ class BufferedScan:
     # Set only when the live tracker tracked this scan.  None means the scan
     # came from the historical path and has no tracking context.
     tracking: TrackingSnapshot | None = None
-
-
-class ReplayBuffer:
-    """Stores the short scan history required for continuity tracking.
-
-    A full-resolution Level II object mask is one boolean grid *per detected
-    object*.  Retaining a two-hour sequence can therefore consume gigabytes
-    on a convective day.  The tracker only compares the current scan with its
-    immediate predecessor, so keep that pair and no more by default.
-    """
-
-    def __init__(self, max_age_minutes: int = 120, max_scans: int = 2):
-        self._scans: deque[BufferedScan] = deque()
-        self._max_age = timedelta(minutes=max_age_minutes)
-        # Tracking needs a previous volume.  Do not allow a configuration
-        # typo to silently disable that continuity check.
-        self._max_scans = max(2, int(max_scans))
-        self._current_site: str | None = None
-
-    def add_scan(self, scan: BufferedScan) -> None:
-        """Add a scan to the buffer. Resets if site changes. Evicts old scans."""
-        if self._current_site is not None and scan.site_id != self._current_site:
-            self._scans.clear()
-        self._current_site = scan.site_id
-        self._scans.append(scan)
-        self._evict_old()
-
-    def _evict_old(self) -> None:
-        """Remove scans older than max_age from the latest scan."""
-        if not self._scans:
-            return
-        cutoff = self._scans[-1].timestamp - self._max_age
-        while self._scans and self._scans[0].timestamp < cutoff:
-            self._scans.popleft()
-        while len(self._scans) > self._max_scans:
-            self._scans.popleft()
-
-    @property
-    def scan_count(self) -> int:
-        return len(self._scans)
-
-    @property
-    def current_scan(self) -> BufferedScan | None:
-        return self._scans[-1] if self._scans else None
-
-    @property
-    def previous_scan(self) -> BufferedScan | None:
-        return self._scans[-2] if len(self._scans) >= 2 else None
-
-    @property
-    def all_scans(self) -> list[BufferedScan]:
-        return list(self._scans)
-
-    @property
-    def time_range(self) -> tuple[datetime, datetime] | None:
-        if not self._scans:
-            return None
-        return (self._scans[0].timestamp, self._scans[-1].timestamp)

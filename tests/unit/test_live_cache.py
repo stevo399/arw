@@ -11,36 +11,13 @@ def test_scan_timestamp_iso_utc_is_normalized_for_archive_lookup():
 
 def _clear_live_state():
     with server._state_lock:
-        server._processed_scans.clear()
-        server._map_layers.clear()
-        server._live_scans.clear()
+        server._historical_scans.clear()
         server._refreshing_sites.clear()
         server._refresh_started_at.clear()
         server._refresh_errors.clear()
-        server._buffers.clear()
-        server._trackers.clear()
         server._site_ingest_locks.clear()
-
-
-def test_live_request_returns_completed_scan_and_queues_refresh(monkeypatch):
-    _clear_live_state()
-    completed = MagicMock()
-    completed.site_id = "KIWA"
-    with server._state_lock:
-        server._live_scans["KIWA"] = completed
-
-    scheduled = []
-    monkeypatch.setattr(
-        server, "_schedule_live_refresh", lambda site_id: scheduled.append(site_id) or True
-    )
-
-    try:
-        result, updating = server._live_or_ingest("kiwa")
-        assert result is completed
-        assert updating is True
-        assert scheduled == ["KIWA"]
-    finally:
-        _clear_live_state()
+    server._map_layers.clear()
+    server._histories.clear()
 
 
 def test_live_refresh_is_coalesced(monkeypatch):
@@ -127,15 +104,16 @@ def test_failed_live_refresh_can_be_retried_without_waiting_the_normal_interval(
 
 def test_live_refresh_publishes_completed_scan_without_waiting_for_map_build(monkeypatch):
     _clear_live_state()
-    completed = SimpleNamespace(site_id="KJAX")
-    monkeypatch.setattr(server, "_ingest_to_buffer", lambda *_args, **_kwargs: completed)
+    ingested = []
+    monkeypatch.setattr(
+        server, "_ingest_to_buffer", lambda site_id, *_args, **_kwargs: ingested.append(site_id)
+    )
     monkeypatch.setattr(server, "_schedule_recurring_refresh", lambda _site_id: None)
     blocked_builder = MagicMock(side_effect=AssertionError("live refresh must not prebuild layers"))
     monkeypatch.setattr(server, "_prepared_map_layers", blocked_builder)
     try:
         server._refresh_live_scan("KJAX")
-        with server._state_lock:
-            assert server._live_scans["KJAX"] is completed
+        assert ingested == ["KJAX"]
         blocked_builder.assert_not_called()
     finally:
         _clear_live_state()
@@ -240,27 +218,6 @@ def test_prepared_map_layers_are_built_once_per_real_volume(monkeypatch, tmp_pat
         _clear_live_state()
 
 
-def test_processed_scan_cache_is_bounded_per_site_and_evicts_map_layers(monkeypatch):
-    _clear_live_state()
-    monkeypatch.setattr(server, "_processed_scans_per_site", 2)
-    monkeypatch.setattr(server, "_max_processed_scans", 3)
-    first = ("KIWA", "first")
-    second = ("KIWA", "second")
-    third = ("KIWA", "third")
-    other = ("KMLB", "first")
-    try:
-        for key in (first, second, other):
-            server._remember_processed_scan(key, SimpleNamespace(site_id=key[0]))
-            server._map_layers[key] = {"audiom": {}}
-        server._remember_processed_scan(third, SimpleNamespace(site_id="KIWA"))
-
-        assert first not in server._processed_scans
-        assert first not in server._map_layers
-        assert set(server._processed_scans) == {second, third, other}
-    finally:
-        _clear_live_state()
-
-
 def test_completed_map_layer_does_not_wait_for_another_site_ingest(tmp_path):
     _clear_live_state()
     source = tmp_path / "KIWA20260907_222941_V06"
@@ -271,8 +228,7 @@ def test_completed_map_layer_does_not_wait_for_another_site_ingest(tmp_path):
         reflectivity_data=SimpleNamespace(timestamp="2026-09-07T22:29:41Z"),
     )
     expected = {"audiom": {"type": "FeatureCollection", "features": []}}
-    with server._state_lock:
-        server._map_layers[server._map_layer_cache_key(scan)] = expected
+    server._map_layers.put(server._map_layer_cache_key(scan), expected, pinned=False)
 
     finished = Event()
     result = []

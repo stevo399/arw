@@ -21,7 +21,7 @@ from src.models import (
     MapLocation, StormMapLayerResponse,
 )
 from src.sites import geocode_city_state, geocode_zipcode, rank_sites, NEXRAD_SITES
-from src.ingest import fetch_scan
+from src.ingest import CACHE_DIR, fetch_scan
 from src.parser import parse_radar_file, extract_sweep_data, extract_velocity, SweepData, VelocityData
 from src.detection import detect_objects_with_grid
 from src.preprocess import preprocess_sweep, refresh_quality_advisory
@@ -37,7 +37,10 @@ from src.map_layer import (
     storm_layer_drawing_info,
     storm_layer_fields,
 )
-from src.buffer import ReplayBuffer, BufferedScan, TrackingSnapshot
+from src.buffer import BufferedScan, TrackingSnapshot
+from src.history.compact_scan import CompactScan
+from src.history.layer_cache import RenderedLayerCache
+from src.history.store import RING_SIZE, HistoryRegistry
 from src.radar_page import radar_page_html
 from src.tracker import StormTracker
 
@@ -65,19 +68,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Tracking state belongs to a radar site.  A single global tracker used to
-# reset whenever a visitor chose a different city, which also made it unsafe
-# to analyze independent sites concurrently.
-_buffers: dict[str, ReplayBuffer] = {}
-_trackers: dict[str, StormTracker] = {}
-
-# A Level II volume is expensive to turn into an accessibility-ready map: it
-# must be parsed, quality-controlled, segmented, and paired with velocity.
-# Keep that completed work in memory.  Raw files in ``cache/`` only avoid a
-# download; without this cache every visitor still repeated all of that work.
-_processed_scans: OrderedDict[tuple[str, str], BufferedScan] = OrderedDict()
-_map_layers: dict[tuple[str, str], dict[str, dict]] = {}
-_live_scans: dict[str, BufferedScan] = {}
+# Tracking state belongs to a radar site.  Each radar keeps its newest tracked
+# scans as compact, lossless records plus its tracker, persisted under
+# cache/<site>/history/.  Full-size grids exist only while a request or a
+# tracker update needs them.
+_history_root = Path(os.getenv("ARW_HISTORY_ROOT", CACHE_DIR))
+_histories = HistoryRegistry(
+    _history_root,
+    max_radars=int(os.getenv("ARW_MAX_RADARS_IN_MEMORY", "20")),
+    ring_size=int(os.getenv("ARW_SCANS_PER_RADAR", str(RING_SIZE))),
+)
+# A Level II volume is expensive to turn into an accessibility-ready map.
+# Volumes requested by time that are not in a radar's retained history are
+# kept compactly here so they are analyzed once.  They are never tracked.
+_historical_scans: OrderedDict[tuple[str, str], CompactScan] = OrderedDict()
+_max_historical_scans = int(os.getenv("ARW_MAX_HISTORICAL_SCANS", "12"))
+_map_layers = RenderedLayerCache(
+    max_unpinned_scans=int(os.getenv("ARW_MAX_RENDERED_SCANS", "10"))
+)
 _refreshing_sites: set[str] = set()
 _refresh_started_at: dict[str, datetime] = {}
 _refresh_errors: dict[str, str] = {}
@@ -87,16 +95,6 @@ _site_ingest_locks: dict[str, RLock] = {}
 # different site's slow Level II ingest/tracker update.
 _map_build_lock = RLock()
 _refresh_interval_seconds = int(os.getenv("ARW_REFRESH_INTERVAL_SECONDS", "120"))
-# Keep enough processed volumes for a current map and a short continuity
-# window, but never let interactive exploration turn the service into an
-# unbounded raw-array archive.  Downloaded Level II files remain in cache/;
-# this limits only re-creatable in-memory analysis products.
-_processed_scans_per_site = int(os.getenv("ARW_PROCESSED_SCANS_PER_SITE", "2"))
-_max_processed_scans = int(os.getenv("ARW_MAX_PROCESSED_SCANS", "12"))
-# Continuity tracking compares adjacent scans only.  Bound the replay buffer
-# separately from processed-scan caching because each buffered detected object
-# owns a full radar-grid mask.
-_replay_scans_per_site = max(2, int(os.getenv("ARW_REPLAY_SCANS_PER_SITE", "2")))
 _refresh_executor = ThreadPoolExecutor(
     max_workers=max(1, int(os.getenv("ARW_REFRESH_WORKERS", "2"))),
     thread_name_prefix="arw-radar",
@@ -150,19 +148,14 @@ def _site_ingest_lock(site_id: str) -> RLock:
         return _site_ingest_locks.setdefault(normalized_site, RLock())
 
 
-def _site_buffer(site_id: str) -> ReplayBuffer:
-    normalized_site = site_id.upper()
-    with _state_lock:
-        return _buffers.setdefault(
-            normalized_site,
-            ReplayBuffer(max_scans=_replay_scans_per_site),
-        )
-
-
 def _site_tracker(site_id: str) -> StormTracker:
-    normalized_site = site_id.upper()
-    with _state_lock:
-        return _trackers.setdefault(normalized_site, StormTracker())
+    with _histories.use(site_id) as history:
+        return history.tracker
+
+
+def _newest_live_scan(site_id: str) -> CompactScan | None:
+    with _histories.use(site_id) as history:
+        return history.newest()
 
 
 def _parse_datetime(dt_str: str | None) -> datetime | None:
@@ -362,50 +355,20 @@ def _process_scan_file(site_id: str, filepath: str) -> BufferedScan:
     return buffered
 
 
-def _track_live_scan(site_id: str, buffered: BufferedScan) -> None:
-    """Advance a site's live tracker with its newest volume.
+def _track_live_scan(site_id: str, buffered: BufferedScan) -> CompactScan | None:
+    """Track and retain a site's newest live volume.
 
-    Only a volume newer than the last one tracked is accepted.  Tracking an
-    older volume would make the tracker see a negative time gap and discard
-    every live track for the site.
+    Returns None for a volume that is not newer than the newest retained
+    scan; such a volume is never tracked (tracking an older volume would
+    reset every live track for the site).
     """
-    tracker = _site_tracker(site_id)
-    last_tracked = tracker.last_scan_timestamp
-    if last_tracked is not None and buffered.timestamp <= last_tracked:
-        return
-    _site_buffer(site_id).add_scan(buffered)
-    tracker.update(buffered)
-    for obj in buffered.detected_objects:
-        obj.temporal_status = tracker.temporal_status_for_current_object(obj.object_id)
-    buffered.tracking = tracker.snapshot()
+    with _histories.use(site_id) as history:
+        return history.add_live_scan(buffered)
 
 
 def _scan_tracking(buffered) -> TrackingSnapshot | None:
     tracking = getattr(buffered, "tracking", None)
     return tracking if isinstance(tracking, TrackingSnapshot) else None
-
-
-def _remember_processed_scan(
-    cache_key: tuple[str, str], buffered: BufferedScan
-) -> None:
-    """Store a completed scan under explicit per-site and global bounds."""
-    with _state_lock:
-        _processed_scans[cache_key] = buffered
-        _processed_scans.move_to_end(cache_key)
-
-        def discard(key: tuple[str, str]) -> None:
-            _processed_scans.pop(key, None)
-            # Detailed GeoJSON can be much larger than the compact live
-            # layer, so discard it with the source scan rather than leaving
-            # an orphaned memory cache behind.
-            _map_layers.pop(key, None)
-
-        site_keys = [key for key in _processed_scans if key[0] == cache_key[0]]
-        while len(site_keys) > max(1, _processed_scans_per_site):
-            discard(site_keys.pop(0))
-        while len(_processed_scans) > max(1, _max_processed_scans):
-            oldest_key = next(iter(_processed_scans))
-            discard(oldest_key)
 
 
 def _map_layer_cache_key(buffered: BufferedScan) -> tuple[str, str] | None:
@@ -429,8 +392,7 @@ def _prepared_map_layers(
     cache_key = _map_layer_cache_key(buffered)
     cached: dict[str, dict] | None = None
     if cache_key is not None:
-        with _state_lock:
-            cached = _map_layers.get(cache_key)
+        cached = _map_layers.get(cache_key)
         if cached is not None and requested_layers.issubset(cached):
             return {name: cached[name] for name in requested_layers}
 
@@ -439,8 +401,7 @@ def _prepared_map_layers(
     # parsed and tracked.
     with _map_build_lock:
         if cache_key is not None:
-            with _state_lock:
-                cached = _map_layers.get(cache_key)
+            cached = _map_layers.get(cache_key)
             if cached is not None and requested_layers.issubset(cached):
                 return {name: cached[name] for name in requested_layers}
         layers = dict(cached or {})
@@ -453,69 +414,95 @@ def _prepared_map_layers(
         if "centroids" in requested_layers and "centroids" not in layers:
             layers["centroids"] = build_storm_centroid_geojson(buffered)
         if cache_key is not None:
-            with _state_lock:
-                _map_layers[cache_key] = layers
+            _map_layers.put(cache_key, layers, pinned=_is_newest_retained(buffered))
         return {name: layers[name] for name in requested_layers}
+
+
+def _is_newest_retained(buffered) -> bool:
+    source_path = getattr(buffered, "source_path", None)
+    newest = _newest_live_scan(buffered.site_id)
+    return newest is not None and source_path is not None and newest.source_path == source_path
 
 
 def _prepared_precipitation_layer(buffered: BufferedScan) -> dict:
     """Build the much larger whole-field layer only when it is requested."""
     cache_key = _map_layer_cache_key(buffered)
     if cache_key is not None:
-        with _state_lock:
-            cached = _map_layers.get(cache_key, {}).get("precipitation")
+        cached = (_map_layers.get(cache_key) or {}).get("precipitation")
         if cached is not None:
             return cached
 
     with _map_build_lock:
         if cache_key is not None:
-            with _state_lock:
-                cached = _map_layers.get(cache_key, {}).get("precipitation")
+            cached = (_map_layers.get(cache_key) or {}).get("precipitation")
             if cached is not None:
                 return cached
         precipitation = build_precipitation_field_geojson(buffered)
         if cache_key is not None:
-            with _state_lock:
-                _map_layers.setdefault(cache_key, {})["precipitation"] = precipitation
+            layers = dict(_map_layers.get(cache_key) or {})
+            layers["precipitation"] = precipitation
+            _map_layers.put(cache_key, layers, pinned=_is_newest_retained(buffered))
         return precipitation
 
 
-def _ingest_to_buffer(
-    site_id: str, dt: datetime | None = None, *, publish_live: bool = True,
-) -> BufferedScan:
+def _source_key(filepath: str) -> str | None:
+    """Identity of a real downloaded volume.  Test doubles are never shared."""
+    path = Path(filepath)
+    return str(path.resolve()) if path.is_file() else None
+
+
+def _remember_historical_scan(key: tuple[str, str], compact: CompactScan) -> None:
+    with _state_lock:
+        _historical_scans[key] = compact
+        _historical_scans.move_to_end(key)
+        while len(_historical_scans) > max(1, _max_historical_scans):
+            _historical_scans.popitem(last=False)
+
+
+def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
     """Return a completed interpretation, analyzing each local volume once.
 
-    One site is single-flight so duplicate requests share one result, while
-    different sites can download and analyze independently.
+    A time that exactly matches a retained scan is served from the ring with
+    no network call.  Only a live request (dt is None) for a volume newer
+    than the newest retained one advances tracking.  Everything else is the
+    historical path: analyzed once, cached compactly, never tracked.  One
+    site is single-flight, while different sites ingest independently.
     """
     normalized_site = site_id.upper()
+    if dt is not None:
+        with _histories.use(normalized_site) as history:
+            retained = history.find_by_timestamp(dt)
+        if retained is not None:
+            return retained.to_buffered_scan()
+
     with _site_ingest_lock(normalized_site):
         filepath = fetch_scan(normalized_site, dt)
-        cache_key = (normalized_site, str(Path(filepath).resolve()))
-        # Test doubles do not point to files.  Requiring a real file here
-        # prevents one mocked scan from leaking into a later test/request.
-        if Path(filepath).is_file():
+        source_key = _source_key(filepath)
+        historical: CompactScan | None = None
+        if source_key is not None:
+            with _histories.use(normalized_site) as history:
+                retained = history.find_by_source(source_key)
+            if retained is not None:
+                return retained.to_buffered_scan()
             with _state_lock:
-                cached = _processed_scans.get(cache_key)
-            if cached is not None:
-                with _state_lock:
-                    _processed_scans.move_to_end(cache_key)
-                if dt is None:
-                    if cached.tracking is None:
-                        _track_live_scan(normalized_site, cached)
-                    with _state_lock:
-                        if publish_live:
-                            _live_scans[normalized_site] = cached
-                return cached
+                historical = _historical_scans.get((normalized_site, source_key))
+                if historical is not None:
+                    _historical_scans.move_to_end((normalized_site, source_key))
 
-        buffered = _process_scan_file(normalized_site, filepath)
-        if dt is None:
-            _track_live_scan(normalized_site, buffered)
-        if Path(filepath).is_file():
-            _remember_processed_scan(cache_key, buffered)
-            with _state_lock:
-                if dt is None and publish_live:
-                    _live_scans[normalized_site] = buffered
+        buffered = (
+            historical.to_buffered_scan()
+            if historical is not None
+            else _process_scan_file(normalized_site, filepath)
+        )
+        if dt is None and _track_live_scan(normalized_site, buffered) is not None:
+            if source_key is not None:
+                with _state_lock:
+                    _historical_scans.pop((normalized_site, source_key), None)
+            return buffered
+        if source_key is not None and historical is None:
+            _remember_historical_scan(
+                (normalized_site, source_key), CompactScan.from_buffered_scan(buffered)
+            )
         return buffered
 
 
@@ -523,9 +510,8 @@ def _refresh_live_scan(site_id: str) -> None:
     """Refresh a live site off the request path; errors leave prior data live."""
     normalized_site = site_id.upper()
     try:
-        buffered = _ingest_to_buffer(normalized_site, publish_live=False)
+        _ingest_to_buffer(normalized_site)
         with _state_lock:
-            _live_scans[normalized_site] = buffered
             _refresh_errors.pop(normalized_site, None)
     except Exception as exc:  # pragma: no cover - exercised by deployment failures
         _logger.exception("Unable to refresh live radar scan for %s", normalized_site)
@@ -592,11 +578,10 @@ def _live_or_ingest(site_id: str, dt: datetime | None = None) -> tuple[BufferedS
     normalized_site = site_id.upper()
     if dt is not None:
         return _ingest_to_buffer(normalized_site, dt), False
-    with _state_lock:
-        completed = _live_scans.get(normalized_site)
-    if completed is None:
+    newest = _newest_live_scan(normalized_site)
+    if newest is None:
         return _ingest_to_buffer(normalized_site), False
-    return completed, _schedule_live_refresh(normalized_site)
+    return newest.to_buffered_scan(), _schedule_live_refresh(normalized_site)
 
 
 def _live_scan_state(site_id: str) -> str:
@@ -915,12 +900,12 @@ def radar_config():
 def get_live_scan_status(site_id: str):
     """Report whether a completed live interpretation is ready or updating."""
     normalized_site = site_id.upper()
+    completed = _newest_live_scan(normalized_site)
     with _state_lock:
-        completed = _live_scans.get(normalized_site)
         refresh_started = _refresh_started_at.get(normalized_site)
         error = _refresh_errors.get(normalized_site)
         refreshing = normalized_site in _refreshing_sites
-    timestamp = None if completed is None else completed.reflectivity_data.timestamp
+    timestamp = None if completed is None else completed.scan_timestamp_text
     return {
         "site_id": normalized_site,
         "available": completed is not None,
@@ -979,11 +964,11 @@ def get_map_status(
     # otherwise each successful poll would start another acquisition and could
     # never become ready.
     queued = _schedule_live_refresh(site_id, force=True) if refresh else False
+    completed = _newest_live_scan(site_id)
     with _state_lock:
-        completed = _live_scans.get(site_id)
         refreshing = site_id in _refreshing_sites
         error = _refresh_errors.get(site_id)
-    timestamp = None if completed is None else completed.reflectivity_data.timestamp
+    timestamp = None if completed is None else completed.scan_timestamp_text
     return {
         "site_id": site_id,
         "location": {"latitude": lat, "longitude": lon, "label": label},
@@ -1279,7 +1264,8 @@ def get_velocity(site_id: str, datetime: str | None = Query(None)):
 
 @app.get("/motion/{site_id}/{track_id}", response_model=TrackDetailResponse)
 def get_motion(site_id: str, track_id: int):
-    track = _site_tracker(site_id).get_track(track_id)
+    with _histories.use(site_id) as history:
+        track = deepcopy(history.tracker.get_track(track_id))
     if track is None:
         raise HTTPException(status_code=404, detail=f"Track {track_id} not found")
     motion = track.get_motion()
