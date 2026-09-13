@@ -8,7 +8,6 @@ evidence, tracking snapshot).  Dual-pol grids are never kept; precipitation
 evidence is precomputed during processing (spec Amendment 1, A1).
 """
 
-from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import zlib
@@ -27,6 +26,7 @@ from src.history.codec import (
     encode_raw,
     encode_stepped,
 )
+from src.label_masks import LabelMaskView  # re-exported for history callers
 from src.parser import SweepData
 
 SCHEMA_VERSION = 1
@@ -37,30 +37,6 @@ def timestamp_key(value: datetime) -> datetime:
     if value.tzinfo is not None:
         return value.astimezone(timezone.utc).replace(tzinfo=None)
     return value
-
-
-class LabelMaskView(Mapping):
-    """Object masks derived on demand from one label grid.
-
-    Replaces a dict of full-grid boolean masks (one per object) without
-    holding any of them: each lookup computes `labels == object_id`.
-    """
-
-    def __init__(self, labels: np.ndarray, object_ids):
-        self._labels = labels
-        self._object_ids = tuple(int(object_id) for object_id in object_ids)
-        self._id_set = frozenset(self._object_ids)
-
-    def __getitem__(self, object_id) -> np.ndarray:
-        if object_id not in self._id_set:
-            raise KeyError(object_id)
-        return self._labels == object_id
-
-    def __iter__(self):
-        return iter(self._object_ids)
-
-    def __len__(self) -> int:
-        return len(self._object_ids)
 
 
 def verify_label_masks(scan: BufferedScan) -> None:

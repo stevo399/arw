@@ -18,6 +18,7 @@ from src.tracking.motion_field import (
     estimate_scan_geographic_motion_field,
     predict_latlon_position,
 )
+from src.tracking.alignment import align_scan_to
 from src.tracking.segmentation import segment_buffered_scan
 from src.tracking.types import AssociationScore, Track
 
@@ -226,6 +227,8 @@ def associate_tracks(
         result.unmatched_new_ids = {obj.object_id for obj in current_scan.detected_objects}
         return result
 
+    # Beam 0 points a different way in every volume; compare by true azimuth.
+    previous_scan = align_scan_to(previous_scan, current_scan)
     previous_segmentation = segment_buffered_scan(previous_scan)
     current_segmentation = segment_buffered_scan(current_scan)
     geo_motion = estimate_scan_geographic_motion_field(previous_scan, current_scan)
@@ -447,7 +450,8 @@ def _reacquire_missing_tracks(
             result.unreacquirable_track_ids.add(track.track_id)
             continue
         if seen_at not in seen_scans:
-            seen_scans[seen_at] = reacquisition_loader(seen_at)
+            loaded = reacquisition_loader(seen_at)
+            seen_scans[seen_at] = align_scan_to(loaded, current_scan) if loaded is not None else None
         seen_scan = seen_scans[seen_at]
         prev_mask = seen_scan.object_masks.get(seen_object_id) if seen_scan is not None else None
         if prev_mask is None:
