@@ -123,3 +123,9 @@ def test_nearby_velocity_is_the_vector_median_of_other_storms_within_60_km():
     accepted = {2: (20.0, 4.0), 3: (24.0, 8.0), 4: (22.0, 6.0), 5: (-50.0, -50.0)}
     assert nearby_velocity(1, accepted, centres) == (22.0, 6.0)
     assert nearby_velocity(5, {1: (1.0, 1.0)}, {1: (35.5, -97.0), 5: (38.0, -97.0)}) is None
+
+
+def test_guard_drops_a_match_faster_than_the_search_limit_in_any_direction():
+    # 144 km/h east and 123 km/h north each fit a square search window; together 189 km/h does not.
+    accepted = guard_matches({1: _match(144.0, 123.0), 2: _match(100.0, 0.0)}, {1: (35.5, -97.0), 2: (38.0, -97.0)})
+    assert set(accepted) == {2}

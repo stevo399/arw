@@ -24,6 +24,9 @@ KM_PER_MILE = 1.60934
 # the measured speed of a motionless storm under that noise
 # (docs/test_reports/2026-09-13-pattern-motion-evaluation.md).
 NEARLY_STATIONARY_KMH = 6.0
+# A velocity measured longer ago than this is not the storm's current motion;
+# the same limit as tracking continuity (src.tracker.MAX_TEMPORAL_CONTINUITY_MINUTES).
+MAX_MEASUREMENT_AGE_MINUTES = 20.0
 MIN_HEADING_CHECK_SPEED_KMH = 5.0
 MAX_STEP_HEADING_DELTA_DEG = 90.0
 
@@ -122,6 +125,7 @@ def report_motion(
     position_count: int,
     measured: list[VelocitySample],
     nearby: tuple[float, float] | None,
+    now: datetime,
 ) -> MotionVector:
     """The motion a storm reports, by the first rule that applies.
 
@@ -131,8 +135,13 @@ def report_motion(
        seen once always takes this rule: nearby storms' motion predicted its
        next position better than its own first measurement.
     3. Otherwise motion is unknown.
+
+    Velocities measured more than 20 minutes before `now` are ignored.
     """
-    recent = measured[-MAX_MEASURED_VELOCITIES:]
+    recent = [
+        sample for sample in measured[-MAX_MEASURED_VELOCITIES:]
+        if (now - sample.timestamp).total_seconds() <= MAX_MEASUREMENT_AGE_MINUTES * 60.0
+    ]
     if position_count >= 2 and recent:
         east = float(np.median([sample.east_kmh for sample in recent]))
         north = float(np.median([sample.north_kmh for sample in recent]))

@@ -167,14 +167,16 @@ def guard_matches(
 ) -> dict[int, tuple[float, float]]:
     """Accepted (east, north) km/h velocities by track id.
 
-    A peak on the search edge is not a match.  A storm with at least three
+    A peak on the search edge, or faster than the search speed limit, is not a
+    match.  A storm with at least three
     other matches within 60 km is rejected when its velocity departs from their
     vector median by more than 25 km/h.
     """
     candidates = {
         track_id: (match.east_kmh, match.north_kmh)
         for track_id, match in matches.items()
-        if not match.at_edge
+        # The search window is square, so its corners reach beyond the speed limit.
+        if not match.at_edge and math.hypot(match.east_kmh, match.north_kmh) <= MAX_MATCH_SPEED_KMH
     }
     accepted: dict[int, tuple[float, float]] = {}
     for track_id, velocity in candidates.items():

@@ -164,7 +164,7 @@ def test_associate_tracks_moves_the_previous_outline_by_the_tracks_measured_moti
     track = tracker.get_track(1)
     track.positions.append(track.positions[0])
     track.measured_velocities = [VelocitySample(timestamp=t1, east_kmh=(x1 - x0) / hours, north_kmh=(y1 - y0) / hours)]
-    track.last_motion = report_motion(position_count=2, measured=track.measured_velocities, nearby=None)
+    track.last_motion = report_motion(position_count=2, measured=track.measured_velocities, nearby=None, now=t1)
 
     result = associate_tracks(scan1, scan2, tracker.all_tracks, tracker._obj_to_track)
 

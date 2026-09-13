@@ -407,6 +407,7 @@ class StormTracker:
                 position_count=len(track.positions),
                 measured=track.measured_velocities,
                 nearby=nearby_velocity(track.track_id, accepted, centres),
+                now=scan.timestamp,
             )
             track.last_motion = motion
             track.motion_confidence = motion.confidence
