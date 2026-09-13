@@ -23,7 +23,16 @@
         "scan": "KTLX20260410_225805_V06",
         "objects": 49,
         "active_tracks": 49,
-        "reacquired": []
+        "reacquired": [
+          {
+            "event_type": "reacquired",
+            "timestamp": "2026-04-10T22:58:05+00:00",
+            "description": "Track 39 reacquired after 1 missed scan",
+            "involved_track_ids": [
+              39
+            ]
+          }
+        ]
       },
       {
         "scan": "KTLX20260410_230332_V06",
@@ -44,40 +53,40 @@
         "reacquired": []
       }
     ],
-    "first_reacquisition_divergence": null
+    "first_reacquisition_divergence": 3
   },
   "memory": {
     "compact_scan_bytes": [
       280228,
-      279870,
-      279037,
-      279791,
-      278034,
+      280210,
+      279469,
+      280590,
+      278987,
       148491,
-      148986,
-      150755,
-      151766,
-      149830
+      149015,
+      150732,
+      151707,
+      149788
     ],
-    "retained_compact_bytes": 2146788,
-    "compact_limit_bytes": 3082508.0000000005,
+    "retained_compact_bytes": 2149217,
+    "compact_limit_bytes": 3086490.0000000005,
     "rendered_scan_bytes": [
       6688865,
-      6520846,
-      6162323,
-      6035532,
-      5866018,
+      6520753,
+      6162278,
+      6035256,
+      5866156,
       140978,
       142953,
       172984,
       215341,
       162861
     ],
-    "retained_rendered_bytes": 32108891,
+    "retained_rendered_bytes": 32108615,
     "rendered_limit_bytes": 88293018.0,
     "old_pipeline_largest_scan_array_bytes": 98928000,
     "old_pipeline_two_scans_two_radars_bytes": 395712000,
-    "transient_peak_traced_bytes": 546272236,
+    "transient_peak_traced_bytes": 546269820,
     "retained_full_grids": []
   },
   "restart": {

@@ -36,13 +36,19 @@ window 2026-04-10 22:42:09Z to 23:14:07Z.
   the synthetic tests only** (`tests/unit/test_tracking_reacquisition.py`, 14 tests), not yet by
   an observed real-data reacquisition. (Real-data reacquisitions were surveyed on 2026-09-13; see
   section 7c.)
+- **Rerun after azimuth alignment (2026-09-13, section 7c):** the reacquiring history now reacquires
+  track 39 at 22:58:05 after one missed scan. Its snapshots are identical to the retained-scan
+  tracker through 22:52:55 and differ from 22:58:05 on; the proof asserts that the first difference
+  is a scan with a reacquisition. The history without reacquisition remains byte-identical at every
+  scan. Retained memory figures in section 3 are unchanged by the rerun (2.15 MB history, 32.1 MB
+  rendered, 546 MB peak).
 
 | Scan | Objects | Active tracks | Reacquired |
 |---|---|---|---|
 | 22:42:09 | 63 | 63 (was 63) | none |
 | 22:47:37 | 53 | 53 (was 50) | none |
 | 22:52:55 | 51 | 51 (was 49) | none |
-| 22:58:05 | 49 | 49 (was 47) | none |
+| 22:58:05 | 49 | 49 (was 47) | track 39 (after alignment) |
 | 23:03:32 | 50 | 50 (was 48) | none |
 | 23:08:50 | 61 | 61 (was 57) | none |
 | 23:14:07 | 57 | 57 (was 54) | none |
