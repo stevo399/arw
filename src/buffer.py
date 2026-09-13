@@ -12,6 +12,19 @@ from src.velocity import VelocityRegion, RotationSignature
 
 
 @dataclass
+class TrackingSnapshot:
+    """Tracker state as it stood immediately after one scan was tracked.
+
+    Served with that scan, so a scan is never described with tracks from a
+    later scan.  `active_tracks` holds deep copies of `Track` objects (typed
+    loosely to avoid importing the tracker here).
+    """
+    active_tracks: list[Any]
+    recent_events: list[dict]
+    continuity_rebuilt: bool = False
+
+
+@dataclass
 class BufferedScan:
     """A single scan stored in the replay buffer."""
     timestamp: datetime
@@ -37,6 +50,9 @@ class BufferedScan:
     # dual-pol grids still exist.  The live pipeline releases those grids
     # before the precipitation layer is rendered.
     precipitation_band_evidence: dict[tuple[float, float], dict[str, Any]] | None = None
+    # Set only when the live tracker tracked this scan.  None means the scan
+    # came from the historical path and has no tracking context.
+    tracking: TrackingSnapshot | None = None
 
 
 class ReplayBuffer:

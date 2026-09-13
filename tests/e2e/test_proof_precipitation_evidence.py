@@ -44,14 +44,6 @@ def _first_difference(actual: dict, expected: dict) -> str | None:
     return "layer metadata differs"
 
 
-@pytest.fixture(autouse=True)
-def _clean_server_state():
-    yield
-    with server._state_lock:
-        server._buffers.clear()
-        server._trackers.clear()
-
-
 @pytest.mark.parametrize("site_id,path", VOLUMES)
 def test_precipitation_evidence_survives_dual_pol_release(monkeypatch, site_id, path):
     captured = {}

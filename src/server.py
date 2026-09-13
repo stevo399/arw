@@ -37,7 +37,7 @@ from src.map_layer import (
     storm_layer_drawing_info,
     storm_layer_fields,
 )
-from src.buffer import ReplayBuffer, BufferedScan
+from src.buffer import ReplayBuffer, BufferedScan, TrackingSnapshot
 from src.radar_page import radar_page_html
 from src.tracker import StormTracker
 
@@ -262,7 +262,11 @@ def _velocity_aligned_to_reflectivity(
 
 
 def _process_scan_file(site_id: str, filepath: str) -> BufferedScan:
-    """Run the full analysis pipeline for one already-selected volume."""
+    """Run the analysis pipeline for one already-selected volume.
+
+    Analysis only: this never touches tracking state.  The live path decides
+    separately whether the result advances the site's tracker.
+    """
     radar = parse_radar_file(
         filepath,
         scans=LIVE_MAP_SCAN_INDICES,
@@ -329,11 +333,6 @@ def _process_scan_file(site_id: str, filepath: str) -> BufferedScan:
         rotation_signatures=rotations,
         echo_advisory=echo_advisory,
     )
-    tracker = _site_tracker(site_id)
-    _site_buffer(site_id).add_scan(buffered)
-    tracker.update(buffered)
-    for obj in annotated_objects:
-        obj.temporal_status = tracker.temporal_status_for_current_object(obj.object_id)
     ref_data, scan_quality, echo_advisory = refresh_quality_advisory(
         ref_data, scan_quality, rotations, velocity=lowest_velocity,
     )
@@ -361,6 +360,29 @@ def _process_scan_file(site_id: str, filepath: str) -> BufferedScan:
     buffered.echo_advisory = None
     buffered.precipitation_band_evidence = precipitation_band_evidence
     return buffered
+
+
+def _track_live_scan(site_id: str, buffered: BufferedScan) -> None:
+    """Advance a site's live tracker with its newest volume.
+
+    Only a volume newer than the last one tracked is accepted.  Tracking an
+    older volume would make the tracker see a negative time gap and discard
+    every live track for the site.
+    """
+    tracker = _site_tracker(site_id)
+    last_tracked = tracker.last_scan_timestamp
+    if last_tracked is not None and buffered.timestamp <= last_tracked:
+        return
+    _site_buffer(site_id).add_scan(buffered)
+    tracker.update(buffered)
+    for obj in buffered.detected_objects:
+        obj.temporal_status = tracker.temporal_status_for_current_object(obj.object_id)
+    buffered.tracking = tracker.snapshot()
+
+
+def _scan_tracking(buffered) -> TrackingSnapshot | None:
+    tracking = getattr(buffered, "tracking", None)
+    return tracking if isinstance(tracking, TrackingSnapshot) else None
 
 
 def _remember_processed_scan(
@@ -479,12 +501,16 @@ def _ingest_to_buffer(
                 with _state_lock:
                     _processed_scans.move_to_end(cache_key)
                 if dt is None:
+                    if cached.tracking is None:
+                        _track_live_scan(normalized_site, cached)
                     with _state_lock:
                         if publish_live:
                             _live_scans[normalized_site] = cached
                 return cached
 
         buffered = _process_scan_file(normalized_site, filepath)
+        if dt is None:
+            _track_live_scan(normalized_site, buffered)
         if Path(filepath).is_file():
             _remember_processed_scan(cache_key, buffered)
             with _state_lock:
@@ -1157,18 +1183,20 @@ def get_summary(site_id: str, datetime: str | None = Query(None)):
     dt = _parse_datetime(datetime)
     buffered, _ = _live_or_ingest(site_id, dt)
     site_name = _find_site_name(site_id)
+    tracking = _scan_tracking(buffered)
     text = generate_summary(
         site_id=site_id.upper(),
         site_name=site_name,
         timestamp=buffered.reflectivity_data.timestamp,
         objects=buffered.detected_objects,
-        tracks=_site_tracker(site_id).active_tracks,
-        events=_site_tracker(site_id).recent_events,
+        tracks=tracking.active_tracks if tracking is not None else [],
+        events=tracking.recent_events if tracking is not None else [],
     )
     return SummaryResponse(
         site_id=site_id.upper(),
         timestamp=buffered.reflectivity_data.timestamp,
         text=text,
+        tracking_context="tracked" if tracking is not None else "unavailable",
     )
 
 
@@ -1176,13 +1204,14 @@ def get_summary(site_id: str, datetime: str | None = Query(None)):
 def get_tracks(site_id: str, datetime: str | None = Query(None)):
     dt = _parse_datetime(datetime)
     buffered, _ = _live_or_ingest(site_id, dt)
-    tracker = _site_tracker(site_id)
-    active = tracker.active_tracks
-    events = tracker.recent_events
+    tracking = _scan_tracking(buffered)
+    active = tracking.active_tracks if tracking is not None else []
+    events = tracking.recent_events if tracking is not None else []
     return TracksResponse(
         site_id=site_id.upper(),
         timestamp=buffered.reflectivity_data.timestamp,
         active_count=len(active),
+        tracking_context="tracked" if tracking is not None else "unavailable",
         tracks=[_track_to_model(t) for t in active],
         recent_events=[
             TrackEvent(

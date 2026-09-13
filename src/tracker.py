@@ -1,5 +1,6 @@
+from copy import deepcopy
 from datetime import datetime
-from src.buffer import BufferedScan
+from src.buffer import BufferedScan, TrackingSnapshot
 from src.detection import DetectedObject
 from src.motion import resolve_reported_motion, MotionVector, recent_heading_flip_count
 from src.tracking.motion import MotionContinuityContext
@@ -679,6 +680,18 @@ class StormTracker:
     @property
     def recent_events(self) -> list[dict]:
         return list(self._recent_events)
+
+    @property
+    def last_scan_timestamp(self) -> datetime | None:
+        """Timestamp of the most recent scan this tracker processed."""
+        return self._prev_scan.timestamp if self._prev_scan is not None else None
+
+    def snapshot(self) -> TrackingSnapshot:
+        """Deep copy of the state a consumer needs to describe the latest scan."""
+        return TrackingSnapshot(
+            active_tracks=deepcopy(self.active_tracks),
+            recent_events=deepcopy(self._recent_events),
+        )
 
     def get_track(self, track_id: int) -> Track | None:
         for t in self._tracks:

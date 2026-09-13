@@ -95,6 +95,7 @@ def test_different_sites_can_ingest_concurrently(monkeypatch):
         return SimpleNamespace(site_id=site_id)
 
     monkeypatch.setattr(server, "_process_scan_file", slow_process)
+    monkeypatch.setattr(server, "_track_live_scan", lambda *_args: None)
     workers = [
         Thread(target=server._ingest_to_buffer, args=(site_id,))
         for site_id in ("KIWA", "KMLB")
@@ -290,4 +291,98 @@ def test_completed_map_layer_does_not_wait_for_another_site_ingest(tmp_path):
     finally:
         other_site_lock.release()
         worker.join(timeout=1)
+        _clear_live_state()
+
+
+from datetime import datetime, timedelta
+
+from fastapi.testclient import TestClient
+
+from tests.unit.test_tracker import _make_object, _make_scan
+
+T0 = datetime(2026, 9, 12, 18, 0)
+
+
+def _scripted_site(monkeypatch, scans_by_path, live_paths):
+    live_order = iter(live_paths)
+    monkeypatch.setattr(
+        server,
+        "fetch_scan",
+        lambda site_id, dt=None: "/old" if dt is not None else next(live_order),
+    )
+    monkeypatch.setattr(server, "_process_scan_file", lambda site_id, path: scans_by_path[path])
+
+
+def _two_live_one_old():
+    return {
+        "/live-1": _make_scan("KTLX", T0, [_make_object(1, 35.3, -97.3)]),
+        "/live-2": _make_scan("KTLX", T0 + timedelta(minutes=5), [_make_object(1, 35.3, -97.3)]),
+        "/old": _make_scan("KTLX", T0 - timedelta(hours=1), [_make_object(1, 35.0, -98.0)]),
+    }
+
+
+def test_historical_request_never_advances_or_resets_live_tracking(monkeypatch):
+    _clear_live_state()
+    _scripted_site(monkeypatch, _two_live_one_old(), ["/live-1", "/live-2"])
+    try:
+        server._ingest_to_buffer("KTLX")
+        server._ingest_to_buffer("KTLX")
+        tracker = server._site_tracker("KTLX")
+        live_state = [(track.track_id, len(track.positions)) for track in tracker.active_tracks]
+        assert live_state == [(1, 2)]
+
+        old = server._ingest_to_buffer("KTLX", T0 - timedelta(hours=1))
+
+        assert old.tracking is None
+        assert [(t.track_id, len(t.positions)) for t in tracker.active_tracks] == live_state
+        assert tracker.last_scan_timestamp == T0 + timedelta(minutes=5)
+    finally:
+        _clear_live_state()
+
+
+def test_live_volume_older_than_the_tracked_one_is_not_tracked(monkeypatch):
+    _clear_live_state()
+    scans = _two_live_one_old()
+    _scripted_site(monkeypatch, scans, ["/live-2", "/live-1"])
+    try:
+        server._ingest_to_buffer("KTLX")
+        stale_live = server._ingest_to_buffer("KTLX")
+        assert stale_live.tracking is None
+        assert server._site_tracker("KTLX").last_scan_timestamp == T0 + timedelta(minutes=5)
+    finally:
+        _clear_live_state()
+
+
+def test_tracks_for_an_older_scan_come_from_that_scan(monkeypatch):
+    _clear_live_state()
+    _scripted_site(monkeypatch, _two_live_one_old(), ["/live-1", "/live-2"])
+    try:
+        first = server._ingest_to_buffer("KTLX")
+        server._ingest_to_buffer("KTLX")
+        monkeypatch.setattr(server, "_live_or_ingest", lambda site_id, dt=None: (first, False))
+
+        data = TestClient(server.app).get(
+            "/tracks/KTLX", params={"datetime": "2026-09-12T18:00:00"}
+        ).json()
+
+        assert data["tracking_context"] == "tracked"
+        assert [len(track["positions"]) for track in data["tracks"]] == [1]
+    finally:
+        _clear_live_state()
+
+
+def test_untracked_scan_reports_no_tracks_and_unavailable_context(monkeypatch):
+    _clear_live_state()
+    untracked = _make_scan("KTLX", T0 - timedelta(hours=1), [_make_object(1, 35.0, -98.0)])
+    monkeypatch.setattr(server, "_live_or_ingest", lambda site_id, dt=None: (untracked, False))
+    try:
+        client = TestClient(server.app)
+        tracks = client.get("/tracks/KTLX", params={"datetime": "2026-09-12T17:00:00"}).json()
+        summary = client.get("/summary/KTLX", params={"datetime": "2026-09-12T17:00:00"}).json()
+
+        assert tracks["tracking_context"] == "unavailable"
+        assert tracks["tracks"] == []
+        assert tracks["recent_events"] == []
+        assert summary["tracking_context"] == "unavailable"
+    finally:
         _clear_live_state()

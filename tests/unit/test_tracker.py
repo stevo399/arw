@@ -499,3 +499,23 @@ def test_tracker_lineage_persists_after_followup_scan():
     assert child is not None
     assert parent.track_id in child.parent_track_ids
 
+
+
+def test_snapshot_is_independent_of_later_tracker_updates():
+    tracker = StormTracker()
+    t1 = datetime(2026, 9, 12, 18, 0)
+    tracker.update(_make_scan("KTLX", t1, [_make_object(1, 35.3, -97.3)]))
+    snapshot = tracker.snapshot()
+    tracker.update(_make_scan("KTLX", t1 + timedelta(minutes=5), [_make_object(1, 35.3, -97.3)]))
+
+    assert [len(track.positions) for track in snapshot.active_tracks] == [1]
+    assert [len(track.positions) for track in tracker.active_tracks] == [2]
+    assert snapshot.continuity_rebuilt is False
+
+
+def test_last_scan_timestamp_follows_updates():
+    tracker = StormTracker()
+    assert tracker.last_scan_timestamp is None
+    t1 = datetime(2026, 9, 12, 18, 0)
+    tracker.update(_make_scan("KTLX", t1, [_make_object(1, 35.3, -97.3)]))
+    assert tracker.last_scan_timestamp == t1

@@ -108,6 +108,9 @@ class SummaryResponse(BaseModel):
     site_id: str
     timestamp: str
     text: str
+    # "tracked": served with the tracker state from this scan's own time.
+    # "unavailable": a historical scan the live tracker never processed.
+    tracking_context: str = "unavailable"
 
 
 class TrackPosition(BaseModel):
@@ -192,6 +195,9 @@ class TracksResponse(BaseModel):
     active_count: int
     tracks: list[StormTrack]
     recent_events: list[TrackEvent]
+    # "tracked": served with the tracker state from this scan's own time.
+    # "unavailable": a historical scan the live tracker never processed.
+    tracking_context: str = "unavailable"
 
 
 class TrackDetailResponse(BaseModel):
