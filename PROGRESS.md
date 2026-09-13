@@ -151,15 +151,44 @@
   had RhoHV; a request for 01:53:30Z returned `unavailable` and left the 43 live tracks unchanged;
   the next live scan (02:58:15Z) continued 29 of 49 tracks with 2+ positions.
 
+## Compact scan history (2026-09-12) -- branch `radar-history`
+- Report with every measurement: `docs/test_reports/2026-09-12-compact-scan-history.md`
+- Implemented: lossless compact scans (~150-285 KB vs ~99-123 MB retained per busy scan), per-radar
+  five-scan history persisted under `cache/<SITE>/history/` with tracker state and restart
+  recovery, radar LRU, bounded historical and rendered-layer caches, scan-owned tracking
+  snapshots, `GET /map/history`, non-blocking specific-time `/map/status`, trends on `/tracks`
+- Owner decision (spec Amendment 2): unmatched storms become `missing` -- not described, still
+  reacquirable -- and are `lost` only after 20 minutes or when their last-seen scan leaves the
+  history. Reacquisition (defect 2) proven by synthetic tests; not yet observed on real data
+- Proofs passed: all five layers identical from compact scans (KTLX, KEMX, KIWA); tracking
+  byte-identical to the retained-scan tracker on a 7-scan KTLX window; no full-size grids retained
+  (2.14 MB history vs 395.7 MB before); restart continues identically; history requests leave
+  live tracking untouched
+- Benchmark: object, merge, split and new-track counts unchanged; active/uncertain/lost counts and
+  one dense focus change all explained by the missing status (a focus that had stayed on a storm
+  absent from the scan now moves to a present one)
+- Defects fixed along the way: stale focus flag on missing tracks; blocking specific-time status
+  (Weather Kitten reported ARW unavailable while it worked); in-use radar eviction
+- Tests: 499 unit+smoke passing; e2e proofs as above
+- Live KJAX: retention, scan-owned tracks, older-scan evidence, Weather Kitten stepping on all four
+  layers, and restart (same scans and track IDs, continued into the next live scan) all verified
+
+## Weather Kitten scan stepping (2026-09-12) -- Weather Kitten branch `radar-scan-stepping`
+- Previously uncommitted auto-refresh/readiness work reviewed and folded in (`17398d1`), with a fix
+  so specific-time maps poll readiness for the requested scan
+- Recent scans section: previous/next links, list with `aria-current`, polite position line
+  (`0cfa7d1`, `5b55e7f`); 38 tests passing; verified against live ARW on all four layers
+
 ## In Progress
-- Compact scan history (`docs/superpowers/plans/2026-09-12-compact-scan-history.md`): Tasks 1
-  (codec) and 2 (records) done; owner decision recorded as spec Amendment 2 -- a `missing` track
-  status, lost only when no longer reacquirable (Task 8 revision)
+- Owner review: keyboard-and-NVDA pass through the Weather Kitten recent-scans section
+- Owner decision: split parent merged away in the same update (report section 7b)
 - Spec 2 restoration is validated and documented; commit/merge decision pending
 
 ## Next
-- Compact scan history Tasks 3-11, then Weather Kitten scan stepping
-  (`docs/superpowers/plans/2026-09-12-weather-kitten-scan-stepping.md`)
+- Decide and fix the merged-split-parent defect; re-run the benchmark comparison
+- Investigate the 2.65 GB transient peak during ingest/rendering; consider reducing rendered-layer
+  retention (up to ~6.7 MB per busy scan)
+- Issue #1: window the motion fit
 - Classifier calibration. The membership parameters need deriving from data, not from a design
   document. The two strict xfails are the measure: they start passing when it works
 - Spec 3 (SCIT cell identification), Spec 4 (hail/mesocyclone, needs volumetric parsing)
