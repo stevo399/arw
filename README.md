@@ -87,12 +87,20 @@ keep warm when starting the server; use a comma-separated list of NEXRAD IDs.
 ```powershell
 $env:ARW_PREWARM_SITES = "KIWA"
 $env:ARW_REFRESH_INTERVAL_SECONDS = "120" # optional; default is 120 seconds
+$env:ARW_REFRESH_WORKERS = "2" # independent sites may prepare in parallel
+$env:ARW_PROCESSED_SCANS_PER_SITE = "2" # bounded in-memory analysis cache
+$env:ARW_MAX_PROCESSED_SCANS = "12" # global cap across all sites
+$env:ARW_REPLAY_SCANS_PER_SITE = "2" # current + prior scan for continuity tracking
 uv run uvicorn src.server:app --host 127.0.0.1 --port 8000
 ```
 
 `GET /live/KIWA/status` reports whether a completed interpretation is
 available, its scan timestamp, and whether a refresh is running. Map GeoJSON
 also includes `metadata.scanTimestamp` and `metadata.refreshState`.
+
+Prewarming is optional. Without it, any requested location is prepared on
+demand; duplicate requests for one radar site share work, while unrelated
+sites can prepare concurrently.
 
 ## License
 

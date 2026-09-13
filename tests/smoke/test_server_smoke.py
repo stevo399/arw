@@ -60,7 +60,8 @@ def test_map_status_queues_a_location_without_synchronously_ingesting(monkeypatc
     monkeypatch.setattr("src.server.rank_sites", lambda _lat, _lon: [{"site_id": "KTLX"}])
     scheduled = []
     monkeypatch.setattr(
-        "src.server._schedule_live_refresh", lambda site_id: scheduled.append(site_id) or True
+        "src.server._schedule_live_refresh",
+        lambda site_id, **_kwargs: scheduled.append(site_id) or True,
     )
     resp = client.get("/map/status?latitude=35.4676&longitude=-97.5164")
 

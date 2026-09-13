@@ -78,6 +78,18 @@ def test_buffer_two_scans():
     assert buf.previous_scan is scan1
 
 
+def test_buffer_retains_only_the_adjacent_pair_needed_for_tracking():
+    buf = ReplayBuffer(max_age_minutes=120, max_scans=2)
+    base = datetime(2026, 4, 8, 18, 30)
+    scans = [_make_buffered_scan("KTLX", base + timedelta(minutes=5 * i)) for i in range(3)]
+    for scan in scans:
+        buf.add_scan(scan)
+
+    assert buf.scan_count == 2
+    assert buf.previous_scan is scans[1]
+    assert buf.current_scan is scans[2]
+
+
 def test_buffer_evicts_old_scans():
     buf = ReplayBuffer(max_age_minutes=120)
     base_time = datetime(2026, 4, 8, 16, 0)

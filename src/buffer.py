@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from collections import deque
+from typing import Any
 import numpy as np
 from src.parser import SweepData, VelocityData
 from src.detection import DetectedObject
@@ -31,14 +32,28 @@ class BufferedScan:
     # flagged, retained for inspection -- never actually removed from
     # reflectivity_data.
     echo_advisory: EchoAdvisory | None = None
+    # Evidence for each precipitation band (see
+    # src.map_layer.compute_precipitation_band_evidence), computed while the
+    # dual-pol grids still exist.  The live pipeline releases those grids
+    # before the precipitation layer is rendered.
+    precipitation_band_evidence: dict[tuple[float, float], dict[str, Any]] | None = None
 
 
 class ReplayBuffer:
-    """Stores up to max_age_minutes of parsed scan data in memory."""
+    """Stores the short scan history required for continuity tracking.
 
-    def __init__(self, max_age_minutes: int = 120):
+    A full-resolution Level II object mask is one boolean grid *per detected
+    object*.  Retaining a two-hour sequence can therefore consume gigabytes
+    on a convective day.  The tracker only compares the current scan with its
+    immediate predecessor, so keep that pair and no more by default.
+    """
+
+    def __init__(self, max_age_minutes: int = 120, max_scans: int = 2):
         self._scans: deque[BufferedScan] = deque()
         self._max_age = timedelta(minutes=max_age_minutes)
+        # Tracking needs a previous volume.  Do not allow a configuration
+        # typo to silently disable that continuity check.
+        self._max_scans = max(2, int(max_scans))
         self._current_site: str | None = None
 
     def add_scan(self, scan: BufferedScan) -> None:
@@ -55,6 +70,8 @@ class ReplayBuffer:
             return
         cutoff = self._scans[-1].timestamp - self._max_age
         while self._scans and self._scans[0].timestamp < cutoff:
+            self._scans.popleft()
+        while len(self._scans) > self._max_scans:
             self._scans.popleft()
 
     @property

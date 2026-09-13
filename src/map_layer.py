@@ -1,3 +1,4 @@
+import math
 from typing import Any
 
 import numpy as np
@@ -490,6 +491,34 @@ def _storm_metadata(name: str = "ARW storm polygons") -> dict[str, Any]:
     }
 
 
+def _safe_audiom_data_properties(
+    metadata: dict[str, Any], features: list[dict[str, Any]]
+) -> None:
+    """Keep Audiom's sonification dimensions numerically safe.
+
+    Audiom builds one pitch range for every advertised ``dataProperties``
+    field.  A field whose available values are all identical has a zero-width
+    source range, which makes its pitch non-finite when Audiom plays it.  A
+    small, local radar response can legitimately have one object or a
+    constant attribute, so it must not advertise that attribute as a
+    sonification dimension.  The underlying values remain on every feature
+    for screen-reader descriptions, filtering, and downstream clients.
+    """
+    safe_properties = []
+    for descriptor in metadata["dataProperties"]:
+        field = descriptor["field"]
+        values = [
+            feature["properties"].get(field)
+            for feature in features
+            if isinstance(feature["properties"].get(field), (int, float))
+            and math.isfinite(feature["properties"][field])
+        ]
+        if len(values) >= 2 and min(values) < max(values):
+            safe_properties.append(descriptor)
+
+    metadata["dataProperties"] = safe_properties
+
+
 def build_storm_geojson(
     scan: BufferedScan, simplify_m: float = DEFAULT_SIMPLIFY_M
 ) -> dict[str, Any]:
@@ -595,6 +624,7 @@ def build_storm_audiom_centroid_geojson(scan: BufferedScan) -> dict[str, Any]:
         }
         features.append(feature)
     metadata = _storm_metadata("ARW live radar interpretations")
+    _safe_audiom_data_properties(metadata, features)
     metadata["geometryDetail"] = "detected-object centroids"
     metadata["detailedGeometryEndpoint"] = "/map/storms.geojson?mode=footprints"
     return {"type": "FeatureCollection", "metadata": metadata, "features": features}
@@ -784,6 +814,29 @@ def _band_evidence(sweep, lower: float, upper: float) -> dict[str, Any]:
     return evidence
 
 
+def precipitation_band_keys() -> list[tuple[float, float]]:
+    """The (lower, upper) bands the precipitation layer contours.
+
+    Mirrors `src.contours._raw_bands`: consecutive sorted levels, the last
+    band open-ended.
+    """
+    ordered = sorted(float(level) for level in PRECIP_FIELD_LEVELS)
+    return [
+        (lower, ordered[index + 1] if index + 1 < len(ordered) else float("inf"))
+        for index, lower in enumerate(ordered)
+    ]
+
+
+def compute_precipitation_band_evidence(sweep) -> dict[tuple[float, float], dict[str, Any]]:
+    """Evidence for every precipitation band, computed while dual-pol exists.
+
+    `_band_evidence` depends only on the sweep and the band's own gates, so
+    this is exactly what the layer would compute from the full fields.  It
+    lets the live pipeline release the RhoHV/ZDR/class grids before the
+    layer is rendered without the layer losing its evidence.
+    """
+    return {key: _band_evidence(sweep, *key) for key in precipitation_band_keys()}
+
 def build_precipitation_field_geojson(scan: BufferedScan) -> dict[str, Any]:
     """The whole precipitation field, independent of object detection.
 
@@ -794,6 +847,7 @@ def build_precipitation_field_geojson(scan: BufferedScan) -> dict[str, Any]:
     sweep = scan.reflectivity_data
     bands = exclusive_bands(sweep.reflectivity, PRECIP_FIELD_LEVELS, sweep)
     gate_area = _gate_area_grid(sweep)
+    precomputed_evidence = getattr(scan, "precipitation_band_evidence", None)
 
     features = []
     omitted_fragment_count = 0
@@ -872,7 +926,14 @@ def build_precipitation_field_geojson(scan: BufferedScan) -> dict[str, Any]:
             "minstep": "100m",
             "maxstep": "300mi",
         }
-        properties.update(_band_evidence(sweep, lower, upper))
+        evidence = (
+            precomputed_evidence[(lower, upper)]
+            if precomputed_evidence is not None
+            else _band_evidence(sweep, lower, upper)
+        )
+        # Copy the nested dict: published features must never alias the
+        # scan's stored evidence.
+        properties.update({**evidence, "class_fractions": dict(evidence["class_fractions"])})
         features.append({
             "type": "Feature",
             "id": properties["id"],

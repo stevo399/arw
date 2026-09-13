@@ -152,6 +152,7 @@ def compute_object_properties(
     elevation_deg: float = 0.5,
     elevations: np.ndarray | None = None,
     gate_classification: np.ndarray | None = None,
+    range_bin_areas_km2: np.ndarray | None = None,
 ) -> "DetectedObject | None":
     """Compute properties for a single detected object. Returns None if too small.
 
@@ -170,7 +171,14 @@ def compute_object_properties(
     if len(az_indices) == 0:
         return None
 
-    range_bin_areas_km2 = _range_bin_areas_km2(azimuths, ranges_m, elevation_deg)
+    # All components in one sweep share the same range geometry.  The live
+    # detector supplies this precomputed vector rather than deriving it once
+    # per candidate echo (which is especially wasteful on clear-air scans
+    # containing hundreds of tiny candidates).
+    if range_bin_areas_km2 is None:
+        range_bin_areas_km2 = _range_bin_areas_km2(
+            azimuths, ranges_m, elevation_deg
+        )
     total_area_km2 = float(np.sum(range_bin_areas_km2[rng_indices]))
 
     if total_area_km2 < MIN_OBJECT_AREA_KM2:
@@ -454,9 +462,24 @@ def detect_objects_with_grid(
     object_masks = {}
     object_hierarchy: dict[int, list[ThresholdHierarchyNode]] = {}
     next_object_id = 1
+    range_bin_areas_km2 = _range_bin_areas_km2(
+        azimuths, ranges_m, elevation_deg
+    )
     for i in range(1, num_features + 1):
         parent_mask = labeled == i
-        split_masks, hierarchy_nodes = _split_parent_mask(parent_mask, reflectivity)
+        # A split requires at least two >= 50 dBZ seed branches.  A component
+        # whose peak never reaches that threshold cannot split under the
+        # documented hierarchy rules, so running five whole-grid connected
+        # component passes for it cannot change the result.  This short-circuit
+        # is crucial for quiet/clear-air scans, which can contain hundreds of
+        # small weak candidates.
+        parent_peak = float(np.nanmax(reflectivity[parent_mask]))
+        if parent_peak >= 50.0:
+            split_masks, hierarchy_nodes = _split_parent_mask(
+                parent_mask, reflectivity
+            )
+        else:
+            split_masks, hierarchy_nodes = [parent_mask], []
         for obj_mask in split_masks:
             obj = compute_object_properties(
                 obj_mask=obj_mask,
@@ -469,12 +492,21 @@ def detect_objects_with_grid(
                 elevation_deg=elevation_deg,
                 elevations=elevations,
                 gate_classification=gate_classification,
+                range_bin_areas_km2=range_bin_areas_km2,
             )
             if obj is None:
                 continue
             objects.append(obj)
             object_masks[obj.object_id] = obj_mask
-            object_hierarchy[obj.object_id] = hierarchy_nodes
+            # Tracking metadata still needs the threshold path of an accepted
+            # unsplit object.  Delay that bookkeeping until after the area/
+            # significance filter: it is useful for real objects, but doing
+            # it for every discarded weak speckle was the full-grid hot path.
+            object_hierarchy[obj.object_id] = (
+                hierarchy_nodes
+                if hierarchy_nodes
+                else _build_threshold_hierarchy(obj_mask, reflectivity)
+            )
             next_object_id += 1
 
     objects.sort(key=lambda o: (o.peak_dbz, o.area_km2), reverse=True)

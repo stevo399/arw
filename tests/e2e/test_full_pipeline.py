@@ -153,8 +153,8 @@ def test_tracks_accumulate_across_calls():
     """Two calls to /tracks should show tracks with multiple positions."""
     # Reset server state
     import src.server as srv
-    srv._buffer = type(srv._buffer)()
-    srv._tracker = type(srv._tracker)()
+    srv._buffers.clear()
+    srv._trackers.clear()
 
     ref_data1 = SweepData(
         reflectivity=np.full((360, 500), np.nan),

@@ -1,9 +1,12 @@
+import dataclasses
+import json
 from datetime import datetime
 
 import numpy as np
 from shapely.geometry import shape as shapely_shape
 
 from src.buffer import BufferedScan
+from src.contours import exclusive_bands
 from src.detection import DetectedObject, IntensityLayerData
 from src.map_layer import (
     PRECIP_FIELD_LEVELS,
@@ -13,7 +16,9 @@ from src.map_layer import (
     build_storm_centroid_geojson,
     build_storm_geojson,
     build_storm_intensity_geojson,
+    compute_precipitation_band_evidence,
     object_geometry,
+    precipitation_band_keys,
 )
 from src.parser import SweepData
 from src.qc.classifier import CLASS_CODES
@@ -251,6 +256,35 @@ def test_build_storm_audiom_centroid_geojson_preserves_interpretation_without_co
     assert geojson["features"][0]["geometry"]["type"] == "Point"
     assert geojson["features"][0]["properties"]["name"]
     assert geojson["features"][0]["properties"]["ruleName"] == "Radar interpretation centroid"
+    # A one-object response has no meaningful numeric pitch range.  ARW keeps
+    # its measurement on the feature but does not expose a zero-width Audiom
+    # sonification dimension that would produce a non-finite MIDI note.
+    assert geojson["metadata"]["dataProperties"] == []
+
+
+def test_audiom_centroid_metadata_only_advertises_varying_finite_dimensions():
+    reflectivity = np.full((12, 12), np.nan)
+    mask = np.zeros_like(reflectivity, dtype=bool)
+    scan = BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0), site_id="KTLX",
+        reflectivity_data=SweepData(
+            reflectivity=reflectivity, azimuths=np.linspace(80, 100, 12),
+            ranges_m=np.linspace(20000, 40000, 12), radar_lat=35.3331,
+            radar_lon=-97.2778, elevation_angle=0.5, elevations=np.full(12, 0.5),
+            elevation_angles=[0.5], radar_alt_m=390.0, timestamp="2026-04-10T20:00:00Z",
+        ),
+        detected_objects=[
+            DetectedObject(1, 35.2, -96.9, 30.0, 90.0, 45.0, "heavy precipitation", 24.0),
+            DetectedObject(2, 35.0, -97.1, 45.0, 180.0, 50.0, "intense precipitation", 40.0),
+        ],
+        labeled_grid=mask.astype(int), object_masks={},
+    )
+
+    geojson = build_storm_audiom_centroid_geojson(scan)
+
+    assert {item["field"] for item in geojson["metadata"]["dataProperties"]} == {
+        "heat_value", "peak_dbz", "area_mi2", "distance_mi"
+    }
 
 
 def test_build_storm_centroid_geojson_returns_point_features():
@@ -1248,3 +1282,77 @@ def test_a_band_wiped_out_by_the_fragment_filter_is_named_in_metadata():
     assert wiped[0]["reason"] == "all_fragments_below_area_floor"
     assert wiped[0]["gateCount"] == 1
     assert wiped[0]["gateAreaKm2"] > 0.0
+
+
+def _dual_pol_precipitation_sweep() -> SweepData:
+    reflectivity = np.full((360, 500), np.nan)
+    reflectivity[100:160, 200:300] = 25.0
+    reflectivity[115:145, 230:270] = 45.0
+    rhohv = np.full(reflectivity.shape, 0.99)
+    rhohv[115:145, 230:270] = 0.95
+    zdr = np.full(reflectivity.shape, 1.25)
+    classes = np.ones(reflectivity.shape, dtype=np.int8)  # 1 = precipitation
+    return SweepData(
+        reflectivity=reflectivity,
+        azimuths=np.linspace(0, 359, 360),
+        ranges_m=np.linspace(2000, 250000, 500),
+        elevation_angle=0.5,
+        elevations=np.full(360, 0.5),
+        elevation_angles=[0.5],
+        radar_lat=35.3331,
+        radar_lon=-97.2778,
+        radar_alt_m=390.0,
+        timestamp="2026-09-12T18:00:00Z",
+        rhohv=rhohv,
+        zdr=zdr,
+        gate_classification=classes,
+    )
+
+
+def _precipitation_scan(sweep: SweepData, evidence=None) -> BufferedScan:
+    return BufferedScan(
+        timestamp=datetime(2026, 9, 12, 18, 0),
+        site_id="KTLX",
+        reflectivity_data=sweep,
+        detected_objects=[],
+        labeled_grid=np.zeros(sweep.reflectivity.shape, dtype=np.int32),
+        object_masks={},
+        precipitation_band_evidence=evidence,
+    )
+
+
+def test_precipitation_band_keys_match_the_contoured_bands():
+    sweep = _dual_pol_precipitation_sweep()
+    bands = exclusive_bands(sweep.reflectivity, PRECIP_FIELD_LEVELS, sweep)
+    assert precipitation_band_keys() == list(bands.keys())
+
+
+def test_precipitation_layer_is_identical_from_precomputed_evidence():
+    sweep = _dual_pol_precipitation_sweep()
+    expected = build_precipitation_field_geojson(_precipitation_scan(sweep))
+    evidence = compute_precipitation_band_evidence(sweep)
+    released = dataclasses.replace(sweep, rhohv=None, zdr=None, gate_classification=None)
+
+    actual = build_precipitation_field_geojson(_precipitation_scan(released, evidence))
+
+    assert json.dumps(actual, sort_keys=True) == json.dumps(expected, sort_keys=True)
+    assert expected["features"], "fixture must produce precipitation features"
+    assert all(f["properties"]["median_rhohv"] is not None for f in expected["features"])
+
+
+def test_released_dual_pol_without_precomputed_evidence_is_the_defect():
+    """Documents defect 1: this is what the live pipeline published."""
+    sweep = _dual_pol_precipitation_sweep()
+    released = dataclasses.replace(sweep, rhohv=None, zdr=None, gate_classification=None)
+    layer = build_precipitation_field_geojson(_precipitation_scan(released))
+    assert all(f["properties"]["median_rhohv"] is None for f in layer["features"])
+
+
+def test_precomputed_evidence_is_not_shared_with_published_features():
+    sweep = _dual_pol_precipitation_sweep()
+    evidence = compute_precipitation_band_evidence(sweep)
+    layer = build_precipitation_field_geojson(_precipitation_scan(sweep, evidence))
+    layer["features"][0]["properties"]["class_fractions"]["precipitation"] = -1.0
+    assert all(
+        band["class_fractions"].get("precipitation") != -1.0 for band in evidence.values()
+    )

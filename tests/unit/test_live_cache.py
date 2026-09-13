@@ -1,8 +1,12 @@
 from unittest.mock import MagicMock
 from types import SimpleNamespace
-from threading import Event, Thread
+from threading import Event, RLock, Thread
 
 import src.server as server
+
+
+def test_scan_timestamp_iso_utc_is_normalized_for_archive_lookup():
+    assert server._parse_datetime("2026-09-12T16:09:33Z").isoformat() == "2026-09-12T16:09:33"
 
 
 def _clear_live_state():
@@ -13,6 +17,9 @@ def _clear_live_state():
         server._refreshing_sites.clear()
         server._refresh_started_at.clear()
         server._refresh_errors.clear()
+        server._buffers.clear()
+        server._trackers.clear()
+        server._site_ingest_locks.clear()
 
 
 def test_live_request_returns_completed_scan_and_queues_refresh(monkeypatch):
@@ -50,6 +57,59 @@ def test_live_refresh_is_coalesced(monkeypatch):
         _clear_live_state()
 
 
+def test_forced_live_refresh_bypasses_background_rate_limit(monkeypatch):
+    _clear_live_state()
+    executor = MagicMock()
+    monkeypatch.setattr(server, "_refresh_executor", executor)
+    monkeypatch.setattr(server, "_refresh_interval_seconds", 60)
+
+    try:
+        assert server._schedule_live_refresh("KIWA") is True
+        assert server._schedule_live_refresh("KIWA", force=True) is True
+        # The first job is still in flight, so both callers correctly share it.
+        assert executor.submit.call_count == 1
+        with server._state_lock:
+            server._refreshing_sites.clear()
+        assert server._schedule_live_refresh("KIWA", force=True) is True
+        assert executor.submit.call_count == 2
+    finally:
+        _clear_live_state()
+
+
+def test_different_sites_can_ingest_concurrently(monkeypatch):
+    """A slow site must not make an unrelated location wait in the queue."""
+    _clear_live_state()
+    both_started = Event()
+    release = Event()
+    started: list[str] = []
+    started_lock = RLock()
+
+    monkeypatch.setattr(server, "fetch_scan", lambda site_id, dt=None: f"/{site_id}")
+
+    def slow_process(site_id, _filepath):
+        with started_lock:
+            started.append(site_id)
+            if len(started) == 2:
+                both_started.set()
+        release.wait(1)
+        return SimpleNamespace(site_id=site_id)
+
+    monkeypatch.setattr(server, "_process_scan_file", slow_process)
+    workers = [
+        Thread(target=server._ingest_to_buffer, args=(site_id,))
+        for site_id in ("KIWA", "KMLB")
+    ]
+    try:
+        for worker in workers:
+            worker.start()
+        assert both_started.wait(0.5), "different sites were serialized"
+    finally:
+        release.set()
+        for worker in workers:
+            worker.join(timeout=1)
+        _clear_live_state()
+
+
 def test_failed_live_refresh_can_be_retried_without_waiting_the_normal_interval(monkeypatch):
     _clear_live_state()
     monkeypatch.setattr(server, "_schedule_recurring_refresh", lambda _site_id: None)
@@ -60,6 +120,22 @@ def test_failed_live_refresh_can_be_retried_without_waiting_the_normal_interval(
             last_started = server._refresh_started_at["KOHX"]
         elapsed = (server.datetime.now() - last_started).total_seconds()
         assert elapsed >= server._refresh_interval_seconds - server.LIVE_REFRESH_FAILURE_RETRY_SECONDS
+    finally:
+        _clear_live_state()
+
+
+def test_live_refresh_publishes_completed_scan_without_waiting_for_map_build(monkeypatch):
+    _clear_live_state()
+    completed = SimpleNamespace(site_id="KJAX")
+    monkeypatch.setattr(server, "_ingest_to_buffer", lambda *_args, **_kwargs: completed)
+    monkeypatch.setattr(server, "_schedule_recurring_refresh", lambda _site_id: None)
+    blocked_builder = MagicMock(side_effect=AssertionError("live refresh must not prebuild layers"))
+    monkeypatch.setattr(server, "_prepared_map_layers", blocked_builder)
+    try:
+        server._refresh_live_scan("KJAX")
+        with server._state_lock:
+            assert server._live_scans["KJAX"] is completed
+        blocked_builder.assert_not_called()
     finally:
         _clear_live_state()
 
@@ -145,7 +221,7 @@ def test_prepared_map_layers_are_built_once_per_real_volume(monkeypatch, tmp_pat
     builders = [
         "build_storm_geojson",
         "build_storm_intensity_geojson",
-        "build_storm_audiom_geojson",
+        "build_storm_audiom_centroid_geojson",
         "build_storm_centroid_geojson",
     ]
     mocks = []
@@ -157,8 +233,29 @@ def test_prepared_map_layers_are_built_once_per_real_volume(monkeypatch, tmp_pat
     try:
         first = server._prepared_map_layers(scan)
         second = server._prepared_map_layers(scan)
-        assert first is second
+        assert first == second
         assert all(mock.call_count == 1 for mock in mocks)
+    finally:
+        _clear_live_state()
+
+
+def test_processed_scan_cache_is_bounded_per_site_and_evicts_map_layers(monkeypatch):
+    _clear_live_state()
+    monkeypatch.setattr(server, "_processed_scans_per_site", 2)
+    monkeypatch.setattr(server, "_max_processed_scans", 3)
+    first = ("KIWA", "first")
+    second = ("KIWA", "second")
+    third = ("KIWA", "third")
+    other = ("KMLB", "first")
+    try:
+        for key in (first, second, other):
+            server._remember_processed_scan(key, SimpleNamespace(site_id=key[0]))
+            server._map_layers[key] = {"audiom": {}}
+        server._remember_processed_scan(third, SimpleNamespace(site_id="KIWA"))
+
+        assert first not in server._processed_scans
+        assert first not in server._map_layers
+        assert set(server._processed_scans) == {second, third, other}
     finally:
         _clear_live_state()
 
@@ -180,16 +277,17 @@ def test_completed_map_layer_does_not_wait_for_another_site_ingest(tmp_path):
     result = []
 
     def read_cached_layer():
-        result.append(server._prepared_map_layers(scan))
+        result.append(server._prepared_map_layers(scan, {"audiom"}))
         finished.set()
 
-    server._ingest_lock.acquire()
+    other_site_lock = server._site_ingest_lock("KMLB")
+    other_site_lock.acquire()
     worker = Thread(target=read_cached_layer)
     try:
         worker.start()
         assert finished.wait(0.5), "cached map layer waited for an unrelated ingest"
         assert result == [expected]
     finally:
-        server._ingest_lock.release()
+        other_site_lock.release()
         worker.join(timeout=1)
         _clear_live_state()
