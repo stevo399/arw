@@ -1,5 +1,7 @@
 from copy import deepcopy
 from datetime import datetime
+import logging
+from typing import Callable
 from src.buffer import BufferedScan, TrackingSnapshot
 from src.detection import DetectedObject
 from src.motion import resolve_reported_motion, MotionVector, recent_heading_flip_count
@@ -7,6 +9,10 @@ from src.tracking.motion import MotionContinuityContext
 from src.tracking.association import associate_tracks
 from src.tracking.events import normalize_merge_event, normalize_split_event
 from src.tracking.types import FocusContinuity, IdentityConfidence, MotionSample, RotationHistoryEntry, Track
+
+_logger = logging.getLogger(__name__)
+TRACKER_STATE_VERSION = 1
+ScanLoader = Callable[[str, datetime], BufferedScan | None]
 
 MAX_MISSED_SCANS = 2
 FOCUS_SWITCH_MARGIN = 2.0
@@ -145,11 +151,15 @@ def _get_track_motion(track: Track) -> MotionVector:
 class StormTracker:
     """Tracks storms across multiple radar scans."""
 
-    def __init__(self):
+    def __init__(self, scan_loader: ScanLoader | None = None):
         self._tracks: list[Track] = []
         self._next_id: int = 1
         self._recent_events: list[dict] = []
+        # The full previous scan is retained only until release_previous_scan();
+        # after that it is reloaded through scan_loader by (site_id, timestamp).
         self._prev_scan: BufferedScan | None = None
+        self._prev_scan_ref: tuple[str, datetime] | None = None
+        self._scan_loader = scan_loader
         self._obj_to_track: dict[int, int] = {}  # object_id -> track_id for current scan
         self._focus_history: list[int | None] = []
 
@@ -159,8 +169,59 @@ class StormTracker:
         self._next_id = 1
         self._recent_events.clear()
         self._prev_scan = None
+        self._prev_scan_ref = None
         self._obj_to_track.clear()
         self._focus_history.clear()
+
+    def _previous_scan(self) -> BufferedScan | None:
+        if self._prev_scan_ref is None:
+            return None
+        if self._prev_scan is not None:
+            return self._prev_scan
+        if self._scan_loader is None:
+            return None
+        return self._scan_loader(*self._prev_scan_ref)
+
+    def _remember_scan(self, scan: BufferedScan) -> None:
+        self._prev_scan = scan
+        self._prev_scan_ref = (scan.site_id, scan.timestamp)
+
+    def release_previous_scan(self) -> None:
+        """Drop the retained full previous scan; it is reloaded when needed."""
+        if self._scan_loader is None:
+            raise RuntimeError("release_previous_scan requires a scan_loader to reload the scan")
+        self._prev_scan = None
+
+    def export_state(self) -> dict:
+        """Everything needed to resume tracking.
+
+        Values are live references: serialize them before the next update.
+        """
+        return {
+            "version": TRACKER_STATE_VERSION,
+            "tracks": self._tracks,
+            "next_id": self._next_id,
+            "recent_events": self._recent_events,
+            "obj_to_track": self._obj_to_track,
+            "focus_history": self._focus_history,
+            "prev_scan_ref": self._prev_scan_ref,
+        }
+
+    @classmethod
+    def from_state(cls, state: dict, scan_loader: ScanLoader) -> "StormTracker":
+        if state.get("version") != TRACKER_STATE_VERSION:
+            raise ValueError(
+                f"tracker state version {state.get('version')!r} is not {TRACKER_STATE_VERSION}"
+            )
+        tracker = cls(scan_loader)
+        tracker._tracks = list(state["tracks"])
+        tracker._next_id = int(state["next_id"])
+        tracker._recent_events = list(state["recent_events"])
+        tracker._obj_to_track = dict(state["obj_to_track"])
+        tracker._focus_history = list(state["focus_history"])
+        reference = state["prev_scan_ref"]
+        tracker._prev_scan_ref = tuple(reference) if reference is not None else None
+        return tracker
 
     def _create_track(self, timestamp: datetime, obj: DetectedObject) -> Track:
         track = Track(track_id=self._next_id, status="active")
@@ -316,7 +377,7 @@ class StormTracker:
             track.motion_confidence = reported_motion.confidence
             track.motion_history.append(
                 MotionSample(
-                    timestamp=track.last_seen or (self._prev_scan.timestamp if self._prev_scan is not None else datetime.min),
+                    timestamp=track.last_seen or (self._prev_scan_ref[1] if self._prev_scan_ref is not None else datetime.min),
                     heading_deg=reported_motion.heading_deg,
                     heading_label=reported_motion.heading_label,
                     source=reported_motion.source,
@@ -505,11 +566,11 @@ class StormTracker:
         self._recent_events.clear()
         timestamp = scan.timestamp
 
-        if self._prev_scan is not None and self._prev_scan.site_id != scan.site_id:
+        if self._prev_scan_ref is not None and self._prev_scan_ref[0] != scan.site_id:
             self._reset_for_site()
 
-        if self._prev_scan is not None:
-            gap_minutes = (timestamp - self._prev_scan.timestamp).total_seconds() / 60.0
+        if self._prev_scan_ref is not None:
+            gap_minutes = (timestamp - self._prev_scan_ref[1]).total_seconds() / 60.0
             # Cross-scan association is evidence only over adjacent operational
             # radar volumes.  Retaining a track across a long outage or a
             # historical jump could falsely make an unrelated echo appear
@@ -518,7 +579,15 @@ class StormTracker:
             if gap_minutes <= 0 or gap_minutes > MAX_TEMPORAL_CONTINUITY_MINUTES:
                 self._reset_for_site()
 
-        if self._prev_scan is None:
+        previous_scan = self._previous_scan()
+        if self._prev_scan_ref is not None and previous_scan is None:
+            _logger.warning(
+                "Previous scan %s %s is no longer available; storm tracking restarts for this site",
+                *self._prev_scan_ref,
+            )
+            self._reset_for_site()
+
+        if self._prev_scan_ref is None:
             # First scan: create a track for each object
             self._obj_to_track.clear()
             for obj in scan.detected_objects:
@@ -534,12 +603,12 @@ class StormTracker:
                 self._obj_to_track[obj.object_id] = track.track_id
             self._refresh_track_motions(field_estimates=None, field_dt_hours=0.0)
             self._update_primary_focus()
-            self._prev_scan = scan
+            self._remember_scan(scan)
             return
 
         new_objects = {obj.object_id: obj for obj in scan.detected_objects}
         association = associate_tracks(
-            previous_scan=self._prev_scan,
+            previous_scan=previous_scan,
             current_scan=scan,
             tracks=self._tracks,
             obj_to_track=self._obj_to_track,
@@ -667,7 +736,7 @@ class StormTracker:
         self._obj_to_track = new_obj_to_track
         self._refresh_track_motions(field_estimates=association.track_geo_motion, field_dt_hours=association.dt_hours)
         self._update_primary_focus()
-        self._prev_scan = scan
+        self._remember_scan(scan)
 
     @property
     def active_tracks(self) -> list[Track]:
@@ -684,7 +753,7 @@ class StormTracker:
     @property
     def last_scan_timestamp(self) -> datetime | None:
         """Timestamp of the most recent scan this tracker processed."""
-        return self._prev_scan.timestamp if self._prev_scan is not None else None
+        return self._prev_scan_ref[1] if self._prev_scan_ref is not None else None
 
     def snapshot(self) -> TrackingSnapshot:
         """Deep copy of the state a consumer needs to describe the latest scan."""
