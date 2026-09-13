@@ -180,6 +180,7 @@ def generate_summary(
     objects: list[DetectedObject],
     tracks=None,
     events: list[dict] | None = None,
+    continuity_rebuilt: bool = False,
 ) -> str:
     """Generate a speech-ready text summary of detected precipitation objects.
 
@@ -190,6 +191,8 @@ def generate_summary(
         objects: Detected objects sorted by peak_dbz descending.
         tracks: Optional list of Track objects for motion info.
         events: Optional list of recent merge/split event dicts.
+        continuity_rebuilt: Tracking was rebuilt after a restart, so storm
+            identities may differ from those spoken before it.
     """
     if not objects:
         return f"{site_name}: No significant precipitation detected."
@@ -245,6 +248,8 @@ def generate_summary(
             f" in {reference}."
         )
 
+    if continuity_rebuilt:
+        parts.append(" Note: storm tracking was rebuilt after a restart, so storm identities may have changed.")
     parts.append(f" Covering approximately {area_mi2} square miles.")
 
     return "".join(parts)

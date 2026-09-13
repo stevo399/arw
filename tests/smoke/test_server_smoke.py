@@ -424,3 +424,15 @@ def test_velocity_endpoint_returns_200():
     data = resp.json()
     assert "regions" in data
     assert "rotation_signatures" in data
+
+
+def test_map_history_requires_location():
+    assert client.get("/map/history").status_code == 422
+
+
+def test_map_history_returns_200_for_a_location(monkeypatch):
+    monkeypatch.setattr("src.server.rank_sites", lambda _lat, _lon: [{"site_id": "KTLX"}])
+    resp = client.get("/map/history", params={"latitude": 35.33, "longitude": -97.28})
+    assert resp.status_code == 200
+    assert resp.json()["site_id"] == "KTLX"
+    assert isinstance(resp.json()["scans"], list)

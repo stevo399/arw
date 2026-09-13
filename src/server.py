@@ -21,6 +21,7 @@ from src.models import (
     VelocityResponse, VelocityRegionModel, RotationSignatureModel, RotationHistoryEntryModel,
     MapLocation, StormMapLayerResponse,
     TrackTrend,
+    HistoryScan, MapHistoryResponse,
 )
 from src.sites import geocode_city_state, geocode_zipcode, rank_sites, NEXRAD_SITES
 from src.ingest import CACHE_DIR, fetch_scan
@@ -904,7 +905,9 @@ def radar_config():
 def get_live_scan_status(site_id: str):
     """Report whether a completed live interpretation is ready or updating."""
     normalized_site = site_id.upper()
-    completed = _newest_live_scan(normalized_site)
+    with _histories.use(normalized_site) as history:
+        completed = history.newest()
+        history_write_error = history.last_write_error
     with _state_lock:
         refresh_started = _refresh_started_at.get(normalized_site)
         error = _refresh_errors.get(normalized_site)
@@ -923,6 +926,9 @@ def get_live_scan_status(site_id: str):
         # An old completed scan remains usable if a refresh fails.  The error
         # is explicit for accessible clients instead of becoming a blank map.
         "last_refresh_error": error,
+        # A failed history write leaves live tracking running, but the
+        # history will not survive a restart until writes succeed.
+        "history_write_error": history_write_error,
     }
 
 
@@ -952,14 +958,21 @@ def get_map_status(
         # Historical selection is synchronous and exact-to-the-available
         # volume.  Returning its timestamp here lets a client label the map by
         # the literal radar volume time rather than the requested clock time.
-        completed = _ingest_to_buffer(site_id, requested_datetime)
+        # A retained scan is ready immediately, with no ingest or network call.
+        with _histories.use(site_id) as history:
+            retained = history.find_by_timestamp(requested_datetime)
+        scan_timestamp = (
+            retained.scan_timestamp_text
+            if retained is not None
+            else _ingest_to_buffer(site_id, requested_datetime).reflectivity_data.timestamp
+        )
         return {
             "site_id": site_id,
             "location": {"latitude": lat, "longitude": lon, "label": label},
             "available": True,
             "refresh_state": "ready",
             "queued": False,
-            "scan_timestamp": completed.reflectivity_data.timestamp,
+            "scan_timestamp": scan_timestamp,
             "last_refresh_error": None,
             "poll_after_seconds": LIVE_REFRESH_FAILURE_RETRY_SECONDS,
         }
@@ -985,6 +998,37 @@ def get_map_status(
         "last_refresh_error": error,
         "poll_after_seconds": LIVE_REFRESH_FAILURE_RETRY_SECONDS,
     }
+
+
+@app.get("/map/history", response_model=MapHistoryResponse)
+def get_map_history(
+    city: str | None = Query(None),
+    state: str | None = Query(None),
+    zipcode: str | None = Query(None),
+    latitude: float | None = Query(None),
+    longitude: float | None = Query(None),
+):
+    """Retained scans for the radar ARW selects for a location, newest first.
+
+    Never ingests: it lists only what that radar's history already holds.
+    Each timestamp can be passed back unchanged as `datetime=` to the map,
+    status, objects, tracks and summary endpoints to select exactly that scan.
+    """
+    lat, lon, label = _resolve_map_location(city, state, zipcode, latitude, longitude)
+    ranked_sites = rank_sites(lat, lon)
+    if not ranked_sites:
+        raise HTTPException(status_code=404, detail="No radar site found for that location")
+    site_id = ranked_sites[0]["site_id"].upper()
+    with _histories.use(site_id) as history:
+        retained = list(reversed(history.scans()))
+    return MapHistoryResponse(
+        site_id=site_id,
+        location={"latitude": lat, "longitude": lon, "label": label},
+        scans=[
+            HistoryScan(timestamp=scan.scan_timestamp_text, object_count=scan.object_count, tracked=scan.tracked)
+            for scan in retained
+        ],
+    )
 
 
 @app.get("/sites", response_model=list[RadarSite])
@@ -1180,12 +1224,14 @@ def get_summary(site_id: str, datetime: str | None = Query(None)):
         objects=buffered.detected_objects,
         tracks=tracking.active_tracks if tracking is not None else [],
         events=tracking.recent_events if tracking is not None else [],
+        continuity_rebuilt=bool(tracking is not None and tracking.continuity_rebuilt),
     )
     return SummaryResponse(
         site_id=site_id.upper(),
         timestamp=buffered.reflectivity_data.timestamp,
         text=text,
         tracking_context="tracked" if tracking is not None else "unavailable",
+        continuity_rebuilt=bool(tracking is not None and tracking.continuity_rebuilt),
     )
 
 
@@ -1201,6 +1247,7 @@ def get_tracks(site_id: str, datetime: str | None = Query(None)):
         timestamp=buffered.reflectivity_data.timestamp,
         active_count=len(active),
         tracking_context="tracked" if tracking is not None else "unavailable",
+        continuity_rebuilt=bool(tracking is not None and tracking.continuity_rebuilt),
         tracks=[_track_to_model(t) for t in active],
         recent_events=[
             TrackEvent(

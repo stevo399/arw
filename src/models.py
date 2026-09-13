@@ -111,6 +111,9 @@ class SummaryResponse(BaseModel):
     # "tracked": served with the tracker state from this scan's own time.
     # "unavailable": a historical scan the live tracker never processed.
     tracking_context: str = "unavailable"
+    # True when this scan's tracking was rebuilt from retained scans after a
+    # restart because saved tracker state could not be used.
+    continuity_rebuilt: bool = False
 
 
 class TrackPosition(BaseModel):
@@ -207,6 +210,9 @@ class TracksResponse(BaseModel):
     # "tracked": served with the tracker state from this scan's own time.
     # "unavailable": a historical scan the live tracker never processed.
     tracking_context: str = "unavailable"
+    # True when this scan's tracking was rebuilt from retained scans after a
+    # restart because saved tracker state could not be used.
+    continuity_rebuilt: bool = False
 
 
 class TrackDetailResponse(BaseModel):
@@ -252,3 +258,16 @@ class StormMapLayerResponse(BaseModel):
     intensity_geojson: dict[str, Any] = Field(default_factory=dict)
     audiom_geojson: dict[str, Any] = Field(default_factory=dict)
     centroid_geojson: dict[str, Any] = Field(default_factory=dict)
+
+
+class HistoryScan(BaseModel):
+    # Pass back unchanged as `datetime=` to select exactly this scan.
+    timestamp: str
+    object_count: int
+    tracked: bool
+
+
+class MapHistoryResponse(BaseModel):
+    site_id: str
+    location: dict
+    scans: list[HistoryScan]  # newest first
