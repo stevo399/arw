@@ -354,3 +354,92 @@ memory measurements.
 - Backfilling volumes the live refresh skipped.
 - Tracking context for historical scans outside the ring.
 - Changes to ARW's own `/radar` page.
+
+## Amendment 1 (2026-09-12, during implementation planning)
+
+Read this section before the rest of the spec. Where it conflicts with an
+earlier section, it overrides it.
+
+### A1. Dual-pol evidence is precomputed, not stored (owner decision)
+
+`_band_evidence(sweep, lower, upper)` summarizes every gate in one band across
+the whole sweep. The bands are fixed (`precipitation_band_keys()`: 15-20,
+20-30, 30-40, 40-50, 50-60, 60+), and after processing nothing else reads
+RhoHV, ZDR or per-gate class. The evidence for all six bands is therefore
+computed once, during processing, while the fields still exist, and stored as
+`precipitation_band_evidence`. The precipitation layer uses it when present.
+
+Verified on KTLX 2026-04-10 22:42:09Z, KEMX 2026-07-12 02:26:46Z and KIWA
+2026-07-12 17:00:29Z: every emitted band has median RhoHV, median ZDR and class
+fractions (KIWA's clear-air bands correctly remain `uncertain`).
+
+Consequences:
+
+- **Defect 1** is fixed without retaining any grid (Plan 1).
+- `CompactScan` no longer stores RhoHV, ZDR or gate class. It stores
+  reflectivity at every gate, the label grid, records, and band evidence.
+  Reflectivity plus labels measured 0.26 MB on KTLX. Records add the objects
+  and that scan's tracking snapshot, which are not yet measured on a busy
+  scene; the Plan 2 proofs measure the full size and set the memory limits
+  from it.
+- The consumer-guard test in section 4 is replaced by a test that the layer
+  built from precomputed evidence equals the layer built from the full fields.
+- Raw dual-pol remains available by re-parsing the Level II file in `cache/`.
+
+### A2. A scan carries the tracking state from its own time
+
+Serving an older scan with the live tracker's current tracks would describe
+storms at the wrong time. So each tracked scan stores a `TrackingSnapshot`
+(copies of active tracks plus that scan's events) taken immediately after it
+was tracked. `/tracks`, `/summary` and `/objects` serve the requested scan's own
+snapshot and never read the live tracker. A scan with no snapshot (the
+historical path) reports `tracking_context: "unavailable"` with no tracks.
+
+### A3. Defect 4: speech attached a storm to another storm's track
+
+`src/summary.py:25` and `:37` find a storm's track by matching
+`track.current_object.object_id`. A track that missed the latest scan stays
+`active` with its previous scan's object, and object numbers are reassigned
+every scan. Verified with a synthetic two-scan case: storm B (lon -96.0) was
+attached to storm A's track (lon -98.5) because A was not detected and B took
+A's old object number. The summary would speak B with A's motion and history.
+Fix: only tracks seen in the scan being summarized (`_missed_scans == 0`) can
+be matched (Plan 1).
+
+### A4. The tracker loads its previous scan instead of retaining it
+
+`StormTracker(scan_loader=None, reacquire=False)`. With no loader, behavior is
+exactly as today. With a loader, the tracker keeps only
+`(site_id, timestamp)` of its previous scan after `release_previous_scan()`,
+and loads the full scan through the loader at the next update. Reacquisition
+masks come from the same loader.
+
+### A5. Reacquisition covers a storm absent for exactly one scan
+
+With `MAX_MISSED_SCANS = 2` unchanged, a track becomes `lost` in the scan of
+its second miss, before it could be reacquired. Reacquisition therefore
+applies to a storm missing from exactly one scan and back in the next.
+Allowing two missed scans means changing `MAX_MISSED_SCANS`, which changes
+which tracks are active for focus and speech, and needs its own benchmark
+validation. It is not part of this work.
+
+### A6. Transient memory during a tracker update is measured, not bounded
+
+Association still builds full-grid masks for both scans of the pair while an
+update runs. This design bounds **retained** memory. The memory proof records
+the transient peak during an update separately, and does not gate on it.
+
+### A7. Encoding fallback stores the original dtype
+
+If a field fails the exact-step check, it is stored in its original dtype
+(zlib-compressed), not float32, so the fallback is lossless by construction.
+
+### A8. Delivery is three plans
+
+1. `docs/superpowers/plans/2026-09-12-radar-correctness-fixes.md`: defects 1,
+   3 and 4, independent of the new history.
+2. `docs/superpowers/plans/2026-09-12-compact-scan-history.md`: compact
+   scans, per-radar history, tracker persistence, reacquisition (defect 2),
+   trends, API, proofs.
+3. `docs/superpowers/plans/2026-09-12-weather-kitten-scan-stepping.md`:
+   Weather Kitten recent-scan navigation.
