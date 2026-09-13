@@ -1408,9 +1408,9 @@ def test_intensity_layer_contours_the_field_once_per_distinct_level_set(monkeypa
     real_exclusive_bands = map_layer.exclusive_bands
     calls = []
 
-    def counting(field, levels, sweep, simplify_m=map_layer.DEFAULT_SIMPLIFY_M):
+    def counting(field, levels, sweep, simplify_m=map_layer.DEFAULT_SIMPLIFY_M, **kwargs):
         calls.append(tuple(sorted(levels)))
-        return real_exclusive_bands(field, levels, sweep, simplify_m=simplify_m)
+        return real_exclusive_bands(field, levels, sweep, simplify_m=simplify_m, **kwargs)
 
     monkeypatch.setattr(map_layer, "exclusive_bands", counting)
     shared = build_storm_intensity_geojson(scan)
@@ -1428,3 +1428,23 @@ def test_intensity_layer_contours_the_field_once_per_distinct_level_set(monkeypa
 
     assert shared["features"], "fixture must produce intensity features"
     assert json.dumps(shared, sort_keys=True) == json.dumps(per_object, sort_keys=True)
+
+
+def test_intensity_layer_contours_each_distinct_level_once(monkeypatch):
+    import src.contours as contours
+
+    scan = _three_storm_band_scan()
+    baseline = build_storm_intensity_geojson(scan)
+
+    real_contour = contours._contour_at_level_raw
+    contoured = []
+
+    def counting(field, level, sweep, padded=None):
+        contoured.append(level)
+        return real_contour(field, level, sweep, padded)
+
+    monkeypatch.setattr(contours, "_contour_at_level_raw", counting)
+    shared = build_storm_intensity_geojson(scan)
+
+    assert sorted(contoured) == [20.0, 30.0, 40.0]
+    assert json.dumps(shared, sort_keys=True) == json.dumps(baseline, sort_keys=True)

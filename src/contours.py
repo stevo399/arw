@@ -467,7 +467,33 @@ def _repair_if_invalid(geom, label):
     return repaired
 
 
-def _raw_bands(field: np.ndarray, ordered_levels, sweep):
+class LevelContourCache:
+    """Raw cumulative contours of one field, shared between level sets.
+
+    `_contour_at_level_raw` depends only on the field, the level and the
+    sweep, so a level contoured for one band set is identical when another
+    band set needs it.  Holds a reference to its field and refuses any other.
+    """
+
+    def __init__(self, field: np.ndarray, sweep):
+        self.field = field
+        self.sweep = sweep
+        self._padded = None
+        self._levels: dict[float, object] = {}
+
+    def contour(self, field: np.ndarray, level: float, sweep):
+        if field is not self.field or sweep is not self.sweep:
+            raise ValueError("LevelContourCache belongs to a different field or sweep")
+        if level not in self._levels:
+            if self._padded is None:
+                self._padded = _pad_for_contouring(np.asarray(field, dtype=float))
+            self._levels[level] = _contour_at_level_raw(
+                np.asarray(field, dtype=float), level, sweep, self._padded
+            )
+        return self._levels[level]
+
+
+def _raw_bands(field: np.ndarray, ordered_levels, sweep, level_cache: LevelContourCache | None = None):
     """Exact, unsimplified exclusive bands between consecutive levels.
 
     Each band is built from `cumulative[lower].difference(cumulative[upper])`
@@ -502,11 +528,17 @@ def _raw_bands(field: np.ndarray, ordered_levels, sweep):
     downstream, and `tests/e2e/test_proof_shape_truth.py` for the real-data
     assertions that pin all of it.
     """
-    padded = _pad_for_contouring(field)
-    cumulative_raw = {
-        level: _contour_at_level_raw(field, level, sweep, padded)
-        for level in ordered_levels
-    }
+    if level_cache is not None:
+        cumulative_raw = {
+            level: level_cache.contour(level_cache.field, level, sweep)
+            for level in ordered_levels
+        }
+    else:
+        padded = _pad_for_contouring(field)
+        cumulative_raw = {
+            level: _contour_at_level_raw(field, level, sweep, padded)
+            for level in ordered_levels
+        }
 
     bands = {}
     for index, lower in enumerate(ordered_levels):
@@ -630,7 +662,13 @@ def _as_multipolygon_or_empty(geom):
     return MultiPolygon([geom]) if geom.geom_type == "Polygon" else geom
 
 
-def exclusive_bands(field: np.ndarray, levels, sweep, simplify_m: float = DEFAULT_SIMPLIFY_M):
+def exclusive_bands(
+    field: np.ndarray,
+    levels,
+    sweep,
+    simplify_m: float = DEFAULT_SIMPLIFY_M,
+    level_cache: LevelContourCache | None = None,
+):
     """Non-overlapping bands, each covering one level up to the next.
 
     Built by geometric difference on raw (unsimplified) geometry, so a band
@@ -639,10 +677,15 @@ def exclusive_bands(field: np.ndarray, levels, sweep, simplify_m: float = DEFAUL
     bands (`_simplify_bands_as_coverage`), so the user walking inward is
     always in exactly one band and crosses a real boundary, not a
     simplification artefact.
+
+    `level_cache` (built for this exact field and sweep) shares raw level
+    contours between calls with different level sets; output is identical.
     """
+    if level_cache is not None and (field is not level_cache.field or sweep is not level_cache.sweep):
+        raise ValueError("level_cache belongs to a different field or sweep")
     field = np.asarray(field, dtype=float)
     ordered = sorted(float(level) for level in levels)
-    raw = _raw_bands(field, ordered, sweep)
+    raw = _raw_bands(field, ordered, sweep, level_cache)
     return _simplify_bands_as_coverage(raw, sweep, simplify_m)
 
 

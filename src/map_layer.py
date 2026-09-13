@@ -7,7 +7,7 @@ from shapely.geometry import MultiPolygon, mapping
 from shapely.ops import transform
 
 from src.buffer import BufferedScan
-from src.contours import DEFAULT_SIMPLIFY_M, contour_mask, exclusive_bands
+from src.contours import DEFAULT_SIMPLIFY_M, LevelContourCache, contour_mask, exclusive_bands
 from src.detection import DetectedObject, IntensityLayerData, classify_intensity, degrees_to_bearing
 from src.geometry import gate_areas_km2
 from src.qc.classifier import CODE_TO_CLASS
@@ -288,7 +288,7 @@ def _object_bands(
       call for that one.
 
     `band_cache` shares whole-field bands between objects of one scan with
-    the same intensity levels.  `exclusive_bands` depends only on the field,
+    the same intensity levels, and raw level contours between level sets.  `exclusive_bands` depends only on the field,
     the levels and the tolerance, so a shared result is identical to a
     per-object one; contouring per object took 166 of 169 seconds on a
     53-object KTLX scan that has only 4 distinct level sets (2026-09-13).
@@ -306,11 +306,18 @@ def _object_bands(
     cache_key = (tuple(sorted(levels)), simplify_m)
     raw_bands = band_cache.get(cache_key) if band_cache is not None else None
     if raw_bands is None:
+        level_cache = None
+        if band_cache is not None:
+            level_cache = band_cache.get("raw_levels")
+            if level_cache is None:
+                level_cache = LevelContourCache(scan.reflectivity_data.reflectivity, scan.reflectivity_data)
+                band_cache["raw_levels"] = level_cache
         raw_bands = exclusive_bands(
             scan.reflectivity_data.reflectivity,
             levels,
             scan.reflectivity_data,
             simplify_m=simplify_m,
+            level_cache=level_cache,
         )
         if band_cache is not None:
             band_cache[cache_key] = raw_bands
