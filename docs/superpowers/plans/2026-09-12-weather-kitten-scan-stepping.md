@@ -39,6 +39,30 @@
 
 ---
 
+### Task 0: Non-blocking specific-time readiness (defect found folding Weather Kitten's uncommitted work)
+
+**Defect.** For a specific time that ARW does not retain, ARW's `/map/status?datetime=` processes the volume synchronously (about 10-12 s; KJAX live summary measured 12.3 s). Weather Kitten's status timeout is 3 s, so the user is told "ARW is temporarily unavailable" while ARW is actually preparing the scan. The preparing page then polls `/radar/status`, which never forwards the requested time. It therefore waits for the *latest* scan and reloads whenever that one is ready, whether or not the requested scan is.
+
+**ARW (`src/server.py`), tests in `tests/unit/test_server_history_api.py`:**
+- `/map/status?datetime=` never ingests in the request.
+  - A retained exact match returns ready immediately (unchanged).
+  - For any other time, it looks up a bounded request map keyed by `(site, naive-UTC requested time)`:
+    - no entry: submit `_prepare_historical_scan` to `_refresh_executor`, record `updating`, return `available: false, refresh_state: "updating", queued: true`
+    - `updating`: return the same without resubmitting
+    - `ready`: return `available: true` with the prepared volume's `scan_timestamp`
+    - `error`: return `available: false`, `last_refresh_error`, and drop the entry so the next poll retries
+- Tests:
+  - first call does not ingest and queues exactly one job
+  - a repeated call while updating queues nothing
+  - after the job runs, the call is ready with the volume timestamp
+  - a failed job reports the error and the next call queues again
+
+**Weather Kitten:**
+- Preparing snapshots carry `status_datetime` (the requested ISO time, or `None` in latest mode).
+- The preparing script polls `url_for('radar_status', datetime=...)` when it is set.
+- `radar_status` forwards a `datetime` query parameter to ARW.
+- Tests: a timestamp-mode preparing snapshot has `status_datetime`; `radar_status` forwards `datetime`.
+
 ### Task 1: Recent-scan navigation model and ARW history client
 
 **Files:**

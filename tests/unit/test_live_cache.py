@@ -12,6 +12,7 @@ def test_scan_timestamp_iso_utc_is_normalized_for_archive_lookup():
 def _clear_live_state():
     with server._state_lock:
         server._historical_scans.clear()
+        server._historical_requests.clear()
         server._refreshing_sites.clear()
         server._refresh_started_at.clear()
         server._refresh_errors.clear()

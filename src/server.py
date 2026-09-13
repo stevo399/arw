@@ -41,7 +41,7 @@ from src.map_layer import (
     storm_layer_fields,
 )
 from src.buffer import BufferedScan, TrackingSnapshot
-from src.history.compact_scan import CompactScan
+from src.history.compact_scan import CompactScan, timestamp_key
 from src.history.layer_cache import RenderedLayerCache
 from src.history.store import RING_SIZE, HistoryRegistry
 from src.radar_page import radar_page_html
@@ -87,6 +87,11 @@ _histories = HistoryRegistry(
 # kept compactly here so they are analyzed once.  They are never tracked.
 _historical_scans: OrderedDict[tuple[str, str], CompactScan] = OrderedDict()
 _max_historical_scans = int(os.getenv("ARW_MAX_HISTORICAL_SCANS", "12"))
+# Readiness of specific-time requests, prepared off the request path so a
+# status poll never waits for a volume to download and be analyzed.
+# (site, naive-UTC requested time) -> {"state", "scan_timestamp", "error"}.
+_historical_requests: OrderedDict[tuple[str, str], dict] = OrderedDict()
+_MAX_HISTORICAL_REQUESTS = 64
 _map_layers = RenderedLayerCache(
     max_unpinned_scans=int(os.getenv("ARW_MAX_RENDERED_SCANS", "10"))
 )
@@ -508,6 +513,48 @@ def _ingest_to_buffer(site_id: str, dt: datetime | None = None) -> BufferedScan:
                 (normalized_site, source_key), CompactScan.from_buffered_scan(buffered)
             )
         return buffered
+
+
+def _historical_request_key(site_id: str, requested: datetime) -> tuple[str, str]:
+    return site_id.upper(), timestamp_key(requested).isoformat()
+
+
+def _prepare_historical_scan(site_id: str, requested: datetime) -> None:
+    """Prepare a specific-time volume in the background and record the result."""
+    key = _historical_request_key(site_id, requested)
+    try:
+        buffered = _ingest_to_buffer(site_id, requested)
+    except Exception as exc:  # recorded for the next status poll, which retries
+        _logger.exception("Unable to prepare %s radar scan for %s", site_id, requested)
+        entry = {"state": "error", "scan_timestamp": None, "error": str(exc)}
+    else:
+        entry = {
+            "state": "ready",
+            "scan_timestamp": buffered.reflectivity_data.timestamp,
+            "error": None,
+        }
+    with _state_lock:
+        _historical_requests[key] = entry
+
+
+def _historical_scan_status(site_id: str, requested: datetime) -> tuple[dict, bool]:
+    """Return (readiness entry, whether preparation was queued by this call)."""
+    key = _historical_request_key(site_id, requested)
+    with _state_lock:
+        entry = _historical_requests.get(key)
+        if entry is not None and entry["state"] == "error":
+            # Report the failure once; the next poll starts a fresh attempt.
+            del _historical_requests[key]
+            return entry, False
+        if entry is not None:
+            _historical_requests.move_to_end(key)
+            return entry, False
+        entry = {"state": "updating", "scan_timestamp": None, "error": None}
+        _historical_requests[key] = entry
+        while len(_historical_requests) > _MAX_HISTORICAL_REQUESTS:
+            _historical_requests.popitem(last=False)
+    _refresh_executor.submit(_prepare_historical_scan, site_id.upper(), requested)
+    return entry, True
 
 
 def _refresh_live_scan(site_id: str) -> None:
@@ -959,21 +1006,22 @@ def get_map_status(
         # volume.  Returning its timestamp here lets a client label the map by
         # the literal radar volume time rather than the requested clock time.
         # A retained scan is ready immediately, with no ingest or network call.
+        # Any other time is prepared in the background; polls report progress.
         with _histories.use(site_id) as history:
             retained = history.find_by_timestamp(requested_datetime)
-        scan_timestamp = (
-            retained.scan_timestamp_text
-            if retained is not None
-            else _ingest_to_buffer(site_id, requested_datetime).reflectivity_data.timestamp
-        )
+        if retained is not None:
+            state, scan_timestamp, error, queued = "ready", retained.scan_timestamp_text, None, False
+        else:
+            entry, queued = _historical_scan_status(site_id, requested_datetime)
+            state, scan_timestamp, error = entry["state"], entry["scan_timestamp"], entry["error"]
         return {
             "site_id": site_id,
             "location": {"latitude": lat, "longitude": lon, "label": label},
-            "available": True,
-            "refresh_state": "ready",
-            "queued": False,
+            "available": state == "ready",
+            "refresh_state": "updating" if state == "updating" else "ready",
+            "queued": queued,
             "scan_timestamp": scan_timestamp,
-            "last_refresh_error": None,
+            "last_refresh_error": error,
             "poll_after_seconds": LIVE_REFRESH_FAILURE_RETRY_SECONDS,
         }
     # ``refresh=true`` starts an explicit acquisition even if the periodic

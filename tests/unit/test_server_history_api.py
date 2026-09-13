@@ -84,3 +84,64 @@ def test_live_status_reports_history_write_errors(client, monkeypatch, tmp_path)
     status = client.get("/live/KTLX/status").json()
     assert status["available"] is True
     assert status["history_write_error"] == "OSError: disk full"
+
+
+class _CapturingExecutor:
+    def __init__(self):
+        self.jobs = []
+
+    def submit(self, fn, *args):
+        self.jobs.append((fn, args))
+
+    def run_all(self):
+        jobs, self.jobs = self.jobs, []
+        for fn, args in jobs:
+            fn(*args)
+
+
+@pytest.fixture
+def background(monkeypatch):
+    executor = _CapturingExecutor()
+    monkeypatch.setattr(server, "_refresh_executor", executor)
+    server._historical_requests.clear()
+    yield executor
+    server._historical_requests.clear()
+
+
+SPECIFIC_TIME = {**LOCATION, "datetime": "2026-09-12T17:00:00"}
+
+
+def test_specific_time_not_retained_is_prepared_off_the_request(client, monkeypatch, background):
+    monkeypatch.setattr(server, "_ingest_to_buffer", lambda *a, **k: pytest.fail("status must not ingest"))
+
+    first = client.get("/map/status", params=SPECIFIC_TIME).json()
+    second = client.get("/map/status", params=SPECIFIC_TIME).json()
+
+    assert (first["available"], first["refresh_state"], first["queued"]) == (False, "updating", True)
+    assert (second["available"], second["refresh_state"], second["queued"]) == (False, "updating", False)
+    assert len(background.jobs) == 1
+
+    prepared = _make_scan("KTLX", T0 - timedelta(hours=1), [_make_object(1, 35.3, -97.3)])
+    monkeypatch.setattr(server, "_ingest_to_buffer", lambda site_id, dt=None: prepared)
+    background.run_all()
+    ready = client.get("/map/status", params=SPECIFIC_TIME).json()
+
+    assert (ready["available"], ready["refresh_state"], ready["queued"]) == (True, "ready", False)
+    assert ready["scan_timestamp"] == prepared.reflectivity_data.timestamp
+    assert background.jobs == []
+
+
+def test_failed_specific_time_preparation_is_reported_then_retried(client, monkeypatch, background):
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("volume unavailable")
+
+    monkeypatch.setattr(server, "_ingest_to_buffer", fail)
+    client.get("/map/status", params=SPECIFIC_TIME)
+    background.run_all()
+
+    failed = client.get("/map/status", params=SPECIFIC_TIME).json()
+    retry = client.get("/map/status", params=SPECIFIC_TIME).json()
+
+    assert failed["available"] is False
+    assert "volume unavailable" in failed["last_refresh_error"]
+    assert retry["queued"] is True and len(background.jobs) == 1
