@@ -1356,3 +1356,75 @@ def test_precomputed_evidence_is_not_shared_with_published_features():
     assert all(
         band["class_fractions"].get("precipitation") != -1.0 for band in evidence.values()
     )
+
+
+def _three_storm_band_scan() -> BufferedScan:
+    """Two storms sharing intensity levels {20, 30, 40} and one with {20, 30}."""
+    reflectivity = np.full((40, 40), np.nan)
+    masks = {}
+    for object_id, (row, col, core) in enumerate([(4, 4, 35.0), (4, 24, 35.0), (24, 4, 25.0)], start=1):
+        reflectivity[row:row + 10, col:col + 10] = 25.0
+        reflectivity[row + 3:row + 7, col + 3:col + 7] = core
+        mask = np.zeros(reflectivity.shape, dtype=bool)
+        mask[row:row + 10, col:col + 10] = True
+        masks[object_id] = mask
+    labeled = np.zeros(reflectivity.shape, dtype=int)
+    for object_id, mask in masks.items():
+        labeled[mask] = object_id
+
+    def storm(object_id, peak, layers):
+        return DetectedObject(object_id, 35.2, -96.9, 30.0, 90.0, peak, "moderate precipitation", 40.0, layers=layers)
+
+    two_bands = [IntensityLayerData("light precipitation", 20, 30, 24.0), IntensityLayerData("moderate precipitation", 30, 40, 16.0)]
+    return BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0),
+        site_id="KTLX",
+        reflectivity_data=SweepData(
+            reflectivity=reflectivity,
+            azimuths=np.linspace(80, 100, 40),
+            ranges_m=np.linspace(20000, 40000, 40),
+            radar_lat=35.3331,
+            radar_lon=-97.2778,
+            elevation_angle=0.5,
+            elevations=np.full(40, 0.5),
+            elevation_angles=[0.5],
+            radar_alt_m=390.0,
+            timestamp="2026-04-10T20:00:00Z",
+        ),
+        detected_objects=[
+            storm(1, 35.0, two_bands),
+            storm(2, 35.0, list(two_bands)),
+            storm(3, 25.0, [IntensityLayerData("light precipitation", 20, 30, 40.0)]),
+        ],
+        labeled_grid=labeled,
+        object_masks=masks,
+    )
+
+
+def test_intensity_layer_contours_the_field_once_per_distinct_level_set(monkeypatch):
+    import src.map_layer as map_layer
+
+    scan = _three_storm_band_scan()
+    real_exclusive_bands = map_layer.exclusive_bands
+    calls = []
+
+    def counting(field, levels, sweep, simplify_m=map_layer.DEFAULT_SIMPLIFY_M):
+        calls.append(tuple(sorted(levels)))
+        return real_exclusive_bands(field, levels, sweep, simplify_m=simplify_m)
+
+    monkeypatch.setattr(map_layer, "exclusive_bands", counting)
+    shared = build_storm_intensity_geojson(scan)
+    assert sorted(calls) == [(20.0, 30.0), (20.0, 30.0, 40.0)]
+
+    real_object_bands = map_layer._object_bands
+    monkeypatch.setattr(
+        map_layer,
+        "_object_bands",
+        lambda scan, obj, simplify_m=map_layer.DEFAULT_SIMPLIFY_M, band_cache=None: real_object_bands(
+            scan, obj, simplify_m=simplify_m
+        ),
+    )
+    per_object = build_storm_intensity_geojson(scan)
+
+    assert shared["features"], "fixture must produce intensity features"
+    assert json.dumps(shared, sort_keys=True) == json.dumps(per_object, sort_keys=True)

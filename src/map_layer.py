@@ -253,7 +253,10 @@ def _as_multipolygon(geom) -> MultiPolygon:
 
 
 def _object_bands(
-    scan: BufferedScan, obj: DetectedObject, simplify_m: float = DEFAULT_SIMPLIFY_M
+    scan: BufferedScan,
+    obj: DetectedObject,
+    simplify_m: float = DEFAULT_SIMPLIFY_M,
+    band_cache: dict | None = None,
 ) -> dict[tuple[float, float], MultiPolygon]:
     """This object's intensity bands: exclusive, and clipped to its own footprint.
 
@@ -283,6 +286,12 @@ def _object_bands(
       `_object_footprint_raw`). This is NOT true of the simplified
       footprint `object_geometry` draws for display -- do not swap this
       call for that one.
+
+    `band_cache` shares whole-field bands between objects of one scan with
+    the same intensity levels.  `exclusive_bands` depends only on the field,
+    the levels and the tolerance, so a shared result is identical to a
+    per-object one; contouring per object took 166 of 169 seconds on a
+    53-object KTLX scan that has only 4 distinct level sets (2026-09-13).
     """
     footprint = _object_footprint_raw(scan, obj)
     if footprint is None or not obj.layers:
@@ -294,12 +303,17 @@ def _object_bands(
         if layer.max_dbz != float("inf"):
             levels.add(float(layer.max_dbz))
 
-    raw_bands = exclusive_bands(
-        scan.reflectivity_data.reflectivity,
-        levels,
-        scan.reflectivity_data,
-        simplify_m=simplify_m,
-    )
+    cache_key = (tuple(sorted(levels)), simplify_m)
+    raw_bands = band_cache.get(cache_key) if band_cache is not None else None
+    if raw_bands is None:
+        raw_bands = exclusive_bands(
+            scan.reflectivity_data.reflectivity,
+            levels,
+            scan.reflectivity_data,
+            simplify_m=simplify_m,
+        )
+        if band_cache is not None:
+            band_cache[cache_key] = raw_bands
     return {
         key: _as_multipolygon(geom.intersection(footprint))
         for key, geom in raw_bands.items()
@@ -547,8 +561,9 @@ def build_storm_intensity_geojson(
 ) -> dict[str, Any]:
     features = []
     omitted = 0
+    band_cache: dict = {}
     for obj in scan.detected_objects:
-        bands = _object_bands(scan, obj, simplify_m=simplify_m)
+        bands = _object_bands(scan, obj, simplify_m=simplify_m, band_cache=band_cache)
         for layer in obj.layers:
             feature = storm_intensity_layer_to_feature(scan, obj, layer, bands)
             if feature is None:
