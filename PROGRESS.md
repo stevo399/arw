@@ -195,6 +195,11 @@
   Byte-identical to the original on real volumes; KTLX 53 storms 123.5 s -> 8.0 s, KEMX 81 storms
   327.1 s -> 14.0 s. The rest is joint coverage simplification (about half) and raw contouring
 - Full suite after both fixes: 539 passed, 3 xfailed (the pre-existing expected failures)
+- **Dense-scene tracking speed (`2457b0b`, branch `tracking-speed`):** association scored every track
+  against every object on full radar grids -- 205 s for a 218-by-225-storm KJAX update, longer than
+  the radar's scan interval. Overlaps are now counted inside the masks' bounding windows and each
+  track's shifted mask is built once. Identical association results on real KJAX and KTLX pairs;
+  2.1 s (was 205.1 s) and 0.7 s (was 14.2 s)
 
 ## In Progress
 - Owner review: keyboard-and-NVDA pass through the Weather Kitten recent-scans section
