@@ -17,12 +17,26 @@ def km2_to_mi2(km2: float) -> int:
     return round(km2 / (KM_PER_MILE ** 2))
 
 
+def _seen_this_scan(track) -> bool:
+    """Whether this track was matched in the scan being summarized.
+
+    A track that missed the scan stays active while holding its previous
+    scan's object.  Object numbers are reassigned every scan, so that stale
+    object's number can now belong to a different storm.
+    """
+    return getattr(track, "_missed_scans", 0) == 0
+
+
 def _get_motion_for_object(obj: DetectedObject, tracks) -> MotionVector | None:
     """Find the motion vector for a detected object by matching to its track."""
     if tracks is None:
         return None
     for track in tracks:
-        if track.current_object is not None and track.current_object.object_id == obj.object_id:
+        if (
+            track.current_object is not None
+            and _seen_this_scan(track)
+            and track.current_object.object_id == obj.object_id
+        ):
             if hasattr(track, '_motion_override'):
                 return track._motion_override
             return track.get_motion()
@@ -34,7 +48,11 @@ def _get_track_for_object(obj: DetectedObject, tracks):
     if tracks is None:
         return None
     for track in tracks:
-        if track.current_object is not None and track.current_object.object_id == obj.object_id:
+        if (
+            track.current_object is not None
+            and _seen_this_scan(track)
+            and track.current_object.object_id == obj.object_id
+        ):
             return track
     return None
 

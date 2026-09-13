@@ -370,3 +370,65 @@ def test_summary_no_rotation_when_none():
     )
     assert "rotation" not in text.lower()
 
+
+
+from datetime import datetime, timedelta
+
+import numpy as np
+
+from src.summary import _get_motion_for_object, _get_track_for_object
+from src.tracker import StormTracker
+from src.tracking.types import Track
+from tests.unit.test_tracking_association import _make_object as _tracked_object
+from tests.unit.test_tracking_association import _make_scan as _tracked_scan
+
+
+def _storm(object_id: int, lon: float, peak: float) -> DetectedObject:
+    return DetectedObject(object_id, 35.0, lon, 40.0, 90.0, peak, "heavy precipitation", 100.0)
+
+
+def test_track_lookup_ignores_a_track_that_missed_this_scan():
+    t1 = datetime(2026, 9, 12, 18, 0)
+    stale = Track(track_id=1, status="active")
+    stale.add_position(t1, _storm(1, -98.5, 55.0))
+    stale._missed_scans = 1
+    stale._motion_override = "storm A motion"
+    current = Track(track_id=2, status="active")
+    current.add_position(t1 + timedelta(minutes=5), _storm(1, -96.0, 45.0))
+    current._motion_override = "storm B motion"
+    storm_b = _storm(1, -96.0, 45.0)
+
+    assert _get_track_for_object(storm_b, [stale, current]) is current
+    assert _get_motion_for_object(storm_b, [stale, current]) == "storm B motion"
+
+
+def test_tracker_scenario_where_a_missed_storm_shares_the_object_number():
+    """Reproduces defect 4 through the real tracker.
+
+    Storm A is not detected in the second scan, so storm B -- the only
+    object -- is numbered 1, which was A's number in the first scan.
+    """
+    shape = (360, 500)
+
+    def mask(row: int, col: int) -> np.ndarray:
+        grid = np.zeros(shape, dtype=bool)
+        grid[row:row + 10, col:col + 10] = True
+        return grid
+
+    t1 = datetime(2026, 4, 8, 18, 30)
+    tracker = StormTracker()
+    tracker.update(_tracked_scan(
+        "KTLX", t1,
+        [_tracked_object(1, 35.0, -98.5, 55.0), _tracked_object(2, 35.0, -96.0, 45.0)],
+        {1: mask(50, 50), 2: mask(200, 400)},
+    ))
+    tracker.update(_tracked_scan(
+        "KTLX", t1 + timedelta(minutes=5),
+        [_tracked_object(1, 35.0, -96.0, 45.0)],
+        {1: mask(200, 400)},
+    ))
+
+    storm_b = _tracked_object(1, 35.0, -96.0, 45.0)
+    track = _get_track_for_object(storm_b, tracker.active_tracks)
+    assert track is not None
+    assert track.current_object.centroid_lon == -96.0
