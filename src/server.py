@@ -1,4 +1,5 @@
 # src/server.py
+from dataclasses import asdict
 from datetime import datetime, date as date_type, timedelta, timezone
 from copy import deepcopy
 from collections import OrderedDict
@@ -19,6 +20,7 @@ from src.models import (
     TrackDetailResponse, PeakHistoryEntry,
     VelocityResponse, VelocityRegionModel, RotationSignatureModel, RotationHistoryEntryModel,
     MapLocation, StormMapLayerResponse,
+    TrackTrend,
 )
 from src.sites import geocode_city_state, geocode_zipcode, rank_sites, NEXRAD_SITES
 from src.ingest import CACHE_DIR, fetch_scan
@@ -43,6 +45,7 @@ from src.history.layer_cache import RenderedLayerCache
 from src.history.store import RING_SIZE, HistoryRegistry
 from src.radar_page import radar_page_html
 from src.tracker import StormTracker
+from src.tracking.trends import compute_trend
 
 app = FastAPI(title="ARW - Accessible Radar Workstation", version="0.2.0")
 
@@ -874,6 +877,7 @@ def _track_to_model(track) -> StormTrack:
             )
             for entry in getattr(track, 'rotation_history', [])
         ],
+        trend=TrackTrend(**asdict(compute_trend(getattr(track, "trend_samples", [])))),
     )
 
 

@@ -166,6 +166,14 @@ class PeakHistoryEntry(BaseModel):
     peak_label: str
 
 
+class TrackTrend(BaseModel):
+    area: str
+    core_area: str
+    confidence: str
+    reason: str
+    sample_count: int
+
+
 class StormTrack(BaseModel):
     track_id: int
     status: str
@@ -180,6 +188,7 @@ class StormTrack(BaseModel):
     first_seen: str
     last_seen: str
     rotation_history: list[RotationHistoryEntryModel] = []
+    trend: TrackTrend | None = None
 
 
 class TrackEvent(BaseModel):

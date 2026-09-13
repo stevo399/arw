@@ -737,6 +737,7 @@ class StormTracker:
             missed_scans = track._missed_scans
             track.status = "active"
             track.add_position(timestamp, new_objects[new_id])
+            track.trend_samples[-1].reacquired = True
             track.rotation_history.append(RotationHistoryEntry(
                 timestamp=timestamp,
                 rotation=getattr(new_objects[new_id], "rotation", None),

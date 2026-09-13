@@ -6,6 +6,23 @@ from src.detection import DetectedObject
 from src.velocity import RotationSignature
 
 
+# Reflectivity at or above this marks a storm's intense core (the
+# "intense precipitation" and "severe core" intensity bands).
+CORE_MIN_DBZ = 50.0
+MAX_TREND_SAMPLES = 6
+
+
+@dataclass
+class TrendSample:
+    timestamp: datetime
+    area_km2: float
+    core_area_km2: float
+    peak_dbz: float
+    # True when this sample came from a reacquired match; trends spanning it
+    # are not reported, since the storm was unobserved for at least a scan.
+    reacquired: bool = False
+
+
 @dataclass
 class TrackPosition:
     timestamp: datetime
@@ -121,6 +138,7 @@ class Track:
     diagnostic_motion: Any | None = None
     motion_history: list[MotionSample] = field(default_factory=list)
     rotation_history: list[RotationHistoryEntry] = field(default_factory=list)
+    trend_samples: list[TrendSample] = field(default_factory=list)
     is_primary_focus: bool = False
     # (scan timestamp, object id) of the last scan this track was matched in.
     # Reacquisition rebuilds the track's mask from that scan.
@@ -143,6 +161,14 @@ class Track:
         self.current_object = obj
         self.last_seen = timestamp
         self.last_seen_ref = (timestamp, obj.object_id)
+        self.trend_samples.append(TrendSample(
+            timestamp=timestamp,
+            area_km2=obj.area_km2,
+            core_area_km2=sum(layer.area_km2 for layer in obj.layers if layer.min_dbz >= CORE_MIN_DBZ),
+            peak_dbz=obj.peak_dbz,
+        ))
+        if len(self.trend_samples) > MAX_TREND_SAMPLES:
+            self.trend_samples = self.trend_samples[-MAX_TREND_SAMPLES:]
         self._missed_scans = 0
         if self.first_seen is None:
             self.first_seen = timestamp
