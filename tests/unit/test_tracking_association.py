@@ -174,3 +174,94 @@ def test_associate_tracks_uses_advected_geometry_to_keep_match():
     score = result.candidate_scores[0]
     assert score.advected_overlap_score > score.overlap_score
 
+
+
+def _block(rows: tuple[int, int], cols: tuple[int, int], shape=(360, 500)) -> np.ndarray:
+    grid = np.zeros(shape, dtype=bool)
+    grid[rows[0]:rows[1], cols[0]:cols[1]] = True
+    return grid
+
+
+def _storm_continuing_while_a_neighbour_absorbs_its_edge():
+    """Storm A continues as Y; its edge overlaps X, which continues storm C."""
+    t1 = datetime(2026, 4, 8, 18, 30)
+    previous = _make_scan(
+        "KTLX", t1,
+        [_make_object(1, 35.30, -97.50, 50.0, 100.0), _make_object(2, 35.30, -97.45, 50.0, 100.0)],
+        {1: _block((50, 70), (100, 120)), 2: _block((50, 70), (130, 150))},
+    )
+    current = _make_scan(
+        "KTLX", t1 + timedelta(minutes=5),
+        [_make_object(1, 35.30, -97.51, 50.0, 75.0), _make_object(2, 35.30, -97.47, 50.0, 170.0)],
+        {1: _block((50, 70), (100, 115)), 2: _block((50, 70), (116, 150))},
+    )
+    return previous, current
+
+
+def test_a_track_matched_to_its_own_object_is_never_a_merge_candidate():
+    previous, current = _storm_continuing_while_a_neighbour_absorbs_its_edge()
+    tracker = StormTracker()
+    tracker.update(previous)
+
+    association = associate_tracks(previous, current, tracker.all_tracks, tracker._obj_to_track)
+
+    assert association.primary_matches == {1: 1, 2: 2}
+    matched = set(association.primary_matches.values())
+    for new_id, track_ids in association.merge_candidates.items():
+        survivor, merged = track_ids[0], track_ids[1:]
+        assert not (set(merged) & matched), f"object {new_id} lists matched tracks {merged} as merged"
+
+
+def test_the_same_storm_keeps_its_track_when_a_neighbour_touches_it():
+    previous, current = _storm_continuing_while_a_neighbour_absorbs_its_edge()
+    tracker = StormTracker()
+    tracker.update(previous)
+    tracker.update(current)
+
+    storm_a = tracker.get_track(1)
+    assert storm_a.status == "active"
+    assert storm_a.current_object.centroid_lon == -97.51
+    assert not any(1 in event["involved_track_ids"] for event in tracker.recent_events if event["event_type"] == "merge")
+    assert len(tracker.active_tracks) == len(current.detected_objects)
+
+
+def test_an_object_matched_to_another_track_is_never_a_split_child(monkeypatch):
+    """Global assignment gives U to Q although P scores U best.
+
+    P -> U 0.10, P -> V 0.20, Q -> U 0.15.  The optimum is P -> V, Q -> U, so
+    U continues storm Q and must not also become a split child of P.
+    """
+    import src.tracking.association as association_module
+    from src.tracking.types import AssociationScore
+
+    costs = {(1, 1): 0.10, (1, 2): 0.20, (2, 1): 0.15}
+
+    def scripted_score(track, new_object, **_kwargs):
+        cost = costs.get((track.track_id, new_object.object_id))
+        if cost is None:
+            return None
+        return AssociationScore(track.track_id, new_object.object_id, 0.9, 0.9, 0.0, 0.0, 0.0, 0.0, cost)
+
+    monkeypatch.setattr(association_module, "_candidate_score", scripted_score)
+    t1 = datetime(2026, 4, 8, 18, 30)
+    previous = _make_scan(
+        "KTLX", t1,
+        [_make_object(1, 35.30, -97.50), _make_object(2, 35.32, -97.52)],
+        {1: _block((50, 70), (100, 120)), 2: _block((100, 120), (100, 120))},
+    )
+    current = _make_scan(
+        "KTLX", t1 + timedelta(minutes=5),
+        [_make_object(1, 35.31, -97.51), _make_object(2, 35.30, -97.49)],
+        {1: _block((50, 60), (100, 120)), 2: _block((60, 70), (100, 120))},
+    )
+    tracker = StormTracker()
+    tracker.update(previous)
+
+    association = associate_tracks(previous, current, tracker.all_tracks, tracker._obj_to_track)
+
+    assert association.primary_matches == {2: 1, 1: 2}
+    for track_id, object_ids in association.split_candidates.items():
+        children = object_ids[1:]
+        assert all(association.primary_matches.get(child) in (None, track_id) for child in children), (
+            f"track {track_id} lists objects matched to other tracks as split children: {children}"
+        )

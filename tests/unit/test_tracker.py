@@ -286,10 +286,14 @@ def test_tracker_merge_event_excludes_surviving_and_dedupes():
         assert merged_track_id in surviving_track.absorbed_track_ids
 
 
-def test_tracker_leftover_after_merge_becomes_new_track():
-    """If a new object 1:1-matches a previous object whose track was already
-    consumed by a merge, the leftover must become a new track — not reuse
-    the merged survivor."""
+def test_storm_matched_to_its_own_object_is_not_merged_into_a_neighbour():
+    """A continues as Y and B as X; neither is merged away.
+
+    This test formerly expected X to "merge" A and B and Y to become a new
+    track.  But the global assignment matches A to Y (60% overlap, cost 0.27)
+    and B to X, so that expectation turned storm A into a different storm.
+    A storm that continues as its own object keeps its track (2026-09-13).
+    """
     tracker = StormTracker()
     t1 = datetime(2026, 4, 8, 18, 30)
     t2 = datetime(2026, 4, 8, 18, 35)
@@ -315,25 +319,18 @@ def test_tracker_leftover_after_merge_becomes_new_track():
     tracker.update(scan1)
     tracker.update(scan2)
 
-    # After scan 2: X should be in the surviving merged track (1),
-    # Y should be in its own new track (not track 1).
-    # Total tracks: 1 surviving (from A), 1 merged-out (B), 1 new (Y) = 3.
     all_tracks = tracker.all_tracks
-    assert len(all_tracks) == 3, f"expected 3 tracks, got {len(all_tracks)}"
+    assert len(all_tracks) == 2, f"expected 2 tracks, got {len(all_tracks)}"
+    assert tracker.get_track(1).current_object.centroid_lon == -97.31  # A continues as Y
+    assert tracker.get_track(2).current_object.centroid_lon == -97.29  # B continues as X
     # No active track should have duplicate positions at the same timestamp
     for track in all_tracks:
         timestamps = [p.timestamp for p in track.positions]
         assert len(timestamps) == len(set(timestamps)), (
             f"track {track.track_id} has duplicate position timestamps: {timestamps}"
         )
-    # Exactly two active tracks: the merged survivor and the new track for Y
-    active = tracker.active_tracks
-    assert len(active) == 2
-    # Merge events should reference real merges (track IDs must be distinct)
-    merge_events = [e for e in tracker.recent_events if e["event_type"] == "merge"]
-    assert len(merge_events) == 1
-    involved = merge_events[0]["involved_track_ids"]
-    assert len(involved) == len(set(involved))
+    assert len(tracker.active_tracks) == 2
+    assert [e for e in tracker.recent_events if e["event_type"] == "merge"] == []
 
 
 def test_tracker_two_merges_sharing_prev_do_not_duplicate_track_mapping():

@@ -295,7 +295,14 @@ def associate_tracks(
         surviving_track_id = result.primary_matches.get(new_id)
         if surviving_track_id is None:
             continue
-        merge_track_ids = [track_id for track_id in related_track_ids if track_id != surviving_track_id]
+        # Only a track left without its own match can merge.  A track matched
+        # to another object continues as that storm; merging it away would
+        # turn the same storm into a different one.
+        merge_track_ids = [
+            track_id
+            for track_id in related_track_ids
+            if track_id != surviving_track_id and track_id not in matched_track_ids
+        ]
         if merge_track_ids:
             result.merge_candidates[new_id] = [surviving_track_id] + merge_track_ids
 
@@ -310,7 +317,15 @@ def associate_tracks(
                 break
         if primary_new_id is None:
             continue
-        split_new_ids = [new_id for new_id in related_new_ids if new_id != primary_new_id and best_track_for_object.get(new_id) == track_id]
+        # Only an object left without its own match can be a split child.  An
+        # object matched to another track continues that storm.
+        split_new_ids = [
+            new_id
+            for new_id in related_new_ids
+            if new_id != primary_new_id
+            and new_id not in matched_new_ids
+            and best_track_for_object.get(new_id) == track_id
+        ]
         if split_new_ids:
             result.split_candidates[track_id] = [primary_new_id] + split_new_ids
 
