@@ -3,6 +3,7 @@ import math
 
 from src.detection import DetectedObject, degrees_to_bearing
 from src.motion import MotionVector
+from src.tracking.motion import NEARBY_SOURCE
 
 KM_PER_MILE = 1.60934
 
@@ -72,7 +73,10 @@ def _identity_score(track) -> float:
 def _should_downgrade_focus_motion(track, motion: MotionVector | None, events: list[dict] | None) -> bool:
     if track is None or motion is None:
         return False
-    if motion.heading_label in {"uncertain", "stationary", "nearly stationary"}:
+    if motion.heading_label in {"uncertain", "stationary", "nearly stationary", "unknown"}:
+        return False
+    if motion.source == NEARBY_SOURCE:
+        # Not this storm's own measurement, and spoken as nearby storms' motion.
         return False
     if not getattr(track, "is_primary_focus", False):
         return False
@@ -164,10 +168,14 @@ def _format_motion(motion: MotionVector | None, track=None, events: list[dict] |
         return ""
     if _should_downgrade_focus_motion(track, motion, events):
         return ", tracking uncertain"
+    if motion.heading_label == "unknown":
+        return ", motion not yet known"
     if motion.heading_label == "uncertain":
         return ", tracking uncertain"
-    if motion.heading_label == "stationary":
-        return ", stationary"
+    if motion.source == NEARBY_SOURCE:
+        if motion.heading_label == "nearly stationary":
+            return ", likely nearly stationary like nearby storms"
+        return f", likely moving {motion.heading_label} at {motion.speed_mph} mph with nearby storms"
     if motion.heading_label == "nearly stationary":
         return ", nearly stationary"
     return f", moving {motion.heading_label} at {motion.speed_mph} mph"

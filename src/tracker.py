@@ -2,16 +2,29 @@ from copy import deepcopy
 from datetime import datetime
 import logging
 from typing import Callable
+
+import numpy as np
+
 from src.buffer import BufferedScan, TrackingSnapshot
 from src.detection import DetectedObject
-from src.motion import resolve_reported_motion, MotionVector, recent_heading_flip_count
-from src.tracking.motion import MotionContinuityContext
+from src.tracking.motion import MotionVector, recent_heading_flip_count, report_motion, unknown_motion
 from src.tracking.association import MAX_REACQUISITION_MINUTES, associate_tracks
 from src.tracking.events import normalize_merge_event, normalize_reacquired_event, normalize_split_event
-from src.tracking.types import FocusContinuity, IdentityConfidence, MotionSample, RotationHistoryEntry, Track
+from src.tracking.pattern_motion import guard_matches, match_storm, nearby_velocity
+from src.tracking.types import (
+    MAX_MEASURED_VELOCITIES,
+    FocusContinuity,
+    IdentityConfidence,
+    MotionSample,
+    RotationHistoryEntry,
+    Track,
+    VelocitySample,
+)
 
 _logger = logging.getLogger(__name__)
-TRACKER_STATE_VERSION = 1
+# 2: motion is measured by pattern matching (2026-09-13); state built from
+# centre-track motion is rebuilt rather than mixed with it.
+TRACKER_STATE_VERSION = 2
 ScanLoader = Callable[[str, datetime], BufferedScan | None]
 
 FOCUS_SWITCH_MARGIN = 2.0
@@ -132,22 +145,7 @@ def _focus_margin_bonus(selection_margin: float | None, structural_event_count: 
 
 
 def _get_track_motion(track: Track) -> MotionVector:
-    if track.last_motion is not None:
-        return track.last_motion
-    pos_tuples = [(p.timestamp, p.latitude, p.longitude) for p in track.positions]
-    reported_motion, diagnostic_motion = resolve_reported_motion(
-        pos_tuples,
-        identity_confidence=track.identity_confidence,
-        continuity=MotionContinuityContext(
-            identity_score=track.identity_confidence,
-            event_context=track.identity_diagnostics.event_context if track.identity_diagnostics is not None else None,
-            ambiguity_margin=track.identity_diagnostics.ambiguity_margin if track.identity_diagnostics is not None else None,
-        ),
-    )
-    track.last_motion = reported_motion
-    track.diagnostic_motion = diagnostic_motion
-    track.motion_confidence = reported_motion.confidence
-    return reported_motion
+    return track.last_motion if track.last_motion is not None else unknown_motion()
 
 
 class StormTracker:
@@ -372,39 +370,53 @@ class StormTracker:
         )
         return fallback
 
-    def _refresh_track_motions(self, field_estimates, field_dt_hours: float) -> None:
-        structural_event_count = sum(
-            1 for event in self._recent_events if event["event_type"] in {"merge", "split"}
-        )
-        for track in self._tracks:
-            if track.status != "active":
-                continue
-            positions = [(p.timestamp, p.latitude, p.longitude) for p in track.positions]
-            field_estimate = None
-            if isinstance(field_estimates, dict):
-                field_estimate = field_estimates.get(track.track_id)
-            reported_motion, diagnostic_motion = resolve_reported_motion(
-                positions,
-                identity_confidence=track.identity_confidence,
-                field_estimate=field_estimate,
-                field_dt_hours=field_dt_hours,
-                continuity=MotionContinuityContext(
-                    identity_score=track.identity_confidence,
-                    event_context=track.identity_diagnostics.event_context if track.identity_diagnostics is not None else None,
-                    ambiguity_margin=track.identity_diagnostics.ambiguity_margin if track.identity_diagnostics is not None else None,
-                    structural_event_count=structural_event_count,
-                ),
+    def _refresh_track_motions(self, scan: BufferedScan, previous_scan: BufferedScan | None) -> None:
+        """Measure every storm seen in this scan and choose the motion it reports."""
+        seen: list[tuple[int, Track]] = []
+        tracks_by_id = {track.track_id: track for track in self._tracks}
+        for object_id, track_id in self._obj_to_track.items():
+            track = tracks_by_id.get(track_id)
+            if track is not None and track.status == "active" and track.current_object is not None:
+                seen.append((object_id, track))
+        centres = {
+            track.track_id: (track.current_object.centroid_lat, track.current_object.centroid_lon)
+            for _, track in seen
+        }
+        matches = {}
+        if previous_scan is not None:
+            hours = (scan.timestamp - previous_scan.timestamp).total_seconds() / 3600.0
+            for object_id, track in seen:
+                found = match_storm(
+                    scan.reflectivity_data,
+                    np.asarray(scan.object_masks[object_id]),
+                    previous_scan.reflectivity_data,
+                    hours,
+                )
+                if found is not None:
+                    matches[track.track_id] = found
+        accepted = guard_matches(matches, centres)
+
+        for _, track in seen:
+            velocity = accepted.get(track.track_id)
+            if velocity is not None:
+                track.measured_velocities.append(
+                    VelocitySample(timestamp=scan.timestamp, east_kmh=velocity[0], north_kmh=velocity[1])
+                )
+                track.measured_velocities = track.measured_velocities[-MAX_MEASURED_VELOCITIES:]
+            motion = report_motion(
+                position_count=len(track.positions),
+                measured=track.measured_velocities,
+                nearby=nearby_velocity(track.track_id, accepted, centres),
             )
-            track.last_motion = reported_motion
-            track.diagnostic_motion = diagnostic_motion
-            track.motion_confidence = reported_motion.confidence
+            track.last_motion = motion
+            track.motion_confidence = motion.confidence
             track.motion_history.append(
                 MotionSample(
-                    timestamp=track.last_seen or (self._prev_scan_ref[1] if self._prev_scan_ref is not None else datetime.min),
-                    heading_deg=reported_motion.heading_deg,
-                    heading_label=reported_motion.heading_label,
-                    source=reported_motion.source,
-                    confidence_score=reported_motion.confidence.score if reported_motion.confidence is not None else None,
+                    timestamp=scan.timestamp,
+                    heading_deg=motion.heading_deg,
+                    heading_label=motion.heading_label,
+                    source=motion.source,
+                    confidence_score=motion.confidence.score if motion.confidence is not None else None,
                 )
             )
             if len(track.motion_history) > 6:
@@ -437,7 +449,7 @@ class StormTracker:
             if motion is not None and motion.confidence is not None and motion.confidence.score is not None
             else 1.0
         )
-        motion_is_stationaryish = motion is None or motion.heading_label in {"stationary", "nearly stationary"}
+        motion_is_stationaryish = motion is None or motion.heading_label in {"stationary", "nearly stationary", "unknown"}
         recent_heading_flip_total = recent_heading_flip_count(
             [(p.timestamp, p.latitude, p.longitude) for p in track.positions],
             max_steps=4,
@@ -626,7 +638,7 @@ class StormTracker:
                     event_context="initial",
                 )
                 self._obj_to_track[obj.object_id] = track.track_id
-            self._refresh_track_motions(field_estimates=None, field_dt_hours=0.0)
+            self._refresh_track_motions(scan, previous_scan=None)
             self._update_primary_focus()
             self._remember_scan(scan)
             return
@@ -816,7 +828,7 @@ class StormTracker:
                 track.status = "lost"
 
         self._obj_to_track = new_obj_to_track
-        self._refresh_track_motions(field_estimates=association.track_geo_motion, field_dt_hours=association.dt_hours)
+        self._refresh_track_motions(scan, previous_scan)
         self._update_primary_focus()
         self._remember_scan(scan)
 

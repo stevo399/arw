@@ -81,14 +81,16 @@ class BenchmarkResult:
     focus_low_continuity_scans: int
     focus_low_motion_scans: int
     focus_reported_heading_reversal_scans: int
-    focus_motion_field_source_scans: int
-    focus_motion_suppressed_source_scans: int
+    focus_nearby_storms_motion_scans: int
+    focus_unknown_motion_scans: int
     focus_switches: int
     focus_heading_flips_ge_90: int
     focus_flips_with_low_motion_confidence: int
     focus_track_distance_changes: int
     summary_tracking_uncertain_count: int
     summary_motion_published_count: int
+    summary_nearby_motion_count: int
+    summary_motion_unknown_count: int
     summary_stationaryish_count: int
     total_new_tracks_after_first_scan: int
     merged_tracks_total: int
@@ -296,6 +298,8 @@ def run_benchmark(entry: dict) -> BenchmarkResult:
     summary_motion_published_count = sum(
         1 for snapshot in snapshots if "moving " in snapshot.summary and "tracking uncertain" not in snapshot.summary
     )
+    summary_nearby_motion_count = sum(1 for snapshot in snapshots if "nearby storms" in snapshot.summary)
+    summary_motion_unknown_count = sum(1 for snapshot in snapshots if "motion not yet known" in snapshot.summary)
     summary_stationaryish_count = sum(
         1
         for snapshot in snapshots
@@ -359,14 +363,16 @@ def run_benchmark(entry: dict) -> BenchmarkResult:
             for snapshot in snapshots
             if snapshot.focus_reported_heading_flip_count is not None and snapshot.focus_reported_heading_flip_count >= 1
         ),
-        focus_motion_field_source_scans=sum(1 for snapshot in snapshots if snapshot.focus_motion_source == "motion_field"),
-        focus_motion_suppressed_source_scans=sum(1 for snapshot in snapshots if snapshot.focus_motion_source == "suppressed"),
+        focus_nearby_storms_motion_scans=sum(1 for snapshot in snapshots if snapshot.focus_motion_source == "nearby_storms"),
+        focus_unknown_motion_scans=sum(1 for snapshot in snapshots if snapshot.focus_motion_source == "not_measured"),
         focus_switches=focus_switches,
         focus_heading_flips_ge_90=focus_heading_flips_ge_90,
         focus_flips_with_low_motion_confidence=focus_flips_with_low_motion_confidence,
         focus_track_distance_changes=focus_track_distance_changes,
         summary_tracking_uncertain_count=summary_tracking_uncertain_count,
         summary_motion_published_count=summary_motion_published_count,
+        summary_nearby_motion_count=summary_nearby_motion_count,
+        summary_motion_unknown_count=summary_motion_unknown_count,
         summary_stationaryish_count=summary_stationaryish_count,
         total_new_tracks_after_first_scan=total_new_tracks_after_first_scan,
         merged_tracks_total=merged_tracks_total,
@@ -408,13 +414,15 @@ def render_markdown(results: list[BenchmarkResult]) -> str:
             f"- focus low-continuity scans: `{result.focus_low_continuity_scans}`",
             f"- focus low-motion scans: `{result.focus_low_motion_scans}`",
             f"- focus reported-heading-reversal scans: `{result.focus_reported_heading_reversal_scans}`",
-            f"- focus motion-field source scans: `{result.focus_motion_field_source_scans}`",
-            f"- focus suppressed-motion source scans: `{result.focus_motion_suppressed_source_scans}`",
+            f"- focus nearby-storms motion scans: `{result.focus_nearby_storms_motion_scans}`",
+            f"- focus unknown-motion scans: `{result.focus_unknown_motion_scans}`",
             f"- focus switches: `{result.focus_switches}`",
             f"- focus heading flips >=90 deg: `{result.focus_heading_flips_ge_90}`",
             f"- focus flips with low motion confidence: `{result.focus_flips_with_low_motion_confidence}`",
             f"- summary tracking-uncertain count: `{result.summary_tracking_uncertain_count}`",
             f"- summary moving-motion count: `{result.summary_motion_published_count}`",
+            f"- summary nearby-storms motion count: `{result.summary_nearby_motion_count}`",
+            f"- summary motion-not-yet-known count: `{result.summary_motion_unknown_count}`",
             f"- summary stationary/nearly-stationary count: `{result.summary_stationaryish_count}`",
             f"- total new tracks after first scan: `{result.total_new_tracks_after_first_scan}`",
             f"- merged tracks total: `{result.merged_tracks_total}`",

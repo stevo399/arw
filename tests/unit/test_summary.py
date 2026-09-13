@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from src.summary import generate_summary, km_to_miles
 from src.detection import DetectedObject
-from src.motion import MotionVector
+from src.motion import MotionVector, unknown_motion
 from src.tracker import Track
 from src.velocity import RotationSignature
 
@@ -80,19 +80,35 @@ def test_generate_summary_with_motion():
     assert "moving NE at 35 mph" in text
 
 
-def test_generate_summary_stationary():
-    """Stationary track shows 'stationary'."""
+def _summary_with_motion(motion) -> str:
     obj = _make_object()
     track = _make_track(obj=obj)
-    track._motion_override = MotionVector(speed_kmh=0.0, speed_mph=0, heading_deg=None, heading_label="stationary")
-    text = generate_summary(
+    track._motion_override = motion
+    return generate_summary(
         site_id="KTLX",
         site_name="Oklahoma City",
         timestamp="2026-04-08T18:30:00Z",
         objects=[obj],
         tracks=[track],
     )
-    assert "stationary" in text
+
+
+def test_generate_summary_nearly_stationary():
+    text = _summary_with_motion(MotionVector(speed_kmh=4.0, speed_mph=2, heading_deg=None, heading_label="nearly stationary", source="pattern_match"))
+    assert ", nearly stationary." in text
+
+
+def test_generate_summary_says_motion_not_yet_known_rather_than_stationary():
+    text = _summary_with_motion(unknown_motion())
+    assert ", motion not yet known." in text
+    assert "stationary" not in text
+
+
+def test_generate_summary_attributes_nearby_storms_motion():
+    moving = MotionVector(speed_kmh=32.0, speed_mph=20, heading_deg=45.0, heading_label="NE", source="nearby_storms")
+    assert ", likely moving NE at 20 mph with nearby storms." in _summary_with_motion(moving)
+    still = MotionVector(speed_kmh=3.0, speed_mph=2, heading_deg=None, heading_label="nearly stationary", source="nearby_storms")
+    assert ", likely nearly stationary like nearby storms." in _summary_with_motion(still)
 
 
 def test_generate_summary_with_merge_event():

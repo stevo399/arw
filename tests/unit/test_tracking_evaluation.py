@@ -23,14 +23,16 @@ def test_render_markdown_includes_heading_flip_metric():
         focus_low_continuity_scans=3,
         focus_low_motion_scans=2,
         focus_reported_heading_reversal_scans=1,
-        focus_motion_field_source_scans=2,
-        focus_motion_suppressed_source_scans=1,
+        focus_nearby_storms_motion_scans=2,
+        focus_unknown_motion_scans=1,
         focus_switches=1,
         focus_heading_flips_ge_90=2,
         focus_flips_with_low_motion_confidence=1,
         focus_track_distance_changes=2,
         summary_tracking_uncertain_count=3,
         summary_motion_published_count=0,
+        summary_nearby_motion_count=0,
+        summary_motion_unknown_count=1,
         summary_stationaryish_count=1,
         total_new_tracks_after_first_scan=6,
         merged_tracks_total=3,
@@ -55,14 +57,14 @@ def test_render_markdown_includes_heading_flip_metric():
                 focus_selection_margin=1.84,
                 focus_runner_up_track_id=7,
                 focus_reported_heading_flip_count=1,
-                focus_reported_heading_sequence=["SE@140:motion_field", "WNW@290:motion_field"],
+                focus_reported_heading_sequence=["SE@140:pattern_match", "WNW@290:pattern_match"],
                 focus_reported_heading_stability_label="unstable",
                 focus_reported_heading_stability_score=0.2,
                 focus_reported_heading_stability_reason="reversal-prone reported heading sequence",
                 focus_heading_deg=None,
-                focus_heading_label="stationary",
+                focus_heading_label="unknown",
                 focus_speed_mph=0,
-                focus_motion_source="suppressed",
+                focus_motion_source="not_measured",
                 focus_motion_confidence_label="low",
                 focus_motion_confidence_score=0.41,
                 new_tracks=48,
@@ -77,13 +79,15 @@ def test_render_markdown_includes_heading_flip_metric():
     assert "focus low-continuity scans" in markdown
     assert "mean focus selection margin" in markdown
     assert "focus reported-heading-reversal scans" in markdown
-    assert "focus motion-field source scans" in markdown
+    assert "focus nearby-storms motion scans" in markdown
+    assert "focus unknown-motion scans" in markdown
+    assert "summary motion-not-yet-known count" in markdown
     assert "summary tracking-uncertain count" in markdown
     assert "merged tracks total" in markdown
     assert "focus_continuity=low:0.38" in markdown
     assert "focus_margin=1.84" in markdown
-    assert "focus_reported_sequence=SE@140:motion_field|WNW@290:motion_field" in markdown
+    assert "focus_reported_sequence=SE@140:pattern_match|WNW@290:pattern_match" in markdown
     assert "focus_reported_stability=unstable:0.2" in markdown
-    assert "focus_motion_source=suppressed" in markdown
+    assert "focus_motion_source=not_measured" in markdown
     assert "focus_identity=medium:0.52" in markdown
     assert "`3`" in markdown

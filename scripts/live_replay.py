@@ -59,9 +59,10 @@ def summarize_scan(site_name: str, buffered: BufferedScan, tracker: StormTracker
     focus_track = next((track for track in tracker.active_tracks if getattr(track, "is_primary_focus", False)), None)
     for track in tracker.active_tracks:
         motion = track.get_motion()
-        if motion.heading_label == "uncertain":
+        if motion.heading_label in {"uncertain", "unknown"}:
             uncertain_tracks += 1
-        max_speed_mph = max(max_speed_mph, motion.speed_mph)
+        if motion.speed_mph is not None:
+            max_speed_mph = max(max_speed_mph, motion.speed_mph)
 
     summary = generate_summary(
         site_id=buffered.site_id,

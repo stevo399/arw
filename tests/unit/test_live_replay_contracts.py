@@ -70,8 +70,8 @@ def test_summarize_scan_reports_motion_sanity_fields():
     tracker.update(buffered)
     track = tracker.active_tracks[0]
     track.focus_continuity.recent_reported_heading_sequence = [
-        "SE@140:motion_field",
-        "WNW@290:motion_field",
+        "SE@140:pattern_match",
+        "WNW@290:pattern_match",
     ]
     track.focus_continuity.reported_heading_stability_label = "unstable"
     track.focus_continuity.reported_heading_stability_score = 0.2
@@ -81,14 +81,14 @@ def test_summarize_scan_reports_motion_sanity_fields():
             timestamp=datetime(2026, 4, 10, 19, 55),
             heading_deg=140.0,
             heading_label="SE",
-            source="motion_field",
+            source="pattern_match",
             confidence_score=0.98,
         ),
         MotionSample(
             timestamp=datetime(2026, 4, 10, 20, 0),
             heading_deg=290.0,
             heading_label="WNW",
-            source="motion_field",
+            source="pattern_match",
             confidence_score=0.98,
         ),
     ])
@@ -110,8 +110,8 @@ def test_summarize_scan_reports_motion_sanity_fields():
     assert diagnostics.focus_selection_margin is None
     assert diagnostics.focus_runner_up_track_id is None
     assert diagnostics.focus_recent_reported_heading_sequence == [
-        "SE@140:motion_field",
-        "WNW@290:motion_field",
+        "SE@140:pattern_match",
+        "WNW@290:pattern_match",
     ]
     assert diagnostics.focus_reported_heading_stability_label == "unstable"
     assert diagnostics.focus_reported_heading_stability_score == 0.2

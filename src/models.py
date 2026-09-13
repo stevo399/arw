@@ -125,8 +125,9 @@ class TrackPosition(BaseModel):
 
 
 class TrackMotion(BaseModel):
-    speed_kmh: float
-    speed_mph: int
+    # None when motion is unknown (heading_label "unknown").
+    speed_kmh: float | None
+    speed_mph: int | None
     heading_deg: float | None
     heading_label: str
     source: str | None = None

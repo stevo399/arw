@@ -98,14 +98,15 @@ def test_track_motion_model():
     assert motion.heading_label == "NE"
 
 
-def test_track_motion_model_stationary():
+def test_track_motion_model_unknown_motion_has_no_speed():
     motion = TrackMotion(
-        speed_kmh=0.0,
-        speed_mph=0,
+        speed_kmh=None,
+        speed_mph=None,
         heading_deg=None,
-        heading_label="stationary",
+        heading_label="unknown",
+        source="not_measured",
     )
-    assert motion.heading_deg is None
+    assert motion.speed_kmh is None
 
 
 def test_track_focus_model():

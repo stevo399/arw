@@ -146,7 +146,6 @@ class Track:
     focus_continuity: FocusContinuity | None = None
     motion_confidence: MotionConfidence | None = None
     last_motion: Any | None = None
-    diagnostic_motion: Any | None = None
     motion_history: list[MotionSample] = field(default_factory=list)
     rotation_history: list[RotationHistoryEntry] = field(default_factory=list)
     trend_samples: list[TrendSample] = field(default_factory=list)
