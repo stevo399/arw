@@ -213,13 +213,34 @@
   its direction depends on beam order. Reported motion falls back to it, so speech can state a
   wrong direction. Predates the history work. Report section 7c
 
+## Geographic placement (2026-09-13) -- branch `geographic-placement`
+- **Storm centres (`ef8a22b`):** centres were averages of ray and gate indices, so storms straddling
+  ray 0 were placed on the far side of the radar (10 of 49 sampled volumes; 12-451 km off) and large
+  storms were 1-4 km off. Now ground centres weighted by reflectivity x gate area (owner decision),
+  with ground distance and bearing. Real-data proof `tests/e2e/test_proof_geographic_placement.py`
+- **Velocity (`ef8a22b`):** regions and couplets labelled with wrap-around and centred the same
+  way; regions merge across tilts by azimuth (tilts start at different azimuths; no region had ever
+  merged across tilts on real data); rotations merge by ground distance
+- **Splits (`e0e44ea`):** hierarchy labels with wrap-around; gates between cores go to the nearest
+  core on the ground. Storm counts unchanged on 49 volumes
+- Storm outlines were already correct (every gate inside its outline, including straddling storms).
+  Live KJAX check: 103/105 centres inside outlines, other two within 0.19 km
+- Benchmark differences explained (dense extended focus changed after a corrected core partition).
+  Report `docs/test_reports/2026-09-13-geographic-placement.md`. Full suite 562 passed, 3 xfailed
+- **Motion evaluation (no code change):** 7,488 predictions over all cached windows. Two positions
+  are not enough to measure motion (worse tail than assuming none); the median of the last three
+  steps without merges/splits is best; nearby storms' motion is best for new storms. Report
+  `docs/test_reports/2026-09-13-motion-prediction-evaluation.md`
+
 ## In Progress
+- Motion redesign: design proposed to owner, awaiting approval. Replace the scene-wide estimate;
+  report motion from recent clean steps; nearby storms' motion for young storms (owner decision);
+  never report "stationary" for a storm with one position
 - Owner review: keyboard-and-NVDA pass through the Weather Kitten recent-scans section
 - Spec 2 restoration is validated and documented; commit/merge decision pending
 
 ## Next
-- Fix the scene-wide motion estimate (geographic regrid or circular centroid plus sub-pixel
-  peak), then re-verify spoken motion on the dense windows
+- Speech calls the focus storm "Strongest" although focus is not chosen by strength
 - Intensity-band layer still takes 8-14 s on busy scans; further gains need changes inside coverage
   simplification or contour georeferencing
 - Reduce the Level II parse peak (356 MB) and rendered-layer retention (up to ~6.7 MB per busy scan)
