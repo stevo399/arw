@@ -1,14 +1,5 @@
 from src.tracking.association import AssociationResult, associate_tracks, compute_overlap
 from src.tracking.events import normalize_merge_event, normalize_split_event
-from src.tracking.motion_field import (
-    GeographicMotionFieldEstimate,
-    MotionFieldEstimate,
-    estimate_geographic_motion_field,
-    estimate_motion_field,
-    predict_bbox,
-    predict_latlon_position,
-    predict_pixel_position,
-)
 from src.tracking.motion import MotionVector, report_motion
 from src.tracking.segmentation import SegmentationResult, adapt_detection_result, segment_storm_objects
 from src.tracking.types import (
@@ -24,8 +15,6 @@ from src.tracking.types import (
 __all__ = [
     "AssociationResult",
     "AssociationScore",
-    "GeographicMotionFieldEstimate",
-    "MotionFieldEstimate",
     "MotionVector",
     "MotionConfidence",
     "PeakEntry",
@@ -36,11 +25,6 @@ __all__ = [
     "TrackPosition",
     "adapt_detection_result",
     "report_motion",
-    "estimate_geographic_motion_field",
-    "estimate_motion_field",
-    "predict_bbox",
-    "predict_latlon_position",
-    "predict_pixel_position",
     "segment_storm_objects",
     "associate_tracks",
     "compute_overlap",

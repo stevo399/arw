@@ -1,6 +1,8 @@
 """Investigation (motion redesign): does matching a storm's reflectivity pattern between
 scans measure motion better than following its centre?
 
+Ran against commit 4a15206 (tracker with centre-track motion).
+
 For every cached back-to-back window, runs the production tracker and, at each
 scan k, for every track observed at both k-1 and k:
 

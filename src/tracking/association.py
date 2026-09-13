@@ -7,19 +7,10 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 
 from src.buffer import BufferedScan
+from src.geometry import gate_ground_xy_m, ground_range_m
 from src.sites import haversine_distance_km
-from src.tracking.motion_field import (
-    GeographicMotionFieldEstimate,
-    blend_geographic_motion_fields,
-    estimate_geographic_motion_field,
-    estimate_motion_field,
-    estimate_local_motion_field,
-    estimate_local_scan_geographic_motion_field,
-    estimate_scan_geographic_motion_field,
-    predict_latlon_position,
-)
 from src.tracking.alignment import align_scan_to
-from src.tracking.segmentation import segment_buffered_scan
+from src.tracking.motion import KM_PER_DEGREE_LAT
 from src.tracking.types import AssociationScore, Track
 
 MIN_OVERLAP_PCT = 0.30
@@ -39,8 +30,6 @@ class AssociationResult:
     unmatched_new_ids: set[int] = field(default_factory=set)
     unmatched_track_ids: set[int] = field(default_factory=set)
     candidate_scores: list[AssociationScore] = field(default_factory=list)
-    geo_motion: object | None = None
-    track_geo_motion: dict[int, object] = field(default_factory=dict)
     dt_hours: float = 0.0
     # Stage 2: missing tracks matched to objects stage 1 left unclaimed.  Kept
     # apart from candidate_scores so stage-1 ambiguity margins and identity
@@ -60,25 +49,65 @@ def compute_overlap(mask_a: np.ndarray, mask_b: np.ndarray) -> float:
 
 
 def _shift_mask(mask: np.ndarray, shift_rows: float, shift_cols: float) -> np.ndarray:
-    """Translate a boolean mask by rounded pixel shifts."""
+    """Translate a boolean mask by rounded ray and gate shifts.
+
+    Rays wrap around (ray 0 is adjacent to the last ray); gates do not.
+    """
     row_shift = int(round(shift_rows))
     col_shift = int(round(shift_cols))
+    rolled = np.roll(mask, row_shift, axis=0) if row_shift else mask
     shifted = np.zeros_like(mask, dtype=bool)
-
-    src_row_start = max(0, -row_shift)
-    src_row_end = mask.shape[0] - max(0, row_shift)
     src_col_start = max(0, -col_shift)
     src_col_end = mask.shape[1] - max(0, col_shift)
-    dst_row_start = max(0, row_shift)
-    dst_row_end = dst_row_start + max(0, src_row_end - src_row_start)
-    dst_col_start = max(0, col_shift)
-    dst_col_end = dst_col_start + max(0, src_col_end - src_col_start)
-
-    if src_row_start >= src_row_end or src_col_start >= src_col_end:
+    if src_col_start >= src_col_end:
         return shifted
-
-    shifted[dst_row_start:dst_row_end, dst_col_start:dst_col_end] = mask[src_row_start:src_row_end, src_col_start:src_col_end]
+    dst_col_start = max(0, col_shift)
+    shifted[:, dst_col_start:dst_col_start + (src_col_end - src_col_start)] = rolled[:, src_col_start:src_col_end]
     return shifted
+
+
+def _track_velocity_kmh(track: Track) -> tuple[float, float]:
+    """The track's reported velocity (east, north); no motion when it is unknown."""
+    motion = track.last_motion
+    east = getattr(motion, "east_kmh", None)
+    north = getattr(motion, "north_kmh", None)
+    if east is None or north is None:
+        return 0.0, 0.0
+    return float(east), float(north)
+
+
+def _predict_latlon(lat: float, lon: float, east_km: float, north_km: float) -> tuple[float, float]:
+    return (
+        lat + north_km / KM_PER_DEGREE_LAT,
+        lon + east_km / (KM_PER_DEGREE_LAT * math.cos(math.radians(lat))),
+    )
+
+
+def _grid_shift(mask: np.ndarray, sweep, east_km: float, north_km: float) -> tuple[float, float]:
+    """Ray and gate shift that moves `mask` by a ground displacement.
+
+    Measured at the outline's own ground centre, where the shift is applied.
+    """
+    if east_km == 0.0 and north_km == 0.0:
+        return 0.0, 0.0
+    rays, gates = np.nonzero(mask)
+    if rays.size == 0:
+        return 0.0, 0.0
+    x, y = gate_ground_xy_m(rays, gates, sweep.azimuths, sweep.ranges_m, sweep.elevations)
+    x0, y0 = float(x.mean()), float(y.mean())
+    x1, y1 = x0 + east_km * 1000.0, y0 + north_km * 1000.0
+    azimuths = np.asarray(sweep.azimuths, dtype=float) % 360.0
+    ground = np.asarray(ground_range_m(np.asarray(sweep.ranges_m, dtype=float), float(sweep.elevation_angle)))
+
+    def ray_index(xm: float, ym: float) -> int:
+        bearing = math.degrees(math.atan2(xm, ym)) % 360.0
+        return int(np.argmin(np.abs((azimuths - bearing + 180.0) % 360.0 - 180.0)))
+
+    count = len(azimuths)
+    row_shift = (ray_index(x1, y1) - ray_index(x0, y0) + count // 2) % count - count // 2
+    gate_index = np.arange(len(ground))
+    col_shift = float(np.interp(math.hypot(x1, y1), ground, gate_index) - np.interp(math.hypot(x0, y0), ground, gate_index))
+    return float(row_shift), col_shift
 
 
 def compute_iou(mask_a: np.ndarray, mask_b: np.ndarray) -> float:
@@ -229,16 +258,6 @@ def associate_tracks(
 
     # Beam 0 points a different way in every volume; compare by true azimuth.
     previous_scan = align_scan_to(previous_scan, current_scan)
-    previous_segmentation = segment_buffered_scan(previous_scan)
-    current_segmentation = segment_buffered_scan(current_scan)
-    geo_motion = estimate_scan_geographic_motion_field(previous_scan, current_scan)
-    pixel_motion = estimate_motion_field(
-        previous_scan.reflectivity_data.reflectivity,
-        current_scan.reflectivity_data.reflectivity,
-    )
-    if geo_motion.quality <= 0.0:
-        geo_motion = estimate_geographic_motion_field(previous_segmentation.objects, current_segmentation.objects)
-    result.geo_motion = geo_motion
 
     new_objects = {obj.object_id: obj for obj in current_scan.detected_objects}
     prev_masks = previous_scan.object_masks
@@ -274,49 +293,16 @@ def associate_tracks(
                 break
         if prev_object_id is None or prev_object_id not in prev_masks:
             continue
-        prev_mask = prev_masks[prev_object_id]
-        prev_segment = next((seg for seg in previous_segmentation.objects if seg.object_id == prev_object_id), None)
-        local_geo_motion = None
-        local_pixel_motion = None
-        if prev_segment is not None:
-            local_geo_motion = estimate_local_scan_geographic_motion_field(
-                previous_scan,
-                current_scan,
-                prev_segment.bbox,
-            )
-            local_pixel_motion = estimate_local_motion_field(
-                previous_scan.reflectivity_data.reflectivity,
-                current_scan.reflectivity_data.reflectivity,
-                prev_segment.bbox,
-                downsample=1,
-            )
-        blended_geo_motion = blend_geographic_motion_fields(geo_motion, local_geo_motion)
-        result.track_geo_motion[track.track_id] = blended_geo_motion
-        predicted_lat, predicted_lon = predict_latlon_position(
-            current_object.centroid_lat,
-            current_object.centroid_lon,
-            blended_geo_motion,
+        prev_mask = np.asarray(prev_masks[prev_object_id])
+        # Guidance is the track's measured motion (docs/superpowers/specs/2026-09-13-measured-motion-design.md).
+        east_kmh, north_kmh = _track_velocity_kmh(track)
+        east_km, north_km = east_kmh * max(dt_hours, 0.0), north_kmh * max(dt_hours, 0.0)
+        predicted_lat, predicted_lon = _predict_latlon(
+            current_object.centroid_lat, current_object.centroid_lon, east_km, north_km,
         )
-        blended_shift_rows = -pixel_motion.shift_rows
-        blended_shift_cols = -pixel_motion.shift_cols
-        use_local_pixel_guidance = (
-            local_pixel_motion is not None
-            and local_pixel_motion.quality > 0.0
-            and blended_geo_motion.source.startswith("blended:")
-        ) or (
-            local_pixel_motion is not None
-            and local_pixel_motion.quality > 0.0
-            and blended_geo_motion.source == "local_phase_correlation"
-        )
-        if use_local_pixel_guidance:
-            local_weight = max(local_pixel_motion.quality, 0.0)
-            global_weight = max(pixel_motion.quality * 0.6, 0.0)
-            total_weight = local_weight + global_weight
-            if total_weight > 0.0:
-                blended_shift_rows = -(((local_pixel_motion.shift_rows * local_weight) + (pixel_motion.shift_rows * global_weight)) / total_weight)
-                blended_shift_cols = -(((local_pixel_motion.shift_cols * local_weight) + (pixel_motion.shift_cols * global_weight)) / total_weight)
+        shift_rows, shift_cols = _grid_shift(prev_mask, previous_scan.reflectivity_data, east_km, north_km)
         prev_extent = mask_extent(prev_mask)
-        shifted_extent = mask_extent(_shift_mask(prev_mask, blended_shift_rows, blended_shift_cols))
+        shifted_extent = mask_extent(_shift_mask(prev_mask, shift_rows, shift_cols))
         for new_id, new_object in new_objects.items():
             score = _candidate_score(
                 track=track,
@@ -403,9 +389,6 @@ def associate_tracks(
             current_scan=current_scan,
             new_objects=new_objects,
             new_masks=new_masks,
-            pixel_motion=pixel_motion,
-            geo_motion=geo_motion,
-            dt_hours=dt_hours,
             reacquisition_loader=reacquisition_loader,
         )
     return result
@@ -418,16 +401,13 @@ def _reacquire_missing_tracks(
     current_scan: BufferedScan,
     new_objects: dict,
     new_masks,
-    pixel_motion,
-    geo_motion: GeographicMotionFieldEstimate,
-    dt_hours: float,
     reacquisition_loader: Callable[[datetime], BufferedScan | None],
 ) -> None:
     """Stage 2: missing tracks compete for the objects stage 1 left unclaimed.
 
     Runs only after stage 1 is final, so a continuously tracked storm always
     keeps its match.  A missing track's mask comes from the scan where it was
-    last seen, shifted by the scene motion scaled to the full elapsed time,
+    last seen, moved by the track's measured motion over the full elapsed time,
     and a match must pass the advected-overlap threshold and the maximum
     storm speed over that elapsed time.  A candidate that is too old, or whose
     last-seen scan can no longer be loaded, is reported as unreacquirable.
@@ -437,7 +417,7 @@ def _reacquire_missing_tracks(
         claimed.update(split_ids)
     unclaimed = [object_id for object_id in new_objects if object_id not in claimed]
     candidates = [track for track in missing_tracks if track.last_seen_ref is not None]
-    if not unclaimed or not candidates or dt_hours <= 0:
+    if not unclaimed or not candidates:
         return
 
     seen_scans: dict[datetime, BufferedScan | None] = {}
@@ -457,22 +437,17 @@ def _reacquire_missing_tracks(
         if prev_mask is None:
             result.unreacquirable_track_ids.add(track.track_id)
             continue
-        scale = elapsed_hours / dt_hours
-        scaled_motion = GeographicMotionFieldEstimate(
-            delta_lat=geo_motion.delta_lat * scale,
-            delta_lon=geo_motion.delta_lon * scale,
-            quality=geo_motion.quality,
-            source=f"reacquisition:{geo_motion.source}",
-        )
+        prev_mask = np.asarray(prev_mask)
+        east_kmh, north_kmh = _track_velocity_kmh(track)
+        east_km, north_km = east_kmh * elapsed_hours, north_kmh * elapsed_hours
         last_object = track.current_object
-        predicted_lat, predicted_lon = predict_latlon_position(
-            last_object.centroid_lat, last_object.centroid_lon, scaled_motion
+        predicted_lat, predicted_lon = _predict_latlon(
+            last_object.centroid_lat, last_object.centroid_lon, east_km, north_km,
         )
         max_distance_km = MAX_STORM_SPEED_KMH * elapsed_hours
         prev_extent = mask_extent(prev_mask)
-        shifted_extent = mask_extent(
-            _shift_mask(prev_mask, -pixel_motion.shift_rows * scale, -pixel_motion.shift_cols * scale)
-        )
+        shift_rows, shift_cols = _grid_shift(prev_mask, seen_scan.reflectivity_data, east_km, north_km)
+        shifted_extent = mask_extent(_shift_mask(prev_mask, shift_rows, shift_cols))
         for col, object_id in enumerate(unclaimed):
             if object_id not in new_mask_cache:
                 new_mask_cache[object_id] = mask_extent(new_masks[object_id])

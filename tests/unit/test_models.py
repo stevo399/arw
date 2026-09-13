@@ -118,7 +118,7 @@ def test_track_focus_model():
         runner_up_track_id=7,
         recent_heading_flip_count=1,
         recent_reported_heading_flip_count=1,
-        recent_reported_heading_sequence=["SE@140:motion_field", "WNW@290:motion_field"],
+        recent_reported_heading_sequence=["SE@140:pattern_match", "WNW@290:pattern_match"],
         reported_heading_stability_label="unstable",
         reported_heading_stability_score=0.2,
         reported_heading_stability_reason="reversal-prone reported heading sequence",
@@ -129,7 +129,7 @@ def test_track_focus_model():
     assert focus.selection_margin == 1.8
     assert focus.recent_reported_heading_flip_count == 1
     assert focus.recent_heading_flip_count == 1
-    assert focus.recent_reported_heading_sequence == ["SE@140:motion_field", "WNW@290:motion_field"]
+    assert focus.recent_reported_heading_sequence == ["SE@140:pattern_match", "WNW@290:pattern_match"]
     assert focus.reported_heading_stability_label == "unstable"
     assert focus.reported_heading_stability_score == 0.2
     assert focus.reported_heading_stability_reason == "reversal-prone reported heading sequence"

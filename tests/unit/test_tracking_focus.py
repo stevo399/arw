@@ -231,28 +231,28 @@ def test_build_focus_continuity_penalizes_reported_motion_reversal_under_structu
         heading_deg=290.0,
         heading_label="WNW",
         confidence=MotionConfidence(label="high", score=0.98),
-        source="motion_field",
+        source="pattern_match",
     )
     track.motion_history.extend([
         MotionSample(
             timestamp=datetime(2026, 4, 8, 18, 0),
             heading_deg=140.0,
             heading_label="SE",
-            source="motion_field",
+            source="pattern_match",
             confidence_score=0.98,
         ),
         MotionSample(
             timestamp=datetime(2026, 4, 8, 18, 5),
             heading_deg=138.0,
             heading_label="SE",
-            source="motion_field",
+            source="pattern_match",
             confidence_score=0.98,
         ),
         MotionSample(
             timestamp=datetime(2026, 4, 8, 18, 10),
             heading_deg=290.0,
             heading_label="WNW",
-            source="motion_field",
+            source="pattern_match",
             confidence_score=0.98,
         ),
     ])
@@ -306,28 +306,28 @@ def test_build_focus_continuity_relaxes_raw_heading_flip_penalty_for_clear_focus
         heading_deg=140.0,
         heading_label="SE",
         confidence=MotionConfidence(label="high", score=0.98),
-        source="motion_field",
+        source="pattern_match",
     )
     track.motion_history.extend([
         MotionSample(
             timestamp=datetime(2026, 4, 8, 18, 0),
             heading_deg=138.0,
             heading_label="SE",
-            source="motion_field",
+            source="pattern_match",
             confidence_score=0.98,
         ),
         MotionSample(
             timestamp=datetime(2026, 4, 8, 18, 5),
             heading_deg=141.0,
             heading_label="SE",
-            source="motion_field",
+            source="pattern_match",
             confidence_score=0.98,
         ),
         MotionSample(
             timestamp=datetime(2026, 4, 8, 18, 10),
             heading_deg=143.0,
             heading_label="SE",
-            source="motion_field",
+            source="pattern_match",
             confidence_score=0.98,
         ),
     ])
@@ -363,28 +363,28 @@ def test_build_focus_continuity_keeps_reported_reversal_penalty_even_with_clear_
         heading_deg=290.0,
         heading_label="WNW",
         confidence=MotionConfidence(label="high", score=0.98),
-        source="motion_field",
+        source="pattern_match",
     )
     track.motion_history.extend([
         MotionSample(
             timestamp=datetime(2026, 4, 8, 18, 0),
             heading_deg=140.0,
             heading_label="SE",
-            source="motion_field",
+            source="pattern_match",
             confidence_score=0.98,
         ),
         MotionSample(
             timestamp=datetime(2026, 4, 8, 18, 5),
             heading_deg=138.0,
             heading_label="SE",
-            source="motion_field",
+            source="pattern_match",
             confidence_score=0.98,
         ),
         MotionSample(
             timestamp=datetime(2026, 4, 8, 18, 10),
             heading_deg=290.0,
             heading_label="WNW",
-            source="motion_field",
+            source="pattern_match",
             confidence_score=0.98,
         ),
     ])
@@ -419,35 +419,35 @@ def test_build_focus_continuity_treats_one_direction_turn_sequence_as_coherent()
         heading_deg=182.0,
         heading_label="S",
         confidence=MotionConfidence(label="high", score=0.98),
-        source="motion_field",
+        source="pattern_match",
     )
     track.motion_history.extend([
         MotionSample(
             timestamp=datetime(2026, 4, 8, 18, 0),
             heading_deg=48.0,
             heading_label="NE",
-            source="motion_field",
+            source="pattern_match",
             confidence_score=0.98,
         ),
         MotionSample(
             timestamp=datetime(2026, 4, 8, 18, 5),
             heading_deg=51.0,
             heading_label="NE",
-            source="motion_field",
+            source="pattern_match",
             confidence_score=0.98,
         ),
         MotionSample(
             timestamp=datetime(2026, 4, 8, 18, 10),
             heading_deg=126.0,
             heading_label="SE",
-            source="motion_field",
+            source="pattern_match",
             confidence_score=0.98,
         ),
         MotionSample(
             timestamp=datetime(2026, 4, 8, 18, 15),
             heading_deg=182.0,
             heading_label="S",
-            source="motion_field",
+            source="pattern_match",
             confidence_score=0.98,
         ),
     ])

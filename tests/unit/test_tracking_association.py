@@ -133,15 +133,14 @@ def test_compute_advected_iou_rewards_motion_aligned_overlap():
     assert compute_advected_iou(prev_mask, new_mask, shift_rows=0, shift_cols=0) == 0.0
 
 
-def test_associate_tracks_uses_advected_geometry_to_keep_match():
+def test_associate_tracks_moves_the_previous_outline_by_the_tracks_measured_motion():
+    from src.geometry import gate_ground_xy_m
+    from src.tracking.motion import report_motion
+    from src.tracking.types import VelocitySample
+
     tracker = StormTracker()
     t1 = datetime(2026, 4, 8, 18, 30)
     t2 = t1 + timedelta(minutes=5)
-
-    reflectivity1 = np.full((360, 500), np.nan)
-    reflectivity2 = np.full((360, 500), np.nan)
-    reflectivity1[85:95, 195:205] = 45.0
-    reflectivity2[89:99, 201:211] = 45.0
 
     prev_obj = _make_object(1, 35.5, -97.3)
     new_obj = _make_object(1, 35.52, -97.26)
@@ -152,28 +151,52 @@ def test_associate_tracks_uses_advected_geometry_to_keep_match():
 
     scan1 = _make_scan("KTLX", t1, [prev_obj], {1: prev_mask})
     scan2 = _make_scan("KTLX", t2, [new_obj], {1: new_mask})
-    scan1.reflectivity_data.reflectivity = reflectivity1
-    scan2.reflectivity_data.reflectivity = reflectivity2
     tracker.update(scan1)
 
-    from src.tracking.motion_field import MotionFieldEstimate
-    from unittest.mock import patch
+    # The storm's measured velocity is the ground displacement between the outlines.
+    sweep = scan1.reflectivity_data
+    def centre(mask):
+        rays, gates = np.nonzero(mask)
+        x, y = gate_ground_xy_m(rays, gates, sweep.azimuths, sweep.ranges_m, sweep.elevations)
+        return x.mean() / 1000.0, y.mean() / 1000.0
+    (x0, y0), (x1, y1) = centre(prev_mask), centre(new_mask)
+    hours = 5.0 / 60.0
+    track = tracker.get_track(1)
+    track.positions.append(track.positions[0])
+    track.measured_velocities = [VelocitySample(timestamp=t1, east_kmh=(x1 - x0) / hours, north_kmh=(y1 - y0) / hours)]
+    track.last_motion = report_motion(position_count=2, measured=track.measured_velocities, nearby=None)
 
-    with patch(
-        "src.tracking.association.estimate_motion_field",
-        return_value=MotionFieldEstimate(
-            shift_rows=4.0,
-            shift_cols=6.0,
-            quality=0.9,
-            source="phase_correlation",
-            downsample=4,
-        ),
-    ):
-        result = associate_tracks(scan1, scan2, tracker.all_tracks, tracker._obj_to_track)
+    result = associate_tracks(scan1, scan2, tracker.all_tracks, tracker._obj_to_track)
+
     assert result.primary_matches == {1: 1}
     score = result.candidate_scores[0]
-    assert score.advected_overlap_score > score.overlap_score
+    assert score.overlap_score < 0.5
+    assert score.advected_overlap_score > 0.85
 
+
+def test_a_track_with_unknown_motion_is_not_moved():
+    tracker = StormTracker()
+    t1 = datetime(2026, 4, 8, 18, 30)
+    mask = np.zeros((360, 500), dtype=bool)
+    mask[85:95, 195:205] = True
+    scan1 = _make_scan("KTLX", t1, [_make_object(1, 35.5, -97.3)], {1: mask})
+    scan2 = _make_scan("KTLX", t1 + timedelta(minutes=5), [_make_object(1, 35.5, -97.3)], {1: mask.copy()})
+    tracker.update(scan1)
+    assert tracker.get_track(1).get_motion().heading_label == "unknown"
+
+    result = associate_tracks(scan1, scan2, tracker.all_tracks, tracker._obj_to_track)
+
+    assert result.candidate_scores[0].advected_overlap_score == 1.0
+
+
+def test_shifting_an_outline_wraps_around_ray_zero():
+    from src.tracking.association import _shift_mask
+
+    mask = np.zeros((360, 500), dtype=bool)
+    mask[355:360, 100:110] = True
+    shifted = _shift_mask(mask, 3, 0)
+    assert shifted[358:360, 100:110].all() and shifted[0:3, 100:110].all()
+    assert np.count_nonzero(shifted) == np.count_nonzero(mask)
 
 
 def _block(rows: tuple[int, int], cols: tuple[int, int], shape=(360, 500)) -> np.ndarray:

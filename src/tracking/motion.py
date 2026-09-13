@@ -37,6 +37,10 @@ class MotionVector:
     heading_label: str
     confidence: MotionConfidence | None = None
     source: str = "track_history"
+    # Velocity components; None when motion is unknown.  Kept even when the
+    # speed is too small to state a heading, so guidance still uses it.
+    east_kmh: float | None = None
+    north_kmh: float | None = None
 
 
 def _step_headings_deg(positions: list[tuple[datetime, float, float]]) -> list[float]:
@@ -98,6 +102,8 @@ def _vector_motion(east_kmh: float, north_kmh: float, source: str, confidence: M
         heading_label=heading_label,
         confidence=confidence,
         source=source,
+        east_kmh=round(east_kmh, 2),
+        north_kmh=round(north_kmh, 2),
     )
 
 

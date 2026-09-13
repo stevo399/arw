@@ -1,5 +1,7 @@
 """Investigation (motion redesign), second pass: guarded pattern matching.
 
+Ran against commit 4a15206 (tracker with centre-track motion).
+
 The first pass (pattern_motion_eval.py) showed pattern matching beats following
 the centre when its match is plausible, but in dense scenes it often locked onto
 a different echo near the edge of its search window (median implied speed of bad

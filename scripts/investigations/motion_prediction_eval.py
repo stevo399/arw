@@ -1,5 +1,8 @@
 """Investigation (motion redesign): which motion estimate predicts where a storm will be?
 
+Ran against commit fa3aaae; its scene_field candidate reads the tracker's
+scene-wide motion estimate, removed with the measured-motion redesign.
+
 Runs every cached back-to-back window through the production tracker
 (RadarHistory, reacquisition on) and records every active track's position
 and identity event at each scan.  Then, for each observed position of each
