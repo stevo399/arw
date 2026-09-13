@@ -615,3 +615,46 @@ def test_arc_shaped_storm_centroid_is_its_geographic_centre():
     assert obj.distance_km == pytest.approx(90.0, abs=0.3)
     assert obj.bearing_deg == pytest.approx(90.0, abs=0.5)
 
+
+def test_single_core_straddling_the_first_and_last_ray_is_not_split_in_two():
+    """One storm whose 40 and 55 dBZ cores straddle ray 0 has one core.  The
+    threshold hierarchy labelled without wrap-around saw two cores and split
+    it into two storms at the array edge."""
+    reflectivity = np.full((360, 500), np.nan)
+    for rows in (slice(0, 15), slice(345, 360)):
+        reflectivity[rows, 190:230] = 25.0
+    for rows in (slice(0, 8), slice(352, 360)):
+        reflectivity[rows, 198:222] = 40.0
+    for rows in (slice(0, 4), slice(356, 360)):
+        reflectivity[rows, 204:216] = 55.0
+    objects = detect_objects(
+        reflectivity=reflectivity,
+        azimuths=np.linspace(0, 359, 360),
+        ranges_m=np.linspace(2000, 250000, 500),
+        radar_lat=35.0,
+        radar_lon=-97.0,
+    )
+    assert len(objects) == 1
+
+
+def test_split_gives_each_gate_to_the_core_nearest_on_the_ground():
+    """At about 150 km one ray (1 degree here) spans 2.6 km but one gate only
+    0.5 km.  The gate at ray 100, gate 300 is 5 km from core A (ray 100, gate
+    290) and 21 km from core B (ray 108, gate 300), yet nearer B in ray and
+    gate numbers (8 against 10)."""
+    reflectivity = np.full((360, 500), np.nan)
+    reflectivity[94:114, 282:310] = 25.0
+    reflectivity[97:104, 286:295] = 40.0
+    reflectivity[99:102, 288:293] = 55.0
+    reflectivity[106:111, 296:305] = 40.0
+    reflectivity[107:110, 298:303] = 55.0
+    result = detect_objects_with_grid(
+        reflectivity=reflectivity,
+        azimuths=np.arange(360, dtype=float),
+        ranges_m=np.linspace(2000, 250000, 500),
+        radar_lat=35.0,
+        radar_lon=-97.0,
+    )
+    assert len(result.objects) == 2
+    core_a = next(mask for mask in result.object_masks.values() if mask[100, 290])
+    assert core_a[100, 300]

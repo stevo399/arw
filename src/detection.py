@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy.ndimage import label, maximum
 
-from src.geometry import label_periodic_azimuth, weighted_geographic_centroid
+from src.geometry import gate_ground_xy_m, label_periodic_azimuth, weighted_geographic_centroid
 
 MIN_OBJECT_AREA_KM2 = 4.0
 MIN_SIGNIFICANT_WEAK_OBJECT_AREA_KM2 = 8.0
@@ -321,6 +321,10 @@ def _build_hierarchy_levels(
 ) -> tuple[list[ThresholdHierarchyNode], _HierarchyLevels]:
     """Build nested threshold components inside a low-threshold parent blob."""
     window = _mask_window(parent_mask)
+    # A window spanning every ray has ray 0 and the last ray, which are
+    # adjacent, as its edges; a core straddling them is one core.
+    spans_all_rays = window[0].start == 0 and window[0].stop == parent_mask.shape[0]
+    label_components = label_periodic_azimuth if spans_all_rays else label
     parent = parent_mask[window]
     field_values = reflectivity[window]
     finite = ~np.isnan(field_values)
@@ -330,7 +334,7 @@ def _build_hierarchy_levels(
     previous_component_to_node_id: dict[int, int] = {}
     next_node_id = 1
     for threshold in SEGMENTATION_HIERARCHY_THRESHOLDS:
-        labels, component_count = label(parent & finite & (field_values >= threshold))
+        labels, component_count = label_components(parent & finite & (field_values >= threshold))
         levels.labels[threshold] = labels
         current_component_to_node_id: dict[int, int] = {}
         if component_count:
@@ -392,11 +396,25 @@ def _branch_threshold_path(nodes_by_id: dict[int, ThresholdHierarchyNode], leaf:
     return tuple(sorted(path))
 
 
+@dataclass(frozen=True)
+class _SweepGeometry:
+    """What a split needs to measure distances between gates on the ground."""
+
+    azimuths: np.ndarray
+    ranges_m: np.ndarray
+    elevation_deg: float | np.ndarray
+    range_bin_areas_km2: np.ndarray
+
+    def ground_xy_m(self, rays: np.ndarray, gates: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        return gate_ground_xy_m(rays, gates, self.azimuths, self.ranges_m, self.elevation_deg)
+
+
 def _select_hierarchy_split_masks(
     parent_mask: np.ndarray,
     reflectivity: np.ndarray,
     hierarchy_nodes: list[ThresholdHierarchyNode],
     levels: _HierarchyLevels,
+    geometry: _SweepGeometry,
 ) -> list[np.ndarray]:
     """Choose split branches from a multilevel threshold hierarchy."""
     if not hierarchy_nodes:
@@ -440,7 +458,7 @@ def _select_hierarchy_split_masks(
         return [parent_mask]
 
     seed_masks = [levels.node_mask(leaf.node_id) for leaf in sorted(selected_leaves, key=lambda node: (node.threshold, node.pixel_count, node.peak_dbz), reverse=True)]
-    centroids = _seed_centroids(seed_masks, reflectivity)
+    centroids = _seed_centroids(seed_masks, reflectivity, geometry)
     child_masks = [np.zeros_like(parent_mask, dtype=bool) for _ in seed_masks]
     claimed_seed_pixels = np.zeros_like(parent_mask, dtype=bool)
     for index, seed_mask in enumerate(seed_masks):
@@ -450,9 +468,13 @@ def _select_hierarchy_split_masks(
     remaining_mask = parent_mask & ~claimed_seed_pixels
     rows, cols = np.where(remaining_mask)
     if len(rows) > 0:
-        centroid_rows = np.array([row for row, _ in centroids], dtype=float)
-        centroid_cols = np.array([col for _, col in centroids], dtype=float)
-        distances = (rows[:, None] - centroid_rows[None, :]) ** 2 + (cols[:, None] - centroid_cols[None, :]) ** 2
+        # Nearest core on the ground.  Ray and gate numbers are not distances:
+        # a ray spans kilometres at long range where a gate spans 250 m, and
+        # ray 0 is adjacent to the last ray.
+        x, y = geometry.ground_xy_m(rows, cols)
+        centroid_x = np.array([cx for cx, _ in centroids], dtype=float)
+        centroid_y = np.array([cy for _, cy in centroids], dtype=float)
+        distances = (x[:, None] - centroid_x[None, :]) ** 2 + (y[:, None] - centroid_y[None, :]) ** 2
         assignments = np.argmin(distances, axis=1)
         for index in range(len(child_masks)):
             assigned = assignments == index
@@ -466,29 +488,32 @@ def _select_hierarchy_split_masks(
 def _seed_centroids(
     seed_masks: list[np.ndarray],
     reflectivity: np.ndarray,
+    geometry: _SweepGeometry,
 ) -> list[tuple[float, float]]:
-    """Compute weighted centroids for seed masks."""
+    """Ground centre (east, north metres from the radar) of each seed.
+
+    Weighted like a storm's centre: reflectivity times gate area.
+    """
     centroids: list[tuple[float, float]] = []
     for mask in seed_masks:
         rows, cols = np.where(mask)
-        weights = np.nan_to_num(reflectivity[mask], nan=0.0, posinf=0.0, neginf=0.0)
+        x, y = geometry.ground_xy_m(rows, cols)
+        weights = np.nan_to_num(reflectivity[mask], nan=0.0, posinf=0.0, neginf=0.0) * geometry.range_bin_areas_km2[cols]
         if float(np.sum(weights)) <= 0.0:
-            centroids.append((float(rows.mean()), float(cols.mean())))
+            centroids.append((float(x.mean()), float(y.mean())))
             continue
-        centroids.append((
-            float(np.average(rows, weights=weights)),
-            float(np.average(cols, weights=weights)),
-        ))
+        centroids.append((float(np.average(x, weights=weights)), float(np.average(y, weights=weights))))
     return centroids
 
 
 def _split_parent_mask(
     parent_mask: np.ndarray,
     reflectivity: np.ndarray,
+    geometry: _SweepGeometry,
 ) -> tuple[list[np.ndarray], list[ThresholdHierarchyNode]]:
     """Partition a low-threshold blob around persistent multilevel branches."""
     hierarchy_nodes, levels = _build_hierarchy_levels(parent_mask, reflectivity)
-    return _select_hierarchy_split_masks(parent_mask, reflectivity, hierarchy_nodes, levels), hierarchy_nodes
+    return _select_hierarchy_split_masks(parent_mask, reflectivity, hierarchy_nodes, levels, geometry), hierarchy_nodes
 
 
 def detect_objects_with_grid(
@@ -525,6 +550,12 @@ def detect_objects_with_grid(
     range_bin_areas_km2 = _range_bin_areas_km2(
         azimuths, ranges_m, elevation_deg
     )
+    geometry = _SweepGeometry(
+        azimuths=azimuths,
+        ranges_m=ranges_m,
+        elevation_deg=elevations if elevations is not None else elevation_deg,
+        range_bin_areas_km2=range_bin_areas_km2,
+    )
     for i in range(1, num_features + 1):
         parent_mask = labeled == i
         # A split requires at least two >= 50 dBZ seed branches.  A component
@@ -536,7 +567,7 @@ def detect_objects_with_grid(
         parent_peak = float(np.nanmax(reflectivity[parent_mask]))
         if parent_peak >= 50.0:
             split_masks, hierarchy_nodes = _split_parent_mask(
-                parent_mask, reflectivity
+                parent_mask, reflectivity, geometry
             )
         else:
             split_masks, hierarchy_nodes = [parent_mask], []

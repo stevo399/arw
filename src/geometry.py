@@ -84,6 +84,30 @@ def gate_latlon(
     return float(lat[0, 0]), float(lon[0, 0])
 
 
+def gate_ground_xy_m(
+    rays: np.ndarray,
+    gates: np.ndarray,
+    azimuths: np.ndarray,
+    ranges_m: np.ndarray,
+    elevation_deg: float | np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """East and north ground offsets from the radar, in metres, of selected gates.
+
+    Coordinates in the radar-centred azimuthal equidistant plane, where
+    distance and bearing from the radar are exact.  `elevation_deg` is the
+    per-ray elevation array (preferred) or a scalar.
+    """
+    rays = np.asarray(rays)
+    elevations = np.asarray(elevation_deg, dtype=float)
+    ray_elevations = elevations[rays] if elevations.ndim == 1 else np.full(rays.shape, float(elevations))
+    x, y, _z = antenna_to_cartesian(
+        np.asarray(ranges_m, dtype=float)[np.asarray(gates)] / 1000.0,
+        np.asarray(azimuths, dtype=float)[rays],
+        ray_elevations,
+    )
+    return np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+
+
 def weighted_geographic_centroid(
     rays: np.ndarray,
     gates: np.ndarray,
@@ -108,18 +132,11 @@ def weighted_geographic_centroid(
     weights sum to zero.
     """
     rays = np.asarray(rays)
-    gates = np.asarray(gates)
     weights = np.asarray(weights, dtype=float)
     total = float(weights.sum())
     if rays.size == 0 or total <= 0.0:
         return None
-    elevations = np.asarray(elevation_deg, dtype=float)
-    ray_elevations = elevations[rays] if elevations.ndim == 1 else np.full(rays.shape, float(elevations))
-    x, y, _z = antenna_to_cartesian(
-        np.asarray(ranges_m, dtype=float)[gates] / 1000.0,
-        np.asarray(azimuths, dtype=float)[rays],
-        ray_elevations,
-    )
+    x, y = gate_ground_xy_m(rays, gates, azimuths, ranges_m, elevation_deg)
     centre_x = float(np.dot(x, weights) / total)
     centre_y = float(np.dot(y, weights) / total)
     lon, lat = cartesian_to_geographic_aeqd(
