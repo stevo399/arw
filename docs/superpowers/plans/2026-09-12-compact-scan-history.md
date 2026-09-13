@@ -126,7 +126,7 @@ def test_stepped_extremes_are_exact():
 
 @pytest.mark.parametrize(
     "bad_value",
-    [20.25, -32.5, 95.0, np.inf, -np.inf],
+    [20.25, -32.5, 95.5, np.inf, -np.inf],
     ids=["off-step", "below-range", "above-range", "inf", "-inf"],
 )
 def test_unrepresentable_values_fall_back_to_original_dtype(caplog, bad_value):
@@ -223,7 +223,8 @@ _logger = logging.getLogger(__name__)
 
 ZLIB_LEVEL = 6
 # NEXRAD Level II reflectivity: 0.5 dBZ steps from -32.0 dBZ.  Code 0 is
-# reserved for no data (NaN), so code 1 is -32.0 dBZ and code 255 is 94.5 dBZ.
+# reserved for no data (NaN), so code 1 is -32.0 dBZ and code 255 is 95.0 dBZ,
+# which covers Level II's own range of -32.0 to 94.5 dBZ.
 REFLECTIVITY_STEP_DBZ = 0.5
 REFLECTIVITY_OFFSET_DBZ = -32.5
 
@@ -2706,7 +2707,21 @@ EOF
 
 ---
 
-### Task 8: Reacquire a storm that missed one scan (defect 2)
+### Task 8: Reacquire missing storms and lose tracks only when unrecoverable (defect 2)
+
+> **Revision (owner decision, spec Amendment 2, A9). This overrides the task text below where they differ.**
+>
+> 1. **Status rule.** In `StormTracker.update`, an active track not matched this scan becomes `status = "missing"` (its `_missed_scans` still increments, and its identity diagnostics are still "track missed a scan"). Delete `MAX_MISSED_SCANS`.
+> 2. **Candidates.** `associate_tracks` must run stage 2 even when no track is `active`. Its early return applies only when there are no active *and* no missing tracks. Stage-2 candidates are tracks with `status == "missing"` and a `last_seen_ref`, taken from the full `tracks` argument (not the active list). Stage 1 is unchanged.
+> 3. **Unrecoverable tracks.** Add `AssociationResult.unreacquirable_track_ids: set[int]`. Stage 2 adds each candidate whose elapsed time exceeds `MAX_REACQUISITION_MINUTES`, or whose last-seen scan the loader cannot return.
+> 4. **Lost.** After applying reacquired matches, the tracker marks a `missing` track `lost` if it is in `unreacquirable_track_ids`, or if more than `MAX_REACQUISITION_MINUTES` have passed since `track.last_seen`. The time rule is applied by the tracker itself, so it also works without reacquisition. A reacquired track's status is set back to `"active"`.
+> 5. **Tests.** Replace `test_lost_track_is_never_reacquired` with two tests:
+>    - `test_missing_track_is_not_active_and_not_described`: after one miss, the track is `missing`, is absent from `active_tracks`, and is not picked by the summary.
+>    - `test_track_is_lost_when_its_last_seen_scan_leaves_history`: the loader drops the last-seen scan, so the track becomes `lost` and is not reacquired.
+>
+>    Change `test_storm_unseen_longer_than_the_continuity_limit_is_not_reacquired` to assert `lost` at the scan where 20 minutes is exceeded, and `missing` before it. Add `test_storm_missing_for_two_scans_is_reacquired` (5-minute scans, absent at 5 and 10, back at 15). Update `tests/unit/test_tracker.py::test_tracker_lost_after_missed_scans` so that two empty scans 5 minutes apart leave the track `missing`, and a scan more than 20 minutes after it was last seen makes it `lost`. In `test_a_different_nearby_storm_is_not_taken_for_the_missing_one` and `test_without_reacquisition_the_returning_storm_gets_a_new_identity`, the old track is `missing` (not `lost`) after the scan shown.
+> 6. **Task 11 Step 3** no longer expects `IDENTICAL` benchmark output. Record every changed metric, explain each one by the missing-status or reacquisition rule, and put that table in the report. An unexplained difference is a defect.
+
 
 **Files:**
 - Modify: `src/tracking/types.py` (`Track.last_seen_ref`, `Track.add_position`)

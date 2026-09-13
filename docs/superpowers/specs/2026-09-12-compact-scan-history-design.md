@@ -443,3 +443,33 @@ If a field fails the exact-step check, it is stored in its original dtype
    trends, API, proofs.
 3. `docs/superpowers/plans/2026-09-12-weather-kitten-scan-stepping.md`:
    Weather Kitten recent-scan navigation.
+
+## Amendment 2 (2026-09-12, owner decision before implementation)
+
+### A9. Track loss follows reacquirability ("missing" status); replaces A5
+
+Product integrity outranks keeping spoken output unchanged. A retained
+history of five scans that can only bridge one missed scan is inconsistent,
+so track loss now follows whether a storm can still be reacquired:
+
+- A track that is not matched in a scan changes from `active` to **`missing`**.
+  A missing track is not active: it is excluded from focus selection,
+  summaries, `/tracks` and merge/split handling, so ARW never describes a
+  storm that is not in the scan being described.
+- A missing track remains a stage-2 reacquisition candidate. Reacquired, it
+  returns to `active` with low identity confidence (unchanged from section 2).
+- A missing track becomes **`lost`** when it can no longer be reacquired:
+  - it has been unseen for more than `MAX_REACQUISITION_MINUTES` (20), or
+  - reacquisition is enabled and the scan it was last seen in can no longer
+    be loaded (it has left the radar's retained history).
+- `MAX_MISSED_SCANS` is removed. Without reacquisition (for example the
+  offline benchmark script), only the 20-minute rule applies.
+
+Consequences:
+
+- Focus and speech change wherever the old tracker kept a missed storm
+  active. The Task 11 benchmark comparison therefore reviews and explains
+  every difference instead of expecting identical output.
+- The "identical tracking" proof still compares two trackers running the
+  same code (retained scans against loaded scans), so it still expects
+  byte-identical snapshots.

@@ -129,10 +129,37 @@
 - Cache-backed proof: 10 passing checks across KTLX Moore, KEMX, and KIWA; full suite: 390 passed, 4 strict xfailed
 - Current measurements and remaining limits are recorded in `docs/test_reports/2026-08-31-spec2-shape-truth.md`
 
+## Radar correctness fixes (2026-09-12) -- branch `radar-history`
+- Plan: `docs/superpowers/plans/2026-09-12-radar-correctness-fixes.md`; spec and amendments:
+  `docs/superpowers/specs/2026-09-12-compact-scan-history-design.md`
+- The previously uncommitted live-memory work (per-site trackers, bounded caches, concurrent
+  per-site ingest, weak-echo detection shortcut, Audiom-safe dimensions) was reviewed and folded
+  into `a0d6d1c`. The detection shortcut was checked to be exact: a split needs two >= 50 dBZ
+  branches, so a component peaking below 50 dBZ never splits.
+- **Defect 1 fixed (`a0d6d1c`)**: releasing dual-pol grids had stripped precipitation-band evidence
+  (every band RhoHV None / "uncertain"). Evidence is now computed during processing. Proof
+  `tests/e2e/test_proof_precipitation_evidence.py`: KTLX and KEMX layers identical to full-field
+  builds; with the fix patched out it fails with `KTLX-precip-15.median_rhohv: None != 0.9883`.
+- **Defect 4 fixed (`c36d0b5`)**: the summary matched a track that missed the scan by its stale
+  object number and could speak one storm with another storm's motion. Only tracks seen in the
+  summarized scan now match.
+- **Defect 3 fixed (`bedbd65`)**: historical requests advanced and reset the live tracker. Only a
+  newer live volume is tracked; each tracked scan carries its own tracker snapshot; untracked
+  scans report `tracking_context: "unavailable"`.
+- Tests: 419 passed (unit, smoke, full-pipeline e2e, precipitation proof).
+- Live check, KJAX 2026-09-13: summary tracked (43 objects, 02:53:13Z); every precipitation band
+  had RhoHV; a request for 01:53:30Z returned `unavailable` and left the 43 live tracks unchanged;
+  the next live scan (02:58:15Z) continued 29 of 49 tracks with 2+ positions.
+
 ## In Progress
+- Compact scan history (`docs/superpowers/plans/2026-09-12-compact-scan-history.md`): Tasks 1
+  (codec) and 2 (records) done; owner decision recorded as spec Amendment 2 -- a `missing` track
+  status, lost only when no longer reacquirable (Task 8 revision)
 - Spec 2 restoration is validated and documented; commit/merge decision pending
 
 ## Next
+- Compact scan history Tasks 3-11, then Weather Kitten scan stepping
+  (`docs/superpowers/plans/2026-09-12-weather-kitten-scan-stepping.md`)
 - Classifier calibration. The membership parameters need deriving from data, not from a design
   document. The two strict xfails are the measure: they start passing when it works
 - Spec 3 (SCIT cell identification), Spec 4 (hail/mesocyclone, needs volumetric parsing)
