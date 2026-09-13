@@ -10,37 +10,37 @@
       {
         "scan": "KTLX20260410_224737_V06",
         "objects": 53,
-        "active_tracks": 50,
+        "active_tracks": 53,
         "reacquired": []
       },
       {
         "scan": "KTLX20260410_225255_V06",
         "objects": 51,
-        "active_tracks": 49,
+        "active_tracks": 51,
         "reacquired": []
       },
       {
         "scan": "KTLX20260410_225805_V06",
         "objects": 49,
-        "active_tracks": 47,
+        "active_tracks": 49,
         "reacquired": []
       },
       {
         "scan": "KTLX20260410_230332_V06",
         "objects": 50,
-        "active_tracks": 48,
+        "active_tracks": 50,
         "reacquired": []
       },
       {
         "scan": "KTLX20260410_230850_V06",
         "objects": 61,
-        "active_tracks": 57,
+        "active_tracks": 61,
         "reacquired": []
       },
       {
         "scan": "KTLX20260410_231407_V06",
         "objects": 57,
-        "active_tracks": 54,
+        "active_tracks": 57,
         "reacquired": []
       }
     ],
@@ -49,35 +49,35 @@
   "memory": {
     "compact_scan_bytes": [
       280228,
-      279304,
-      278157,
-      278813,
-      276841,
+      279870,
+      279037,
+      279791,
+      278034,
       148491,
-      148933,
-      150643,
-      151555,
-      149335
+      148986,
+      150755,
+      151766,
+      149830
     ],
-    "retained_compact_bytes": 2142300,
+    "retained_compact_bytes": 2146788,
     "compact_limit_bytes": 3082508.0000000005,
     "rendered_scan_bytes": [
       6688865,
-      6520936,
-      6162782,
-      6035991,
-      5866384,
+      6520846,
+      6162323,
+      6035532,
+      5866018,
       140978,
       142953,
-      173029,
-      215479,
+      172984,
+      215341,
       162861
     ],
-    "retained_rendered_bytes": 32110448,
+    "retained_rendered_bytes": 32108891,
     "rendered_limit_bytes": 88293018.0,
     "old_pipeline_largest_scan_array_bytes": 98928000,
     "old_pipeline_two_scans_two_radars_bytes": 395712000,
-    "transient_peak_traced_bytes": 2654713371,
+    "transient_peak_traced_bytes": 546272236,
     "retained_full_grids": []
   },
   "restart": {

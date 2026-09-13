@@ -38,13 +38,16 @@ window 2026-04-10 22:42:09Z to 23:14:07Z.
 
 | Scan | Objects | Active tracks | Reacquired |
 |---|---|---|---|
-| 22:42:09 | 63 | 63 | none |
-| 22:47:37 | 53 | 50 | none |
-| 22:52:55 | 51 | 49 | none |
-| 22:58:05 | 49 | 47 | none |
-| 23:03:32 | 50 | 48 | none |
-| 23:08:50 | 61 | 57 | none |
-| 23:14:07 | 57 | 54 | none |
+| 22:42:09 | 63 | 63 (was 63) | none |
+| 22:47:37 | 53 | 53 (was 50) | none |
+| 22:52:55 | 51 | 51 (was 49) | none |
+| 22:58:05 | 49 | 49 (was 47) | none |
+| 23:03:32 | 50 | 50 (was 48) | none |
+| 23:08:50 | 61 | 61 (was 57) | none |
+| 23:14:07 | 57 | 57 (was 54) | none |
+
+Active-track counts are from the 2026-09-13 rerun after the storm-identity fix (section 7b); the
+counts in parentheses, from 2026-09-12, were lower because continuing storms had been merged away.
 
 ## 3. Memory
 
@@ -59,6 +62,28 @@ four map layers and the precipitation layer rendered for every scan.
 | Full-size grids retained after ingest | **none** | none |
 | Previous pipeline, arrays for 2 scans on 2 radars | 395.7 MB | -- |
 | Transient traced peak during ingest and rendering | **2.65 GB** | not gated (spec A6) |
+
+**Update 2026-09-13 -- the transient peak's root cause was found and fixed (`55fc07c`).** Measuring
+each pipeline stage on real KTLX volumes showed object detection peaking at 2,243 MB and still
+holding 2,226 MB when it returned (KEMX: 3,557 MB / 3,539 MB); every other stage peaked at 356 MB
+or less. Detection kept a full-grid mask (1.3 MB) for every threshold-hierarchy node of every
+object; one KEMX storm complex of 36,222 gates produced 1,329 nodes and a 1,765 MB build peak.
+Components are now labeled once per threshold inside the blob's bounding box, with full-grid masks
+built only for split seeds. Against the previous code on the same volumes, every object, mask,
+label and hierarchy node (2,429 KTLX, 7,075 KEMX) is identical, and:
+
+| Volume | Detection peak before | after | Held after detection before | after |
+|---|---|---|---|---|
+| KTLX 22:42:09Z (63 objects) | 2,243 MB | **97 MB** | 2,226 MB | **89 MB** |
+| KEMX 02:26:46Z (81 objects) | 3,557 MB | **121 MB** | 3,539 MB | **113 MB** |
+
+Largest remaining per-stage peaks on KTLX: Level II parse 356 MB (159 MB held through processing),
+quality-control preprocessing 148 MB and its refresh 148 MB, intensity-band layer 107 MB,
+precipitation layer 100 MB.
+
+The memory proof, rerun after the fix on the same ten scans with every layer rendered, measured a
+transient traced peak of **546 MB** (was 2,655 MB). Retained history 2.15 MB, retained rendered
+layers 32.1 MB, and no full-size grids retained, all unchanged.
 
 Findings to act on:
 
@@ -137,22 +162,55 @@ ARW on branch `radar-history`, port 8765, history under `cache/KJAX/history/`.
 - **Not verified here:** a keyboard-and-NVDA pass through the Weather Kitten page (needs the
   owner), and an observed real reacquisition (none occurred).
 
-## 7b. Defect found during the live check, not fixed (owner decision)
+## 7b. Storm identity: a continuing storm was merged away (fixed 2026-09-13)
 
-The newest KJAX scan had 29 objects but 24 active tracks; the offline benchmark showed the same
-pattern (49 objects, 47 active; 45 objects, 44 active). Instrumenting the benchmark pipeline: every
-object maps to exactly one track, but in the same update some tracks are first assigned an object as
-a split parent and then marked `merged` into another track (for example object 40 -> track 38,
-`merged_into` 12, with object 40 as its current object). The merge step checks only that a track is
-`active`, not whether it already holds an object in this scan. Such a storm is present in the scan
-but represented only by a merged track: absent from `/tracks`, without motion in speech, and
-ineligible for focus. This predates the history work (the old tracker's inflated active count hid
-it); fixing it changes merge and split lineage, so it is left for an owner decision.
+**Found:** the newest KJAX scan had 29 objects but 24 active tracks, and the offline benchmark showed
+the same pattern (49 objects / 47 active tracks; 45 / 44). Every object mapped to exactly one track,
+but some tracks were matched to their own object and then marked `merged` into a neighbour in the
+same update (for example object 40 -> track 38, `merged_into` 12). Such a storm was present in the
+scan but absent from `/tracks`, without motion in speech, and ineligible for focus.
+
+**Root cause:** association listed every track that scored against an object as a merge candidate
+for it, including tracks the global assignment had matched to a different object. The mirror case
+also existed: an object matched to one track could be listed as a split child of another.
+
+**Owner decision:** a storm that is the same storm as a previous track must not become a different
+one. **Fix (`e32a835`):** only an unmatched track can merge, and only an unmatched object can be a
+split child. An April tracker test had encoded the defect (storm A, best matched to its own
+continuation with 60% overlap, merged away and its continuation given a new identity); it now
+asserts that A keeps its track.
+
+**Verified:** on the benchmark pipeline active tracks now equal objects in every scan (55/55, 49/49,
+45/45), with no object on a merged track.
+
+**Benchmark effect** (`2026-09-13-benchmark-after-identity-fix.json` against
+`2026-09-12-benchmark-after-history.json`), all in the direction of fewer false identity changes:
+
+| Window | Merges | Splits | New tracks after first scan | Fragmentation proxy |
+|---|---|---|---|---|
+| dense_cached_quick | 15 -> 8 | 9 -> 7 | 34 -> 27 | 0.228 -> 0.181 |
+| dense_cached_extended | 53 -> 29 | 33 -> 24 | 131 -> 100 | 0.313 -> 0.239 |
+| lower_complexity_extended | 5 -> 2 | 1 -> 1 | 15 -> 5 | 0.625 -> 0.208 |
+| merge_split_regression | 12 -> 5 | 6 -> 5 | 23 -> 16 | 0.242 -> 0.168 |
+| merge_split_extended | 14 -> 6 | 11 -> 8 | 41 -> 28 | 0.353 -> 0.241 |
+
+The clearest case, `lower_complexity_extended`: a steady scene of four storms previously created
+three new tracks every scan (tracks seen 4, 7, 10, 12, 13, 19), meaning three of the four storms were
+renamed each scan; after the fix it created none while the scene was stable (4 tracks seen through
+23:44Z). The focus storm is track 1 throughout. Its selection margin fell (5.16 -> 2.76) because its
+competitors are now persistent tracks rather than brand-new ones, and at 23:18Z it now has real
+track history, so motion is published from it (ENE 3 mph). Mean uncertain tracks rose slightly in
+each window (for example 7.5 -> 8.75); the likely cause is continuing storms keeping their lowered
+identity scores instead of being replaced by new tracks, which was not verified case by case.
 
 ## 8. Known limits
 
 - Reacquisition has not yet been observed on real data (section 2).
-- Transient peak memory during ingest and rendering is large and not bounded (section 3).
+- Peak memory while processing and rendering is 546 MB (measured; section 3), led by the 356 MB
+  Level II parse. Detection's multi-gigabyte peak is fixed.
+- The intensity-band layer is slow on busy scans: 135.6 s untraced for KTLX 22:47:37Z (measured
+  while a benchmark ran concurrently), against 1.7 s for footprints and 8.2 s for the
+  precipitation field.
 - Rendered layers dominate retained memory on busy days (section 3).
 - `Track.positions` is uncapped, so motion fits span a track's lifetime (issue #1).
 - Lost and merged tracks accumulate in tracker state for the life of a site's tracker, so

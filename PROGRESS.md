@@ -179,15 +179,26 @@
 - Recent scans section: previous/next links, list with `aria-current`, polite position line
   (`0cfa7d1`, `5b55e7f`); 38 tests passing; verified against live ARW on all four layers
 
+## Fixes after merge (2026-09-13)
+- **Detection memory (`55fc07c`):** detection held a full-grid mask per threshold-hierarchy node:
+  2.2 GB (KTLX) to 3.5 GB (KEMX) per scan. Now labeled per threshold within each blob; identical
+  output on real volumes, detection peak 97 MB (KTLX) and 121 MB (KEMX). Memory proof's measured
+  peak across ten scans with all layers rendered: 546 MB (was 2,655 MB). Largest remaining stage is
+  the Level II parse at 356 MB
+- **Storm identity (`e32a835`):** owner decision -- a continuing storm must never become a different
+  one. Only unmatched tracks can merge and only unmatched objects can be split children. Benchmark:
+  merges down 40-60%, new tracks after the first scan down (131 -> 100 dense), fragmentation proxy
+  down in every window; active tracks now equal objects every scan. Report section 7b
+- Found, not yet fixed: intensity-band layer takes about 136 s on a busy scan
+- Full suite after both fixes: 539 passed, 3 xfailed (the pre-existing expected failures)
+
 ## In Progress
 - Owner review: keyboard-and-NVDA pass through the Weather Kitten recent-scans section
-- Owner decision: split parent merged away in the same update (report section 7b)
 - Spec 2 restoration is validated and documented; commit/merge decision pending
 
 ## Next
-- Decide and fix the merged-split-parent defect; re-run the benchmark comparison
-- Investigate the 2.65 GB transient peak during ingest/rendering; consider reducing rendered-layer
-  retention (up to ~6.7 MB per busy scan)
+- Intensity-band layer speed (about 136 s on a busy scan)
+- Reduce the Level II parse peak (356 MB) and rendered-layer retention (up to ~6.7 MB per busy scan)
 - Issue #1: window the motion fit
 - Classifier calibration. The membership parameters need deriving from data, not from a design
   document. The two strict xfails are the measure: they start passing when it works
