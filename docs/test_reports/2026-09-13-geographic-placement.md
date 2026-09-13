@@ -79,6 +79,14 @@ accident, because its two halves merged afterwards, and is kept as a guard.
 
 **Full suite:** 562 passed, 3 xfailed (the pre-existing expected failures).
 
+**Live check** (current code on a separate port with its own history directory, live KJAX
+19:54:28Z, 108 storms):
+- `/summary/KJAX` answered in 11 s.
+- Checking `/objects/KJAX` against `/map/storms.geojson?mode=footprints`: 103 of 105 drawn storm
+  centres lie inside their outlines. The other two lie within 0.19 km of the edge; they are small
+  storms 1.7 to 2.2 km across, where outline simplification accounts for the gap.
+- Reported distances agree with the centres within 0.06 km.
+
 **Tracking benchmark** (`2026-09-13-benchmark-after-placement.json` against
 `2026-09-13-benchmark-after-alignment.json`):
 
