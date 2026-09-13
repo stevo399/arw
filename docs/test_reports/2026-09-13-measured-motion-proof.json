@@ -1,0 +1,63 @@
+{
+  "window": [
+    "KTLX20260410_224209_V06",
+    "KTLX20260410_224737_V06",
+    "KTLX20260410_225255_V06",
+    "KTLX20260410_225805_V06",
+    "KTLX20260410_230332_V06",
+    "KTLX20260410_230850_V06",
+    "KTLX20260410_231407_V06"
+  ],
+  "reported_motion_sources": {
+    "not_measured": 64,
+    "pattern_match": 231,
+    "nearby_storms": 89
+  },
+  "all": {
+    "n": 190,
+    "median_error_km": {
+      "reported": 1.562,
+      "stationary": 2.571
+    },
+    "p90_error_km": {
+      "reported": 5.417,
+      "stationary": 6.411
+    },
+    "mean_iou": {
+      "reported": 0.4883,
+      "stationary": 0.3913
+    }
+  },
+  "by_source": {
+    "nearby_storms": {
+      "n": 42,
+      "median_error_km": {
+        "reported": 1.724,
+        "stationary": 3.057
+      },
+      "p90_error_km": {
+        "reported": 4.187,
+        "stationary": 6.374
+      },
+      "mean_iou": {
+        "reported": 0.3123,
+        "stationary": 0.2146
+      }
+    },
+    "pattern_match": {
+      "n": 148,
+      "median_error_km": {
+        "reported": 1.507,
+        "stationary": 2.559
+      },
+      "p90_error_km": {
+        "reported": 6.306,
+        "stationary": 6.27
+      },
+      "mean_iou": {
+        "reported": 0.5383,
+        "stationary": 0.4414
+      }
+    }
+  }
+}
