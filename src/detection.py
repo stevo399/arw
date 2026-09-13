@@ -1,7 +1,7 @@
 import math
 from dataclasses import dataclass, field
 import numpy as np
-from scipy.ndimage import label
+from scipy.ndimage import label, maximum
 
 from src.geometry import gate_latlon, interpolate_azimuth, label_periodic_azimuth
 
@@ -270,7 +270,106 @@ class ThresholdHierarchyNode:
     parent_node_id: int | None
     pixel_count: int
     peak_dbz: float
-    mask: np.ndarray = field(repr=False)
+
+
+@dataclass
+class _HierarchyLevels:
+    """Component labels for each threshold, within the parent blob's bounding box.
+
+    Nodes used to carry one full-grid mask each.  A single real storm complex
+    (KEMX, 36,222 gates) produced 1,329 nodes, a 1.77 GB peak, and 2.2-3.5 GB
+    held until detection returned.  A node's mask is now derived from its
+    level's labels, and only for the few seed leaves a split uses.
+    """
+
+    grid_shape: tuple[int, int]
+    window: tuple[slice, slice]
+    labels: dict[float, np.ndarray] = field(default_factory=dict)
+    components: dict[int, tuple[float, int]] = field(default_factory=dict)  # node_id -> (threshold, label)
+
+    def node_mask(self, node_id: int) -> np.ndarray:
+        threshold, component_id = self.components[node_id]
+        mask = np.zeros(self.grid_shape, dtype=bool)
+        mask[self.window] = self.labels[threshold] == component_id
+        return mask
+
+
+def _mask_window(mask: np.ndarray) -> tuple[slice, slice]:
+    rows = np.flatnonzero(mask.any(axis=1))
+    cols = np.flatnonzero(mask.any(axis=0))
+    return slice(int(rows[0]), int(rows[-1]) + 1), slice(int(cols[0]), int(cols[-1]) + 1)
+
+
+def _dominant_previous_components(labels: np.ndarray, previous_labels: np.ndarray) -> dict[int, int]:
+    """For each component, the previous-level component it overlaps most.
+
+    Ties go to the smaller previous label, matching the former per-component
+    `np.unique` + `argmax` selection.
+    """
+    both = (labels > 0) & (previous_labels > 0)
+    if not both.any():
+        return {}
+    current = labels[both].astype(np.int64)
+    previous = previous_labels[both].astype(np.int64)
+    base = int(previous.max()) + 1
+    pairs, counts = np.unique(current * base + previous, return_counts=True)
+    pair_current = pairs // base
+    pair_previous = pairs % base
+    dominant: dict[int, int] = {}
+    for index in np.lexsort((pair_previous, -counts, pair_current)):
+        dominant.setdefault(int(pair_current[index]), int(pair_previous[index]))
+    return dominant
+
+
+def _build_hierarchy_levels(
+    parent_mask: np.ndarray,
+    reflectivity: np.ndarray,
+) -> tuple[list[ThresholdHierarchyNode], _HierarchyLevels]:
+    """Build nested threshold components inside a low-threshold parent blob."""
+    window = _mask_window(parent_mask)
+    parent = parent_mask[window]
+    field_values = reflectivity[window]
+    finite = ~np.isnan(field_values)
+    levels = _HierarchyLevels(grid_shape=parent_mask.shape, window=window)
+    nodes: list[ThresholdHierarchyNode] = []
+    previous_labels: np.ndarray | None = None
+    previous_component_to_node_id: dict[int, int] = {}
+    next_node_id = 1
+    for threshold in SEGMENTATION_HIERARCHY_THRESHOLDS:
+        labels, component_count = label(parent & finite & (field_values >= threshold))
+        levels.labels[threshold] = labels
+        current_component_to_node_id: dict[int, int] = {}
+        if component_count:
+            component_ids = np.arange(1, component_count + 1)
+            pixel_counts = np.bincount(labels.ravel(), minlength=component_count + 1)
+            peaks = np.asarray(maximum(field_values, labels=labels, index=component_ids))
+            dominant = (
+                _dominant_previous_components(labels, previous_labels)
+                if previous_component_to_node_id
+                else {}
+            )
+            for component_id in component_ids.tolist():
+                pixel_count = int(pixel_counts[component_id])
+                if pixel_count <= 0:
+                    continue
+                previous_component = dominant.get(component_id)
+                nodes.append(ThresholdHierarchyNode(
+                    node_id=next_node_id,
+                    threshold=threshold,
+                    parent_node_id=(
+                        previous_component_to_node_id.get(previous_component)
+                        if previous_component is not None
+                        else None
+                    ),
+                    pixel_count=pixel_count,
+                    peak_dbz=float(peaks[component_id - 1]),
+                ))
+                levels.components[next_node_id] = (threshold, component_id)
+                current_component_to_node_id[component_id] = next_node_id
+                next_node_id += 1
+        previous_labels = labels
+        previous_component_to_node_id = current_component_to_node_id
+    return nodes, levels
 
 
 def _build_threshold_hierarchy(
@@ -278,41 +377,7 @@ def _build_threshold_hierarchy(
     reflectivity: np.ndarray,
 ) -> list[ThresholdHierarchyNode]:
     """Build nested threshold components inside a low-threshold parent blob."""
-    nodes: list[ThresholdHierarchyNode] = []
-    previous_labeled_grid = np.zeros_like(parent_mask, dtype=int)
-    previous_component_to_node_id: dict[int, int] = {}
-    next_node_id = 1
-    for threshold in SEGMENTATION_HIERARCHY_THRESHOLDS:
-        threshold_grid = parent_mask & ~np.isnan(reflectivity) & (reflectivity >= threshold)
-        labeled_grid, component_count = label(threshold_grid)
-        current_component_to_node_id: dict[int, int] = {}
-        for component_id in range(1, component_count + 1):
-            component_mask = labeled_grid == component_id
-            pixel_count = int(np.count_nonzero(component_mask))
-            if pixel_count <= 0:
-                continue
-            parent_node_id = None
-            if previous_component_to_node_id:
-                overlapping_components = previous_labeled_grid[component_mask]
-                overlapping_components = overlapping_components[overlapping_components > 0]
-                if overlapping_components.size > 0:
-                    overlapping_values, overlapping_counts = np.unique(overlapping_components, return_counts=True)
-                    parent_component_id = int(overlapping_values[np.argmax(overlapping_counts)])
-                    parent_node_id = previous_component_to_node_id.get(parent_component_id)
-
-            nodes.append(ThresholdHierarchyNode(
-                node_id=next_node_id,
-                threshold=threshold,
-                parent_node_id=parent_node_id,
-                pixel_count=pixel_count,
-                peak_dbz=float(np.nanmax(reflectivity[component_mask])),
-                mask=component_mask,
-            ))
-            current_component_to_node_id[component_id] = next_node_id
-            next_node_id += 1
-        previous_labeled_grid = labeled_grid
-        previous_component_to_node_id = current_component_to_node_id
-    return nodes
+    return _build_hierarchy_levels(parent_mask, reflectivity)[0]
 
 
 def _hierarchy_children(nodes: list[ThresholdHierarchyNode], parent_id: int) -> list[ThresholdHierarchyNode]:
@@ -337,6 +402,7 @@ def _select_hierarchy_split_masks(
     parent_mask: np.ndarray,
     reflectivity: np.ndarray,
     hierarchy_nodes: list[ThresholdHierarchyNode],
+    levels: _HierarchyLevels,
 ) -> list[np.ndarray]:
     """Choose split branches from a multilevel threshold hierarchy."""
     if not hierarchy_nodes:
@@ -379,7 +445,7 @@ def _select_hierarchy_split_masks(
     if len(selected_leaves) < 2:
         return [parent_mask]
 
-    seed_masks = [leaf.mask for leaf in sorted(selected_leaves, key=lambda node: (node.threshold, node.pixel_count, node.peak_dbz), reverse=True)]
+    seed_masks = [levels.node_mask(leaf.node_id) for leaf in sorted(selected_leaves, key=lambda node: (node.threshold, node.pixel_count, node.peak_dbz), reverse=True)]
     centroids = _seed_centroids(seed_masks, reflectivity)
     child_masks = [np.zeros_like(parent_mask, dtype=bool) for _ in seed_masks]
     claimed_seed_pixels = np.zeros_like(parent_mask, dtype=bool)
@@ -427,8 +493,8 @@ def _split_parent_mask(
     reflectivity: np.ndarray,
 ) -> tuple[list[np.ndarray], list[ThresholdHierarchyNode]]:
     """Partition a low-threshold blob around persistent multilevel branches."""
-    hierarchy_nodes = _build_threshold_hierarchy(parent_mask, reflectivity)
-    return _select_hierarchy_split_masks(parent_mask, reflectivity, hierarchy_nodes), hierarchy_nodes
+    hierarchy_nodes, levels = _build_hierarchy_levels(parent_mask, reflectivity)
+    return _select_hierarchy_split_masks(parent_mask, reflectivity, hierarchy_nodes, levels), hierarchy_nodes
 
 
 def detect_objects_with_grid(

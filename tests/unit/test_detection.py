@@ -480,3 +480,81 @@ def test_intensity_thresholds_are_unchanged():
     assert classify_intensity(55.0) == "intense precipitation"
     assert classify_intensity(65.0) == "severe core"
     assert classify_intensity(10.0) == "drizzle"
+
+
+def _many_layered_storms(storm_count: int = 40) -> np.ndarray:
+    """Separate storms on a full-resolution grid, each with 30/40/50 dBZ cores."""
+    reflectivity = np.full((720, 1832), np.nan)
+    for index in range(storm_count):
+        row, col = 20 + (index % 8) * 85, 200 + (index // 8) * 300
+        reflectivity[row:row + 40, col:col + 60] = 25.0
+        reflectivity[row + 8:row + 32, col + 10:col + 50] = 35.0
+        reflectivity[row + 14:row + 26, col + 20:col + 40] = 45.0
+        reflectivity[row + 17:row + 23, col + 26:col + 34] = 55.0
+    return reflectivity
+
+
+def _detect_full_grid(reflectivity):
+    return detect_objects_with_grid(
+        reflectivity=reflectivity,
+        azimuths=np.linspace(0, 359.5, reflectivity.shape[0]),
+        ranges_m=np.linspace(2000, 460000, reflectivity.shape[1]),
+        radar_lat=35.0,
+        radar_lon=-97.0,
+    )
+
+
+def test_detection_result_retains_no_hierarchy_masks():
+    result = _detect_full_grid(_many_layered_storms(8))
+    nodes = [node for hierarchy in result.object_hierarchy.values() for node in hierarchy]
+    assert nodes, "fixture must produce threshold hierarchies"
+    assert {node.threshold for node in nodes} >= {20.0, 30.0, 40.0, 50.0}
+    assert all(not isinstance(value, np.ndarray) for node in nodes for value in vars(node).values())
+
+
+def test_detection_retains_only_object_masks_and_label_grid():
+    """Detection used to keep a full-grid mask for every hierarchy node of
+    every object: about 2.2 GB for 63 real KTLX objects (2026-09-13)."""
+    import tracemalloc
+
+    reflectivity = _many_layered_storms(40)
+    tracemalloc.start()
+    try:
+        before, _ = tracemalloc.get_traced_memory()
+        result = _detect_full_grid(reflectivity)
+        retained = tracemalloc.get_traced_memory()[0] - before
+    finally:
+        tracemalloc.stop()
+
+    assert len(result.objects) == 40
+    expected = sum(mask.nbytes for mask in result.object_masks.values()) + result.labeled_grid.nbytes
+    assert retained < expected + 20_000_000, (
+        f"detection retained {retained / 1e6:.1f} MB; masks and labels are {expected / 1e6:.1f} MB"
+    )
+
+
+def test_one_storm_complex_with_many_cores_does_not_allocate_a_grid_per_core():
+    """A 40,000-gate complex with 100 separate 55 dBZ cores.
+
+    Each core is a hierarchy component at 30, 40 and 50 dBZ.  Building the
+    hierarchy used to allocate one full-grid mask per component: on real KEMX
+    data, one complex of 36,222 gates produced 1,329 nodes and a 1.77 GB
+    peak (2026-09-13).
+    """
+    import tracemalloc
+
+    reflectivity = np.full((720, 1832), np.nan)
+    reflectivity[100:300, 400:600] = 25.0
+    reflectivity[105:300:20, 405:600:20] = 55.0
+    tracemalloc.start()
+    try:
+        start, _ = tracemalloc.get_traced_memory()
+        result = _detect_full_grid(reflectivity)
+        peak = tracemalloc.get_traced_memory()[1] - start
+    finally:
+        tracemalloc.stop()
+
+    nodes = [node for hierarchy in result.object_hierarchy.values() for node in hierarchy]
+    assert len(nodes) > 300, "fixture must produce a large hierarchy"
+    assert peak < 100_000_000, f"detection peaked at {peak / 1e6:.1f} MB for {len(nodes)} hierarchy nodes"
+
