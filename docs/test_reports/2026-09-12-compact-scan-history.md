@@ -34,7 +34,8 @@ window 2026-04-10 22:42:09Z to 23:14:07Z.
 - With reacquisition enabled, no storm was reacquired in this window, so its snapshots were
   identical too (`first_reacquisition_divergence: null`). **Reacquisition is therefore proven by
   the synthetic tests only** (`tests/unit/test_tracking_reacquisition.py`, 14 tests), not yet by
-  an observed real-data reacquisition.
+  an observed real-data reacquisition. (Real-data reacquisitions were surveyed on 2026-09-13; see
+  section 7c.)
 
 | Scan | Objects | Active tracks | Reacquired |
 |---|---|---|---|
@@ -203,9 +204,120 @@ track history, so motion is published from it (ENE 3 mph). Mean uncertain tracks
 each window (for example 7.5 -> 8.75); the likely cause is continuing storms keeping their lowered
 identity scores instead of being replaced by new tracks, which was not verified case by case.
 
+## 7c. Scans compared by beam index instead of azimuth (fixed 2026-09-13)
+
+**Found:** a survey of every cached back-to-back window (23 windows, 213 scans, 6 radars) found
+only 4 reacquisitions among 1,517 storms that went missing. An audit of the rejected candidates
+found 140 near candidates; 135 of them had exactly zero raw overlap with the returning echo, even
+when stationary.
+
+**Root cause:** masks and reflectivity from two scans were compared cell by cell, but a Level II
+volume starts at whatever azimuth the antenna is pointing, so row 0 differs between volumes
+(measured 336, 343, 341 and 8 degrees on consecutive KEYX volumes; 177 degrees apart on a KTLX
+pair). On a KTLX pair, all 38 matched storms had zero raw overlap. The same misalignment made the
+per-storm local motion estimate useless: its median quality was 0.00.
+
+**Owner decision:** align within tracking. **Fix (`091d193`):** `src/tracking/alignment.py`
+re-indexes the earlier scan onto the later scan's beam order (nearest azimuth, circular) before
+any comparison, in stage 1 and for each scan loaded for reacquisition. The re-indexed azimuth array
+keeps each row's true observed azimuth, so geographic conversions stay exact. When beam orders
+already match, alignment returns the scan unchanged. Tests use rotated synthetic volumes
+(`tests/unit/test_tracking_alignment.py`).
+
+**Verified on real pairs:** raw overlap of matched storms is 0.74, 0.34 and 0.66 (was 0 in all).
+Median local motion quality rose from 0.00 to 0.89. Local shifts larger than 20 pixels fell from
+10 of 48 to 4 of 48.
+
+**Reacquisition survey rerun** (same 23 windows, 213 scans):
+
+| | Before alignment | After |
+|---|---|---|
+| Storms that went missing | 1,517 | 1,159 |
+| Reacquired | 4 | 40 |
+| Lost | 1,041 | 785 |
+| Still missing at window end | 472 | 334 |
+
+The 40 reacquisitions (KIWA 12, KTLX 9, KJAX 7, KMLB 6, KEYX 5, KFWS 1), each checked for physical
+plausibility:
+
+- Gap: 29 after one missed scan, 7 after two, 4 after three; 7.8 to 18.6 minutes.
+- Displacement: 0.08 to 6.17 km (median 1.9). Implied speed is 0.5 to 26 km/h, all slow and
+  physically reasonable.
+- Advected overlap: 0.16 to 0.77 (median 0.27). Raw overlap was zero in 6 cases, all 2.5 to 4.9 km
+  displacements over 10 to 19 minutes.
+- Size and strength: weak and small (peak 22.5 to 57.5 dBZ, median 29.5; area 4 to 39 km²),
+  mostly at long range (median 236 km), where echoes near the detection threshold drop out for a
+  scan. Area after/before ratio is 0.30 to 2.74; peak change is -5.0 to +7.5 dBZ.
+- Competition: one case had a competing track. At KMLB 03:10Z, track 80 (cost 0.332) won over
+  track 87 (0.357); the lower cost won.
+- Identity after reacquisition is 0.08 to 0.23, below the 0.4 cap, so these storms are reported
+  with low identity confidence.
+
+**Rejection audit rerun:** 41 candidates were eligible and 40 were reacquired. The one eligible
+candidate not reacquired was track 87 above, which lost to a lower-cost track.
+
+Rejections within 5 km for low advected overlap fell from 140 to 58:
+
+- Before alignment, 139 of the 140 had zero raw overlap, including stationary echoes.
+- Now 28 of the 58 have zero raw overlap, and every one of those is displaced 2.4 to 5.0 km, which
+  is plausible for small echoes.
+- The highest advected overlap among the 58 is 0.13, against the 0.15 threshold; only 4 exceed
+  0.10.
+
+No remaining rejection pattern points to a comparison artifact.
+
+**Benchmark effect** (`2026-09-13-benchmark-after-alignment.json` against
+`2026-09-13-benchmark-after-identity-fix.json`):
+
+| Window | Merges | Splits | New tracks | Lost | Max speed mph | Mean uncertain | Fragmentation |
+|---|---|---|---|---|---|---|---|
+| dense_cached_quick | 8 -> 13 | 7 -> 7 | 27 -> 25 | - | - | 7.67 -> 6.0 | 0.181 -> 0.168 |
+| dense_cached_extended | 29 -> 40 | 24 -> 22 | 100 -> 91 | 47 -> 36 | 87 -> 32 | 8.75 -> 6.62 | 0.239 -> 0.217 |
+| lower_complexity_extended | unchanged | unchanged | unchanged | - | - | 0.17 -> 0.0 | unchanged |
+| merge_split_regression | unchanged | unchanged | unchanged | - | 35 -> 27 | 1.2 -> 1.0 | unchanged |
+| merge_split_extended | unchanged | unchanged | unchanged | - | 35 -> 29 | 1.71 -> 1.29 | unchanged |
+
+- Fewer new, lost and uncertain tracks and lower maximum speeds follow from working local motion
+  guidance and real overlap.
+- The 87 mph outlier is gone.
+- Merges rose in both dense windows. The likely cause is that overlaps between merging storms are
+  now measured instead of reading zero. This was not verified case by case.
+- `dense_cached_extended` mean focus selection margin fell from 2.02 to 0.79. This was not
+  investigated.
+- `merge_split_regression` gained one heading-reversal scan: a 82 to 90 degree change crossing the
+  metric's threshold, with unchanged speech.
+
+`dense_cached_quick` speech changed:
+
+- **Before:** the strongest storm was a different track each scan (9, 8, 60), with "moving SSE at
+  19 mph", then "moving S at 7 mph".
+- **After:** the strongest storm stays track 9 at 96, 97 and 94 miles NNE, and its motion is
+  reported as "tracking uncertain" twice.
+
+Instrumenting that window showed that neither reported motion came from the storm. Both came from
+the scene-wide motion estimate, identical for every track: 183 degrees at 2.01 km, then 325
+degrees at 1.01 km. Its raw phase-correlation shifts were exactly 0 rays and -8 gates, then 0 rays
+and -4 gates. The motion guard withheld the resulting S-to-NW flip. That estimate is defective, as
+described next.
+
+**New defect found (not fixed, predates this branch):** `estimate_scan_geographic_motion_field`
+has two problems:
+
+- It correlates the polar grid downsampled by 4, so shifts are quantized to 1 km in range and
+  2 degrees in azimuth (about 5 km tangentially at 150 km).
+- It turns the shift into a direction at a weighted centroid of *row indices*. That linear average
+  of a circular quantity depends on where the volume's beam 0 lies, not on where the echoes are.
+
+A purely radial 1 to 2 km shift was therefore reported toward whatever bearing the index average
+fell on. Reported motion falls back to this field whenever a track's own history motion is not
+publishable, or disagrees with the field. The blend with the storm's local estimate discards the
+local estimate whenever it differs from the scene estimate by more than 0.03 degrees, as both local
+estimates did here. Spoken motion can therefore state a wrong direction.
+
 ## 8. Known limits
 
-- Reacquisition has not yet been observed on real data (section 2).
+- Scene-wide motion estimate is quantized and its heading depends on beam order (section 7c). Not
+  yet fixed.
 - Peak memory while processing and rendering is 546 MB (measured; section 3), led by the 356 MB
   Level II parse. Detection's multi-gigabyte peak is fixed.
 - The intensity-band layer took 123.5 s (KTLX, 53 storms) and 327.1 s (KEMX, 81 storms) because it

@@ -200,12 +200,26 @@
   the radar's scan interval. Overlaps are now counted inside the masks' bounding windows and each
   track's shifted mask is built once. Identical association results on real KJAX and KTLX pairs;
   2.1 s (was 205.1 s) and 0.7 s (was 14.2 s)
+- **Azimuth alignment (`091d193`, branch `tracking-speed`):** tracking compared two scans cell by
+  cell although each Level II volume starts at a different azimuth (177 degrees apart on a KTLX
+  pair), so matched storms had zero raw overlap and local motion quality was 0.00. The earlier
+  scan is now re-indexed onto the later scan's beam order before comparison. Real pairs: overlap
+  0.74/0.34/0.66, local motion quality median 0.89. Reacquisition survey over 213 cached scans:
+  4 -> 40 reacquired (all slow, nearby, physically plausible), 1,041 -> 785 lost. Benchmark: fewer
+  new, lost and uncertain tracks; 87 mph outlier gone; merges up in dense windows (not verified
+  case by case). Report section 7c
+- **Defect found, not fixed:** the scene-wide motion estimate (`estimate_scan_geographic_motion_field`)
+  quantizes shifts to 1 km / 2 degrees and derives heading from a centroid of beam *indices*, so
+  its direction depends on beam order. Reported motion falls back to it, so speech can state a
+  wrong direction. Predates the history work. Report section 7c
 
 ## In Progress
 - Owner review: keyboard-and-NVDA pass through the Weather Kitten recent-scans section
 - Spec 2 restoration is validated and documented; commit/merge decision pending
 
 ## Next
+- Fix the scene-wide motion estimate (geographic regrid or circular centroid plus sub-pixel
+  peak), then re-verify spoken motion on the dense windows
 - Intensity-band layer still takes 8-14 s on busy scans; further gains need changes inside coverage
   simplification or contour georeferencing
 - Reduce the Level II parse peak (356 MB) and rendered-layer retention (up to ~6.7 MB per busy scan)
