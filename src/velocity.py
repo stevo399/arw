@@ -3,10 +3,15 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 
 import numpy as np
-from scipy.ndimage import label
 
 from src.detection import DetectedObject
-from src.geometry import gate_areas_km2, gate_coordinates, gate_latlon, interpolate_azimuth
+from src.geometry import (
+    align_field_by_azimuth,
+    gate_areas_km2,
+    gate_coordinates,
+    label_periodic_azimuth,
+    weighted_geographic_centroid,
+)
 from src.parser import VelocityData
 
 MIN_VELOCITY_MS = 10.0
@@ -47,7 +52,7 @@ def _detect_regions_single_sweep(
         ("outbound", velocity >= MIN_VELOCITY_MS),
     ]:
         valid = ~np.isnan(velocity) & condition
-        labeled_grid, count = label(valid, structure=np.ones((3, 3), dtype=int))
+        labeled_grid, count = label_periodic_azimuth(valid, structure=np.ones((3, 3), dtype=int))
 
         for component_id in range(1, count + 1):
             mask = labeled_grid == component_id
@@ -64,25 +69,14 @@ def _detect_regions_single_sweep(
                 peak = float(np.nanmax(region_velocities))
             mean = float(np.nanmean(region_velocities))
 
-            weights = np.abs(region_velocities)
-            weight_sum = float(np.sum(weights))
-            if weight_sum == 0:
+            weights = np.nan_to_num(np.abs(region_velocities), nan=0.0)
+            centroid = weighted_geographic_centroid(
+                az_indices, rng_indices, weights * range_bin_areas[rng_indices],
+                azimuths, ranges_m, elevations, radar_lat, radar_lon,
+            )
+            if centroid is None:
                 continue
-            centroid_az_idx = float(np.average(az_indices, weights=weights))
-            centroid_rng_idx = float(np.average(rng_indices, weights=weights))
-            centroid_az = interpolate_azimuth(azimuths, centroid_az_idx)
-            centroid_range = float(np.interp(centroid_rng_idx, range(len(ranges_m)), ranges_m))
-            centroid_elevation = float(
-                np.interp(centroid_az_idx, range(len(elevations)), elevations)
-            )
-
-            centroid_lat, centroid_lon = gate_latlon(
-                azimuth_deg=centroid_az,
-                range_m=centroid_range,
-                elevation_deg=centroid_elevation,
-                radar_lat=radar_lat,
-                radar_lon=radar_lon,
-            )
+            centroid_lat, centroid_lon, distance_km, bearing_deg = centroid
 
             results.append((VelocityRegion(
                 region_type=region_type,
@@ -91,8 +85,8 @@ def _detect_regions_single_sweep(
                 area_km2=round(area_km2, 2),
                 centroid_lat=round(centroid_lat, 4),
                 centroid_lon=round(centroid_lon, 4),
-                distance_km=round(centroid_range / 1000.0, 1),
-                bearing_deg=round(centroid_az % 360, 1),
+                distance_km=round(distance_km, 1),
+                bearing_deg=round(bearing_deg, 1),
                 sweep_count=1,
                 elevation_angles=[elevation_angle],
             ), mask))
@@ -103,7 +97,10 @@ def _detect_regions_single_sweep(
 def _merge_cross_sweep_regions(
     all_sweep_results: list[list[tuple[VelocityRegion, np.ndarray]]],
 ) -> list[VelocityRegion]:
-    """Merge regions from multiple sweeps by spatial overlap."""
+    """Merge regions from multiple sweeps by spatial overlap.
+
+    Masks must already share one ray order (see `detect_velocity_regions`).
+    """
     if not all_sweep_results:
         return []
 
@@ -296,11 +293,8 @@ def _detect_shear_single_sweep(
     radar_lon: float,
     elevation_angle: float,
     elevations: np.ndarray,
-) -> list[tuple[RotationSignature, float, float]]:
-    """Find gate-to-gate shear couplets on one sweep.
-
-    Returns (signature, centroid_az, centroid_range_m) tuples for cross-sweep merging.
-    """
+) -> list[RotationSignature]:
+    """Find gate-to-gate shear couplets on one sweep."""
     n_az, n_rng = velocity.shape
     range_spacing_m = float(np.median(np.diff(ranges_m))) if len(ranges_m) > 1 else 250.0
 
@@ -358,8 +352,9 @@ def _detect_shear_single_sweep(
                 outbound_values,
             )
 
-    labeled_shear, count = label(shear_mask, structure=np.ones((3, 3), dtype=int))
-    results: list[tuple[RotationSignature, float, float]] = []
+    labeled_shear, count = label_periodic_azimuth(shear_mask, structure=np.ones((3, 3), dtype=int))
+    range_bin_areas = gate_areas_km2(azimuths, ranges_m, elevation_angle)
+    results: list[RotationSignature] = []
 
     for component_id in range(1, count + 1):
         component_mask = labeled_shear == component_id
@@ -373,16 +368,13 @@ def _detect_shear_single_sweep(
         max_outbound = float(np.nanmax(outbound_values[component_mask]))
 
         weights = np.nan_to_num(component_shear, nan=0.0)
-        weight_sum = float(np.sum(weights))
-        if weight_sum == 0:
-            continue
-        centroid_az_idx = float(np.average(az_indices, weights=weights))
-        centroid_rng_idx = float(np.average(rng_indices, weights=weights))
-        centroid_az = interpolate_azimuth(azimuths, centroid_az_idx)
-        centroid_range = float(np.interp(centroid_rng_idx, range(len(ranges_m)), ranges_m))
-        centroid_elevation = float(
-            np.interp(centroid_az_idx, range(len(elevations)), elevations)
+        centroid = weighted_geographic_centroid(
+            az_indices, rng_indices, weights * range_bin_areas[rng_indices],
+            azimuths, ranges_m, elevations, radar_lat, radar_lon,
         )
+        if centroid is None:
+            continue
+        centroid_lat, centroid_lon, distance_km, bearing_deg = centroid
 
         # Use the wrapped angular span rather than index count so irregular
         # ray spacing does not distort the reported diameter.
@@ -390,23 +382,15 @@ def _detect_shear_single_sweep(
         az_extent = float(np.degrees(component_azimuths.max() - component_azimuths.min()))
         rng_extent = (float(np.max(rng_indices)) - float(np.min(rng_indices))) * range_spacing_m
         diameter_km = math.sqrt(
-            (az_extent * math.pi / 180 * centroid_range) ** 2
+            (az_extent * math.pi / 180 * distance_km * 1000.0) ** 2
             + rng_extent ** 2
         ) / 1000.0
 
-        centroid_lat, centroid_lon = gate_latlon(
-            azimuth_deg=centroid_az,
-            range_m=centroid_range,
-            elevation_deg=centroid_elevation,
-            radar_lat=radar_lat,
-            radar_lon=radar_lon,
-        )
-
-        results.append((RotationSignature(
+        results.append(RotationSignature(
             centroid_lat=round(centroid_lat, 4),
             centroid_lon=round(centroid_lon, 4),
-            distance_km=round(centroid_range / 1000.0, 1),
-            bearing_deg=round(centroid_az % 360, 1),
+            distance_km=round(distance_km, 1),
+            bearing_deg=round(bearing_deg, 1),
             max_shear_ms=round(max_shear, 1),
             max_inbound_ms=round(max_inbound, 1),
             max_outbound_ms=round(max_outbound, 1),
@@ -414,7 +398,7 @@ def _detect_shear_single_sweep(
             sweep_count=1,
             elevation_angles=[elevation_angle],
             strength=_classify_rotation_strength(max_shear),
-        ), centroid_az, centroid_range))
+        ))
 
     return results
 
@@ -442,33 +426,27 @@ def _merge_elevation_angles(existing: list[float], new: list[float]) -> list[flo
 
 
 def _merge_cross_sweep_rotations(
-    all_sweep_results: list[list[tuple[RotationSignature, float, float]]],
-    ranges_m: np.ndarray,
+    all_sweep_results: list[list[RotationSignature]],
 ) -> list[RotationSignature]:
-    """Merge rotation signatures from multiple sweeps by proximity."""
+    """Merge rotation signatures from multiple sweeps by ground distance."""
     if not all_sweep_results:
         return []
 
-    merged: list[tuple[RotationSignature, float, float]] = []
+    merged: list[RotationSignature] = []
 
     for sweep_results in all_sweep_results:
-        for sig, az, rng in sweep_results:
+        for sig in sweep_results:
             matched = False
-            for i, (existing_sig, existing_az, existing_rng) in enumerate(merged):
-                az_dist_deg = abs(az - existing_az)
-                if az_dist_deg > 180:
-                    az_dist_deg = 360 - az_dist_deg
-                rng_dist_m = abs(rng - existing_rng)
-                approx_dist_km = math.sqrt(
-                    (az_dist_deg * math.pi / 180 * rng) ** 2
-                    + rng_dist_m ** 2
-                ) / 1000.0
-
-                if approx_dist_km <= ROTATION_MERGE_DISTANCE_KM:
+            for i, existing_sig in enumerate(merged):
+                distance_km = _haversine_km(
+                    existing_sig.centroid_lat, existing_sig.centroid_lon,
+                    sig.centroid_lat, sig.centroid_lon,
+                )
+                if distance_km <= ROTATION_MERGE_DISTANCE_KM:
                     merged_elevation_angles = _merge_elevation_angles(
                         existing_sig.elevation_angles, sig.elevation_angles
                     )
-                    merged[i] = (RotationSignature(
+                    merged[i] = RotationSignature(
                         centroid_lat=existing_sig.centroid_lat,
                         centroid_lon=existing_sig.centroid_lon,
                         distance_km=existing_sig.distance_km,
@@ -482,19 +460,20 @@ def _merge_cross_sweep_rotations(
                         strength=_classify_rotation_strength(
                             max(existing_sig.max_shear_ms, sig.max_shear_ms)
                         ),
-                    ), existing_az, existing_rng)
+                    )
                     matched = True
                     break
             if not matched:
-                merged.append((sig, az, rng))
+                merged.append(sig)
 
-    return [sig for sig, _, _ in merged]
+    return merged
 
 
 def detect_velocity_regions(vel_data: VelocityData) -> list[VelocityRegion]:
     """Detect inbound/outbound velocity regions across all sweeps."""
     all_sweep_results: list[list[tuple[VelocityRegion, np.ndarray]]] = []
 
+    reference_azimuths = vel_data.sweeps[0].azimuths if vel_data.sweeps else None
     for sweep in vel_data.sweeps:
         sweep_results = _detect_regions_single_sweep(
             velocity=sweep.velocity,
@@ -505,14 +484,19 @@ def detect_velocity_regions(vel_data: VelocityData) -> list[VelocityRegion]:
             elevation_angle=sweep.elevation_angle,
             elevations=sweep.elevations,
         )
-        all_sweep_results.append(sweep_results)
+        # Each cut starts at whatever azimuth the antenna points, so the same
+        # region lies at different ray indices in each; compare by azimuth.
+        all_sweep_results.append([
+            (region, align_field_by_azimuth(mask, sweep.azimuths, reference_azimuths))
+            for region, mask in sweep_results
+        ])
 
     return _merge_cross_sweep_regions(all_sweep_results)
 
 
 def detect_rotation_signatures(vel_data: VelocityData) -> list[RotationSignature]:
     """Detect rotation signatures across all sweeps."""
-    all_sweep_results: list[list[tuple[RotationSignature, float, float]]] = []
+    all_sweep_results: list[list[RotationSignature]] = []
 
     for sweep in vel_data.sweeps:
         sweep_results = _detect_shear_single_sweep(
@@ -526,8 +510,7 @@ def detect_rotation_signatures(vel_data: VelocityData) -> list[RotationSignature
         )
         all_sweep_results.append(sweep_results)
 
-    ranges_m = vel_data.sweeps[0].ranges_m if vel_data.sweeps else np.array([])
-    return _merge_cross_sweep_rotations(all_sweep_results, ranges_m)
+    return _merge_cross_sweep_rotations(all_sweep_results)
 
 
 MAX_ASSOCIATION_DISTANCE_KM = 30.0

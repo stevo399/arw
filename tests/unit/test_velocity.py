@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -508,3 +509,78 @@ def test_sweep_count_never_exceeds_three_sweeps_on_real_data():
         pytest.skip("reference volume has no rotation signatures above threshold")
     assert max(s.sweep_count for s in signatures) <= 3
 
+
+
+def _bearing_from_north(bearing_deg: float) -> float:
+    return min(bearing_deg % 360.0, 360.0 - bearing_deg % 360.0)
+
+
+def test_velocity_region_straddling_the_first_and_last_ray_is_one_region_due_north():
+    """Ray 0 and the last ray are adjacent; a region occupying both is one
+    region.  Labelled without wrap-around it became two regions, and averaging
+    ray indices across it would place it on the far side of the radar."""
+    grid = np.full((360, 500), np.nan)
+    grid[0:8, 100:130] = -20.0
+    grid[352:360, 100:130] = -20.0
+    regions = detect_velocity_regions(_make_velocity_data([_make_sweep(grid)]))
+
+    inbound = [r for r in regions if r.region_type == "inbound"]
+    assert len(inbound) == 1
+    assert _bearing_from_north(inbound[0].bearing_deg) < 1.0
+    assert inbound[0].centroid_lat > RADAR_LAT
+
+
+def test_rotation_couplet_straddling_the_first_and_last_ray_is_one_signature_due_north():
+    grid = np.full((360, 500), np.nan)
+    grid[354:360, 150:160] = -20.0
+    grid[0:6, 150:160] = 20.0
+    signatures = detect_rotation_signatures(_make_velocity_data([_make_sweep(grid)]))
+
+    assert len(signatures) == 1
+    assert _bearing_from_north(signatures[0].bearing_deg) < 1.0
+    assert signatures[0].centroid_lat > RADAR_LAT
+
+
+def test_velocity_region_centre_is_its_geographic_centre():
+    """A region spanning 90 degrees of azimuth at 100 km has its centre inside
+    the arc, at 100 * sin(45) / (pi / 4) = 90.0 km from the radar."""
+    ranges_m = np.arange(250.0, 230000.0, 250.0)
+    grid = np.full((360, len(ranges_m)), np.nan)
+    grid[45:136, (ranges_m >= 99000.0) & (ranges_m <= 101000.0)] = -20.0
+    sweep = VelocitySweep(
+        velocity=grid,
+        azimuths=np.arange(360, dtype=float),
+        ranges_m=ranges_m,
+        elevation_angle=0.5,
+        nyquist_velocity=26.2,
+        elevations=np.full(360, 0.5),
+    )
+    regions = detect_velocity_regions(_make_velocity_data([sweep]))
+
+    assert len(regions) == 1
+    assert regions[0].distance_km == pytest.approx(90.0, abs=0.3)
+    assert regions[0].bearing_deg == pytest.approx(90.0, abs=0.5)
+
+
+def test_velocity_regions_merge_across_sweeps_by_azimuth_not_ray_index():
+    """Each sweep starts at whatever azimuth the antenna points, so the same
+    region sits at different ray indices in each cut."""
+    sweeps = []
+    for start_ray, elevation in ((0, 0.48), (137, 0.88)):
+        azimuths = (np.arange(360, dtype=float) + start_ray) % 360.0
+        grid = np.full((360, 500), np.nan)
+        rows = (np.arange(50, 70) - start_ray) % 360
+        grid[rows, 100:130] = -20.0
+        sweeps.append(VelocitySweep(
+            velocity=grid,
+            azimuths=azimuths,
+            ranges_m=np.linspace(2000, 230000, 500),
+            elevation_angle=elevation,
+            nyquist_velocity=26.2,
+            elevations=np.full(360, elevation),
+        ))
+    regions = detect_velocity_regions(_make_velocity_data(sweeps))
+
+    inbound = [r for r in regions if r.region_type == "inbound"]
+    assert len(inbound) == 1
+    assert inbound[0].sweep_count == 2

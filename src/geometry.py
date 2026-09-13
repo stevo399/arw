@@ -84,6 +84,52 @@ def gate_latlon(
     return float(lat[0, 0]), float(lon[0, 0])
 
 
+def weighted_geographic_centroid(
+    rays: np.ndarray,
+    gates: np.ndarray,
+    weights: np.ndarray,
+    azimuths: np.ndarray,
+    ranges_m: np.ndarray,
+    elevation_deg: float | np.ndarray,
+    radar_lat: float,
+    radar_lon: float,
+) -> tuple[float, float, float, float] | None:
+    """Weighted centre of a set of gates on the ground.
+
+    Gates are projected to the radar-centred azimuthal equidistant plane,
+    averaged there, and projected back.  Averaging ray and gate *indices*
+    instead is wrong in two ways: ray 0 and ray N-1 are adjacent, so a storm
+    straddling them averages to the far side of the radar; and a mean in
+    azimuth and range lies on an arc, not at the shape's centre.
+
+    `elevation_deg` is the per-ray elevation array (preferred) or a scalar.
+    Returns (lat, lon, ground distance km, bearing deg) -- distance and
+    bearing are exact from the projection centre -- or None when the
+    weights sum to zero.
+    """
+    rays = np.asarray(rays)
+    gates = np.asarray(gates)
+    weights = np.asarray(weights, dtype=float)
+    total = float(weights.sum())
+    if rays.size == 0 or total <= 0.0:
+        return None
+    elevations = np.asarray(elevation_deg, dtype=float)
+    ray_elevations = elevations[rays] if elevations.ndim == 1 else np.full(rays.shape, float(elevations))
+    x, y, _z = antenna_to_cartesian(
+        np.asarray(ranges_m, dtype=float)[gates] / 1000.0,
+        np.asarray(azimuths, dtype=float)[rays],
+        ray_elevations,
+    )
+    centre_x = float(np.dot(x, weights) / total)
+    centre_y = float(np.dot(y, weights) / total)
+    lon, lat = cartesian_to_geographic_aeqd(
+        np.asarray([centre_x]), np.asarray([centre_y]), radar_lon, radar_lat
+    )
+    distance_km = float(np.hypot(centre_x, centre_y)) / 1000.0
+    bearing_deg = float(np.degrees(np.arctan2(centre_x, centre_y))) % 360.0
+    return float(np.asarray(lat).ravel()[0]), float(np.asarray(lon).ravel()[0]), distance_km, bearing_deg
+
+
 def beam_height_m(
     range_m: float | np.ndarray,
     elevation_deg: float,

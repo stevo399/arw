@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy.ndimage import label, maximum
 
-from src.geometry import gate_latlon, interpolate_azimuth, label_periodic_azimuth
+from src.geometry import label_periodic_azimuth, weighted_geographic_centroid
 
 MIN_OBJECT_AREA_KM2 = 4.0
 MIN_SIGNIFICANT_WEAK_OBJECT_AREA_KM2 = 8.0
@@ -194,27 +194,21 @@ def compute_object_properties(
     if weight_sum == 0:
         return None
 
-    centroid_az_idx = np.average(az_indices[valid], weights=weights[valid])
-    centroid_rng_idx = np.average(rng_indices[valid], weights=weights[valid])
-    # Seam-safe: azimuths wrap once from ~360 back to ~0, and a straight
-    # np.interp across that seam reverses the bearing by 180 degrees.
-    centroid_az = interpolate_azimuth(azimuths, centroid_az_idx)
-    centroid_range = float(np.interp(centroid_rng_idx, range(len(ranges_m)), ranges_m))
-    if elevations is not None:
-        centroid_elevation_deg = float(np.interp(centroid_az_idx, range(len(elevations)), elevations))
-    else:
-        centroid_elevation_deg = elevation_deg
-
-    centroid_lat, centroid_lon = gate_latlon(
-        azimuth_deg=centroid_az,
-        range_m=centroid_range,
-        elevation_deg=centroid_elevation_deg,
-        radar_lat=radar_lat,
-        radar_lon=radar_lon,
+    # Owner decision (2026-09-13): a storm's centre is its reflectivity-
+    # weighted centre on the ground, each gate counted by the area it covers.
+    centroid = weighted_geographic_centroid(
+        az_indices,
+        rng_indices,
+        weights * range_bin_areas_km2[rng_indices],
+        azimuths,
+        ranges_m,
+        elevations if elevations is not None else elevation_deg,
+        radar_lat,
+        radar_lon,
     )
-    distance_km = centroid_range / 1000.0
-    bearing_deg = centroid_az % 360
-
+    if centroid is None:
+        return None
+    centroid_lat, centroid_lon, distance_km, bearing_deg = centroid
     peak_dbz = float(np.nanmax(obj_dbz))
     peak_label = classify_intensity(peak_dbz)
 

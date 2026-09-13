@@ -558,3 +558,60 @@ def test_one_storm_complex_with_many_cores_does_not_allocate_a_grid_per_core():
     assert len(nodes) > 300, "fixture must produce a large hierarchy"
     assert peak < 100_000_000, f"detection peaked at {peak / 1e6:.1f} MB for {len(nodes)} hierarchy nodes"
 
+
+
+def _single_object(reflectivity, azimuths, ranges_m):
+    objects = detect_objects(
+        reflectivity=reflectivity,
+        azimuths=azimuths,
+        ranges_m=ranges_m,
+        radar_lat=35.0,
+        radar_lon=-97.0,
+    )
+    assert len(objects) == 1
+    return objects[0]
+
+
+def test_storm_straddling_the_first_and_last_ray_is_placed_at_the_storm():
+    """Ray 0 and ray N-1 are adjacent, so a storm occupying both is one storm
+    due north here.  Averaging its ray *indices* (about 3 and 357) gives ray
+    180 -- due south, on the far side of the radar.  Real volumes misplaced
+    such storms by 12 to 451 km (2026-09-13 survey).
+    """
+    reflectivity = np.full((360, 500), np.nan)
+    reflectivity[0:6, 195:205] = 45.0
+    reflectivity[354:360, 195:205] = 45.0
+    obj = _single_object(reflectivity, np.linspace(0, 359, 360), np.linspace(2000, 250000, 500))
+
+    assert min(obj.bearing_deg, 360.0 - obj.bearing_deg) < 1.0, obj.bearing_deg
+    assert obj.centroid_lat > 35.0
+    assert obj.centroid_lon == pytest.approx(-97.0, abs=0.02)
+
+
+def test_storm_centroid_weights_each_gate_by_the_ground_it_covers():
+    """A uniform storm from 50 to 150 km covers more ground per gate at far
+    range.  Weighting by area, its centroid lies at (150^3 - 50^3) / 3 divided
+    by (150^2 - 50^2) / 2 = 108.3 km, not at the 100 km mid-range."""
+    ranges_m = np.arange(250.0, 250000.0, 250.0)
+    reflectivity = np.full((360, len(ranges_m)), np.nan)
+    in_storm = (ranges_m >= 50000.0) & (ranges_m <= 150000.0)
+    reflectivity[88:93, in_storm] = 40.0
+    obj = _single_object(reflectivity, np.arange(360, dtype=float), ranges_m)
+
+    assert obj.distance_km == pytest.approx(108.3, abs=0.3)
+    assert obj.bearing_deg == pytest.approx(90.0, abs=0.5)
+
+
+def test_arc_shaped_storm_centroid_is_its_geographic_centre():
+    """A band of storm spanning 90 degrees of azimuth at 100 km range has its
+    geographic centre inside the arc, at 100 * sin(45) / (pi / 4) = 90.0 km.
+    Averaging in azimuth and range places it on the arc at 100 km."""
+    ranges_m = np.arange(250.0, 250000.0, 250.0)
+    reflectivity = np.full((360, len(ranges_m)), np.nan)
+    band = (ranges_m >= 99000.0) & (ranges_m <= 101000.0)
+    reflectivity[45:136, band] = 40.0
+    obj = _single_object(reflectivity, np.arange(360, dtype=float), ranges_m)
+
+    assert obj.distance_km == pytest.approx(90.0, abs=0.3)
+    assert obj.bearing_deg == pytest.approx(90.0, abs=0.5)
+
