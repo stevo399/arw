@@ -1,0 +1,42 @@
+[
+  {
+    "id": "dense_cached_quick",
+    "category": "dense",
+    "site_id": "KTLX",
+    "date": "2026-04-10",
+    "scans": 3,
+    "local_only": true
+  },
+  {
+    "id": "dense_cached_extended",
+    "category": "dense_extended",
+    "site_id": "KTLX",
+    "date": "2026-04-10",
+    "scans": 8,
+    "local_only": true
+  },
+  {
+    "id": "lower_complexity_extended",
+    "category": "lower_complexity_extended",
+    "site_id": "KSOX",
+    "date": "2026-04-10",
+    "scans": 6,
+    "local_only": true
+  },
+  {
+    "id": "merge_split_regression",
+    "category": "merge_split",
+    "site_id": "KEYX",
+    "date": "2026-04-10",
+    "scans": 5,
+    "local_only": true
+  },
+  {
+    "id": "merge_split_extended",
+    "category": "merge_split_extended",
+    "site_id": "KEYX",
+    "date": "2026-04-10",
+    "scans": 7,
+    "local_only": true
+  }
+]
