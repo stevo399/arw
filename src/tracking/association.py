@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 import math
@@ -8,6 +9,7 @@ from scipy.optimize import linear_sum_assignment
 from src.buffer import BufferedScan
 from src.sites import haversine_distance_km
 from src.tracking.motion_field import (
+    GeographicMotionFieldEstimate,
     blend_geographic_motion_fields,
     estimate_geographic_motion_field,
     estimate_motion_field,
@@ -23,6 +25,9 @@ MIN_OVERLAP_PCT = 0.30
 MIN_ADVECTED_OVERLAP_PCT = 0.15
 MAX_STORM_SPEED_KMH = 120.0
 UNMATCHED_COST = 10.0
+# Must equal src.tracker.MAX_TEMPORAL_CONTINUITY_MINUTES (asserted in tests):
+# a storm unseen for longer than that is not evidence of the same storm.
+MAX_REACQUISITION_MINUTES = 20.0
 
 
 @dataclass
@@ -36,6 +41,13 @@ class AssociationResult:
     geo_motion: object | None = None
     track_geo_motion: dict[int, object] = field(default_factory=dict)
     dt_hours: float = 0.0
+    # Stage 2: missing tracks matched to objects stage 1 left unclaimed.  Kept
+    # apart from candidate_scores so stage-1 ambiguity margins and identity
+    # confidence are unaffected.
+    reacquired_matches: dict[int, int] = field(default_factory=dict)  # new_obj_id -> track_id
+    reacquisition_scores: list[AssociationScore] = field(default_factory=list)
+    # Missing tracks that can never be reacquired (too old, or last-seen scan gone).
+    unreacquirable_track_ids: set[int] = field(default_factory=set)
 
 
 def compute_overlap(mask_a: np.ndarray, mask_b: np.ndarray) -> float:
@@ -140,11 +152,21 @@ def associate_tracks(
     current_scan: BufferedScan,
     tracks: list[Track],
     obj_to_track: dict[int, int],
+    reacquisition_loader: Callable[[datetime], BufferedScan | None] | None = None,
 ) -> AssociationResult:
-    """Associate active tracks to new objects using a global cost matrix."""
+    """Associate active tracks to new objects using a global cost matrix.
+
+    With a reacquisition loader, missing tracks then compete for the objects
+    left unclaimed (stage 2).
+    """
     result = AssociationResult()
     active_tracks = [track for track in tracks if track.status == "active" and track.current_object is not None]
-    if not active_tracks:
+    missing_tracks = (
+        [track for track in tracks if track.status == "missing" and track.current_object is not None]
+        if reacquisition_loader is not None
+        else []
+    )
+    if not active_tracks and not missing_tracks:
         result.unmatched_new_ids = {obj.object_id for obj in current_scan.detected_objects}
         return result
 
@@ -292,4 +314,110 @@ def associate_tracks(
         if split_new_ids:
             result.split_candidates[track_id] = [primary_new_id] + split_new_ids
 
+    if reacquisition_loader is not None:
+        _reacquire_missing_tracks(
+            result=result,
+            missing_tracks=missing_tracks,
+            current_scan=current_scan,
+            new_objects=new_objects,
+            new_masks=new_masks,
+            pixel_motion=pixel_motion,
+            geo_motion=geo_motion,
+            dt_hours=dt_hours,
+            reacquisition_loader=reacquisition_loader,
+        )
     return result
+
+
+def _reacquire_missing_tracks(
+    *,
+    result: AssociationResult,
+    missing_tracks: list[Track],
+    current_scan: BufferedScan,
+    new_objects: dict,
+    new_masks,
+    pixel_motion,
+    geo_motion: GeographicMotionFieldEstimate,
+    dt_hours: float,
+    reacquisition_loader: Callable[[datetime], BufferedScan | None],
+) -> None:
+    """Stage 2: missing tracks compete for the objects stage 1 left unclaimed.
+
+    Runs only after stage 1 is final, so a continuously tracked storm always
+    keeps its match.  A missing track's mask comes from the scan where it was
+    last seen, shifted by the scene motion scaled to the full elapsed time,
+    and a match must pass the advected-overlap threshold and the maximum
+    storm speed over that elapsed time.  A candidate that is too old, or whose
+    last-seen scan can no longer be loaded, is reported as unreacquirable.
+    """
+    claimed = set(result.primary_matches)
+    for split_ids in result.split_candidates.values():
+        claimed.update(split_ids)
+    unclaimed = [object_id for object_id in new_objects if object_id not in claimed]
+    candidates = [track for track in missing_tracks if track.last_seen_ref is not None]
+    if not unclaimed or not candidates or dt_hours <= 0:
+        return
+
+    seen_scans: dict[datetime, BufferedScan | None] = {}
+    new_mask_cache: dict[int, np.ndarray] = {}
+    cost_matrix = np.full((len(candidates), len(unclaimed)), UNMATCHED_COST, dtype=float)
+    for row, track in enumerate(candidates):
+        seen_at, seen_object_id = track.last_seen_ref
+        elapsed_hours = (current_scan.timestamp - seen_at).total_seconds() / 3600.0
+        if elapsed_hours <= 0 or elapsed_hours * 60.0 > MAX_REACQUISITION_MINUTES:
+            result.unreacquirable_track_ids.add(track.track_id)
+            continue
+        if seen_at not in seen_scans:
+            seen_scans[seen_at] = reacquisition_loader(seen_at)
+        seen_scan = seen_scans[seen_at]
+        prev_mask = seen_scan.object_masks.get(seen_object_id) if seen_scan is not None else None
+        if prev_mask is None:
+            result.unreacquirable_track_ids.add(track.track_id)
+            continue
+        scale = elapsed_hours / dt_hours
+        scaled_motion = GeographicMotionFieldEstimate(
+            delta_lat=geo_motion.delta_lat * scale,
+            delta_lon=geo_motion.delta_lon * scale,
+            quality=geo_motion.quality,
+            source=f"reacquisition:{geo_motion.source}",
+        )
+        last_object = track.current_object
+        predicted_lat, predicted_lon = predict_latlon_position(
+            last_object.centroid_lat, last_object.centroid_lon, scaled_motion
+        )
+        max_distance_km = MAX_STORM_SPEED_KMH * elapsed_hours
+        for col, object_id in enumerate(unclaimed):
+            if object_id not in new_mask_cache:
+                new_mask_cache[object_id] = new_masks[object_id]
+            new_mask = new_mask_cache[object_id]
+            if new_mask.shape != prev_mask.shape:
+                continue
+            new_object = new_objects[object_id]
+            score = _candidate_score(
+                track=track,
+                new_object=new_object,
+                prev_mask=prev_mask,
+                new_mask=new_mask,
+                max_distance_km=max_distance_km,
+                predicted_lat=predicted_lat,
+                predicted_lon=predicted_lon,
+                motion_shift_rows=-pixel_motion.shift_rows * scale,
+                motion_shift_cols=-pixel_motion.shift_cols * scale,
+            )
+            if score is None or score.advected_overlap_score < MIN_ADVECTED_OVERLAP_PCT:
+                continue
+            centroid_km = haversine_distance_km(
+                last_object.centroid_lat, last_object.centroid_lon,
+                new_object.centroid_lat, new_object.centroid_lon,
+            )
+            if centroid_km > max(max_distance_km, 5.0):
+                continue
+            result.reacquisition_scores.append(score)
+            cost_matrix[row, col] = score.total_cost
+
+    for row, col in zip(*linear_sum_assignment(cost_matrix)):
+        if cost_matrix[row, col] >= UNMATCHED_COST:
+            continue
+        object_id, track_id = unclaimed[col], candidates[row].track_id
+        result.reacquired_matches[object_id] = track_id
+        result.unmatched_new_ids.discard(object_id)

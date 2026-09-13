@@ -138,13 +138,14 @@ def test_tracker_lost_after_missed_scans():
     mask1[85:95, 195:205] = True
     scan1 = _make_scan("KTLX", t1, [obj1], masks={1: mask1})
     tracker.update(scan1)
-    # Two empty scans = lost
-    for i in range(2):
-        t = t1 + timedelta(minutes=(i + 1) * 5)
-        empty_scan = _make_scan("KTLX", t, [])
-        tracker.update(empty_scan)
-    lost = [t for t in tracker.all_tracks if t.status == "lost"]
-    assert len(lost) == 1
+    # Missed scans leave the track missing (not described, still
+    # reacquirable) until it has been unseen for more than 20 minutes.
+    for minutes in (5, 10, 15, 20):
+        tracker.update(_make_scan("KTLX", t1 + timedelta(minutes=minutes), []))
+        assert [t.status for t in tracker.all_tracks] == ["missing"]
+        assert tracker.active_tracks == []
+    tracker.update(_make_scan("KTLX", t1 + timedelta(minutes=25), []))
+    assert [t.status for t in tracker.all_tracks] == ["lost"]
 
 
 def test_tracker_merge_detection():

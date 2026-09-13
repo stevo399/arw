@@ -60,10 +60,10 @@ class RadarHistory:
         return history
 
     def _new_tracker(self) -> StormTracker:
-        return StormTracker(scan_loader=self._load_for_tracker)
+        return StormTracker(scan_loader=self._load_for_tracker, reacquire=True)
 
     def _restore_tracker(self, state: dict) -> StormTracker:
-        return StormTracker.from_state(state, self._load_for_tracker)
+        return StormTracker.from_state(state, self._load_for_tracker, reacquire=True)
 
     # -- reads -----------------------------------------------------------
 
@@ -111,6 +111,9 @@ class RadarHistory:
             self._ring.append(compact)
             evicted = self._ring[: -self.ring_size]
             self._ring = self._ring[-self.ring_size:]
+            for scan in evicted:
+                # Missing storms last seen in an evicted scan can never be reacquired.
+                self.tracker.expire_scan(self.site_id, scan.timestamp)
             self.tracker.release_previous_scan()
             self._persist([compact], evicted)
             return compact

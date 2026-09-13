@@ -432,3 +432,18 @@ def test_tracker_scenario_where_a_missed_storm_shares_the_object_number():
     track = _get_track_for_object(storm_b, tracker.active_tracks)
     assert track is not None
     assert track.current_object.centroid_lon == -96.0
+
+
+from src.tracking.types import IdentityConfidence
+
+
+def test_reacquired_focus_storm_is_described_as_possibly_the_same_storm():
+    storm = _storm(1, -97.5, 55.0)
+    track = Track(track_id=4, status="active")
+    track.add_position(datetime(2026, 9, 12, 18, 0), storm)
+    track.identity_diagnostics = IdentityConfidence(
+        label="low", score=0.4, reason="reacquired after 1 missed scan", event_context="reacquired"
+    )
+    text = generate_summary("KTLX", "Oklahoma City", "2026-09-12T18:00:00Z", [storm], tracks=[track], events=[])
+    assert "possibly the same storm seen before a missed scan" in text
+    assert "tracking uncertain" in text

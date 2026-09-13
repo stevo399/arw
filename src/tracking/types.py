@@ -102,7 +102,7 @@ class RotationHistoryEntry:
 @dataclass
 class Track:
     track_id: int
-    status: str  # "active", "merged", "split", "lost"
+    status: str  # "active", "missing", "merged", "split", "lost"
     positions: list[TrackPosition] = field(default_factory=list)
     peak_history: list[PeakEntry] = field(default_factory=list)
     current_object: DetectedObject | None = None
@@ -122,6 +122,9 @@ class Track:
     motion_history: list[MotionSample] = field(default_factory=list)
     rotation_history: list[RotationHistoryEntry] = field(default_factory=list)
     is_primary_focus: bool = False
+    # (scan timestamp, object id) of the last scan this track was matched in.
+    # Reacquisition rebuilds the track's mask from that scan.
+    last_seen_ref: tuple[datetime, int] | None = None
     _missed_scans: int = 0
 
     def add_position(self, timestamp: datetime, obj: DetectedObject) -> None:
@@ -139,6 +142,7 @@ class Track:
         ))
         self.current_object = obj
         self.last_seen = timestamp
+        self.last_seen_ref = (timestamp, obj.object_id)
         self._missed_scans = 0
         if self.first_seen is None:
             self.first_seen = timestamp

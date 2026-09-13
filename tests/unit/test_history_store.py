@@ -173,3 +173,28 @@ def test_registry_never_evicts_a_radar_in_use(tmp_path):
     finally:
         release.set()
         worker.join(2)
+
+
+from tests.unit.test_tracking_reacquisition import _scan as _reacquisition_scan
+from tests.unit.test_tracking_reacquisition import _storm_a, _storm_b
+
+
+def test_radar_history_reacquires_through_its_ring(tmp_path):
+    history = RadarHistory.open("KTLX", tmp_path)
+    history.add_live_scan(_reacquisition_scan(0, [_storm_a(1), _storm_b(2)]))
+    history.add_live_scan(_reacquisition_scan(5, [_storm_b(1)]))
+    history.add_live_scan(_reacquisition_scan(10, [_storm_a(1, row=51, lat=35.301), _storm_b(2)]))
+
+    tracking = history.newest().to_buffered_scan().tracking
+    assert [event["event_type"] for event in tracking.recent_events] == ["reacquired"]
+    assert history.tracker.get_track(1).status == "active"
+
+
+def test_missing_track_is_lost_when_its_scan_leaves_the_ring(tmp_path):
+    history = RadarHistory.open("KTLX", tmp_path, ring_size=2)
+    history.add_live_scan(_reacquisition_scan(0, [_storm_a(1), _storm_b(2)]))
+    history.add_live_scan(_reacquisition_scan(5, [_storm_b(1)]))
+    assert history.tracker.get_track(1).status == "missing"
+    history.add_live_scan(_reacquisition_scan(10, [_storm_b(1)]))  # evicts the 0-minute scan
+
+    assert history.tracker.get_track(1).status == "lost"

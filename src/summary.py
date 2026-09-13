@@ -17,6 +17,11 @@ def km2_to_mi2(km2: float) -> int:
     return round(km2 / (KM_PER_MILE ** 2))
 
 
+def _was_reacquired(track) -> bool:
+    diagnostics = getattr(track, "identity_diagnostics", None)
+    return diagnostics is not None and diagnostics.event_context == "reacquired"
+
+
 def _seen_this_scan(track) -> bool:
     """Whether this track was matched in the scan being summarized.
 
@@ -199,6 +204,10 @@ def generate_summary(
     focus_track = _get_track_for_object(strongest, tracks)
     motion = _get_motion_for_object(strongest, tracks)
     motion_str = _format_motion(motion, track=focus_track, events=events)
+    if focus_track is not None and _was_reacquired(focus_track):
+        # Identity rests on shape overlap across a scan in which the storm was
+        # not seen; say so rather than state continuity or motion as fact.
+        motion_str = ", possibly the same storm seen before a missed scan, tracking uncertain"
     rotation_str = _format_rotation(strongest, track=focus_track)
 
     parts = [

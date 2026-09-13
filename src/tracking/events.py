@@ -44,3 +44,12 @@ def normalize_split_event(
         "involved_track_ids": [parent_track_id] + child_track_ids,
     }
 
+
+def normalize_reacquired_event(timestamp: datetime, track_id: int, missed_scans: int) -> dict:
+    scans_word = "scan" if missed_scans == 1 else "scans"
+    return {
+        "event_type": "reacquired",
+        "timestamp": timestamp.isoformat(),
+        "description": f"Track {track_id} reacquired after {missed_scans} missed {scans_word}",
+        "involved_track_ids": [track_id],
+    }

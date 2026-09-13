@@ -6,18 +6,20 @@ from src.buffer import BufferedScan, TrackingSnapshot
 from src.detection import DetectedObject
 from src.motion import resolve_reported_motion, MotionVector, recent_heading_flip_count
 from src.tracking.motion import MotionContinuityContext
-from src.tracking.association import associate_tracks
-from src.tracking.events import normalize_merge_event, normalize_split_event
+from src.tracking.association import MAX_REACQUISITION_MINUTES, associate_tracks
+from src.tracking.events import normalize_merge_event, normalize_reacquired_event, normalize_split_event
 from src.tracking.types import FocusContinuity, IdentityConfidence, MotionSample, RotationHistoryEntry, Track
 
 _logger = logging.getLogger(__name__)
 TRACKER_STATE_VERSION = 1
 ScanLoader = Callable[[str, datetime], BufferedScan | None]
 
-MAX_MISSED_SCANS = 2
 FOCUS_SWITCH_MARGIN = 2.0
 HIGH_CONFIDENCE = 0.75
 MEDIUM_CONFIDENCE = 0.45
+# A reacquired identity is never better than low confidence: the storm was
+# not observed for at least one scan, so speech must not state it as fact.
+REACQUIRED_IDENTITY_CAP = 0.4
 # Consecutive Level II volumes normally arrive about 4–10 minutes apart.  A
 # longer gap is not valid evidence of temporal persistence.
 MAX_TEMPORAL_CONTINUITY_MINUTES = 20
@@ -151,7 +153,9 @@ def _get_track_motion(track: Track) -> MotionVector:
 class StormTracker:
     """Tracks storms across multiple radar scans."""
 
-    def __init__(self, scan_loader: ScanLoader | None = None):
+    def __init__(self, scan_loader: ScanLoader | None = None, *, reacquire: bool = False):
+        if reacquire and scan_loader is None:
+            raise ValueError("reacquisition needs a scan_loader for the scans where tracks were last seen")
         self._tracks: list[Track] = []
         self._next_id: int = 1
         self._recent_events: list[dict] = []
@@ -160,6 +164,7 @@ class StormTracker:
         self._prev_scan: BufferedScan | None = None
         self._prev_scan_ref: tuple[str, datetime] | None = None
         self._scan_loader = scan_loader
+        self._reacquire = reacquire
         self._obj_to_track: dict[int, int] = {}  # object_id -> track_id for current scan
         self._focus_history: list[int | None] = []
 
@@ -186,6 +191,21 @@ class StormTracker:
         self._prev_scan = scan
         self._prev_scan_ref = (scan.site_id, scan.timestamp)
 
+    def expire_scan(self, site_id: str, timestamp: datetime) -> None:
+        """The scan at `timestamp` can no longer be loaded.
+
+        Missing tracks last seen in it can never be reacquired, so they are lost.
+        """
+        if self._prev_scan_ref is not None and self._prev_scan_ref[0] != site_id:
+            return
+        for track in self._tracks:
+            if (
+                track.status == "missing"
+                and track.last_seen_ref is not None
+                and track.last_seen_ref[0] == timestamp
+            ):
+                track.status = "lost"
+
     def release_previous_scan(self) -> None:
         """Drop the retained full previous scan; it is reloaded when needed."""
         if self._scan_loader is None:
@@ -208,12 +228,12 @@ class StormTracker:
         }
 
     @classmethod
-    def from_state(cls, state: dict, scan_loader: ScanLoader) -> "StormTracker":
+    def from_state(cls, state: dict, scan_loader: ScanLoader, *, reacquire: bool = False) -> "StormTracker":
         if state.get("version") != TRACKER_STATE_VERSION:
             raise ValueError(
                 f"tracker state version {state.get('version')!r} is not {TRACKER_STATE_VERSION}"
             )
-        tracker = cls(scan_loader)
+        tracker = cls(scan_loader, reacquire=reacquire)
         tracker._tracks = list(state["tracks"])
         tracker._next_id = int(state["next_id"])
         tracker._recent_events = list(state["recent_events"])
@@ -609,6 +629,11 @@ class StormTracker:
         new_objects = {obj.object_id: obj for obj in scan.detected_objects}
         association = associate_tracks(
             previous_scan=previous_scan,
+            reacquisition_loader=(
+                (lambda seen_at: self._scan_loader(scan.site_id, seen_at))
+                if self._reacquire
+                else None
+            ),
             current_scan=scan,
             tracks=self._tracks,
             obj_to_track=self._obj_to_track,
@@ -703,6 +728,43 @@ class StormTracker:
             track.identity_confidence = self._score_confidence(association, new_id, track_id, scan, track)
             new_obj_to_track[new_id] = track_id
 
+        for new_id, track_id in association.reacquired_matches.items():
+            if new_id in new_obj_to_track:
+                continue
+            track = self.get_track(track_id)
+            if track is None or track.status != "missing":
+                continue
+            missed_scans = track._missed_scans
+            track.status = "active"
+            track.add_position(timestamp, new_objects[new_id])
+            track.rotation_history.append(RotationHistoryEntry(
+                timestamp=timestamp,
+                rotation=getattr(new_objects[new_id], "rotation", None),
+            ))
+            if len(track.rotation_history) > 6:
+                track.rotation_history = track.rotation_history[-6:]
+            score = next(
+                candidate for candidate in association.reacquisition_scores
+                if candidate.track_id == track_id and candidate.object_id == new_id
+            )
+            match_quality = self._match_quality(score)
+            track.identity_confidence = round(
+                min(REACQUIRED_IDENTITY_CAP, match_quality * _scan_quality_factor(scan) / (1 + missed_scans)),
+                2,
+            )
+            scans_word = "scan" if missed_scans == 1 else "scans"
+            track.identity_diagnostics = self._build_identity_diagnostics(
+                score_value=track.identity_confidence,
+                scan=scan,
+                track=track,
+                reason=f"reacquired after {missed_scans} missed {scans_word}",
+                match_quality=match_quality,
+                event_context="reacquired",
+            )
+            track.identity_diagnostics.missed_scans = missed_scans
+            self._recent_events.append(normalize_reacquired_event(timestamp, track_id, missed_scans))
+            new_obj_to_track[new_id] = track_id
+
         # Create new tracks for unmatched new objects
         for new_id, obj in new_objects.items():
             if new_id not in new_obj_to_track:
@@ -717,21 +779,35 @@ class StormTracker:
                 )
                 new_obj_to_track[new_id] = track.track_id
 
-        # Increment missed scans for unmatched active tracks
+        # An unmatched track goes missing: never described, still reacquirable.
+        # It is lost only once it can no longer be reacquired.
         matched_track_ids = set(new_obj_to_track.values())
         for track in self._tracks:
-            if track.status == "active" and track.track_id not in matched_track_ids:
-                track._missed_scans += 1
-                track.identity_confidence = max(0.0, round(track.identity_confidence - 0.2, 2))
-                track.identity_diagnostics = self._build_identity_diagnostics(
-                    score_value=track.identity_confidence,
-                    scan=scan,
-                    track=track,
-                    reason="track missed a scan",
-                    event_context="missed_scan",
-                )
-                if track._missed_scans >= MAX_MISSED_SCANS:
-                    track.status = "lost"
+            if track.track_id in matched_track_ids:
+                continue
+            if track.status == "active":
+                track.status = "missing"
+            elif track.status != "missing":
+                continue
+            track._missed_scans += 1
+            track.identity_confidence = max(0.0, round(track.identity_confidence - 0.2, 2))
+            track.identity_diagnostics = self._build_identity_diagnostics(
+                score_value=track.identity_confidence,
+                scan=scan,
+                track=track,
+                reason="track missed a scan",
+                event_context="missed_scan",
+            )
+            unseen_minutes = (
+                (timestamp - track.last_seen).total_seconds() / 60.0
+                if track.last_seen is not None
+                else float("inf")
+            )
+            if (
+                track.track_id in association.unreacquirable_track_ids
+                or unseen_minutes > MAX_REACQUISITION_MINUTES
+            ):
+                track.status = "lost"
 
         self._obj_to_track = new_obj_to_track
         self._refresh_track_motions(field_estimates=association.track_geo_motion, field_dt_hours=association.dt_hours)
