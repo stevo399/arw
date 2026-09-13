@@ -192,3 +192,13 @@ def test_expiring_a_scan_does_not_change_a_tracker_that_never_reacquires():
     recorder.update(_scan(5, [_storm_b(1)]))
     recorder.tracker.expire_scan("KTLX", T0)
     assert recorder.tracker.get_track(1).status == "missing"
+
+
+def test_focus_flag_never_stays_on_a_track_that_is_not_active():
+    recorder = _Recorder()
+    recorder.update(_scan(0, [_storm_a(1), _storm_b(2)]))
+    assert recorder.tracker.get_track(1).is_primary_focus, "fixture: storm A is the focus"
+    recorder.update(_scan(5, [_storm_b(1)]))
+    assert not recorder.tracker.get_track(1).is_primary_focus
+    recorder.update(_scan(10, [_storm_a(1, row=51, lat=35.301), _storm_b(2)]))
+    assert sum(track.is_primary_focus for track in recorder.tracker.all_tracks) == 1

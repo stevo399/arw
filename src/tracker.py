@@ -525,7 +525,9 @@ class StormTracker:
         active_tracks = [track for track in self._tracks if track.status == "active" and track.current_object is not None]
         previous_focus_track_id = next((track.track_id for track in active_tracks if track.is_primary_focus), None)
         previous_focus_track = next((track for track in active_tracks if track.track_id == previous_focus_track_id), None)
-        for track in active_tracks:
+        # Clear every track, not only active ones: a missing track that kept
+        # its flag would return as a second focus if it were reacquired.
+        for track in self._tracks:
             track.is_primary_focus = False
         if not active_tracks:
             return
