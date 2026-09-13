@@ -184,3 +184,11 @@ def test_reacquisition_requires_a_scan_loader():
 
 def test_reacquisition_window_matches_the_tracker_continuity_limit():
     assert MAX_REACQUISITION_MINUTES == MAX_TEMPORAL_CONTINUITY_MINUTES
+
+
+def test_expiring_a_scan_does_not_change_a_tracker_that_never_reacquires():
+    recorder = _Recorder(reacquire=False)
+    recorder.update(_scan(0, [_storm_a(1), _storm_b(2)]))
+    recorder.update(_scan(5, [_storm_b(1)]))
+    recorder.tracker.expire_scan("KTLX", T0)
+    assert recorder.tracker.get_track(1).status == "missing"

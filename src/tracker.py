@@ -195,7 +195,10 @@ class StormTracker:
         """The scan at `timestamp` can no longer be loaded.
 
         Missing tracks last seen in it can never be reacquired, so they are lost.
+        A tracker without reacquisition applies only the time limit.
         """
+        if not self._reacquire:
+            return
         if self._prev_scan_ref is not None and self._prev_scan_ref[0] != site_id:
             return
         for track in self._tracks:
