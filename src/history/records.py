@@ -28,6 +28,7 @@ from src.tracking.types import (
     Track,
     TrackPosition,
     TrendSample,
+    VelocitySample,
 )
 from src.velocity import RotationSignature
 
@@ -45,7 +46,7 @@ for _cls in (
     DetectedObject, IntensityLayerData, RotationSignature, ScanQuality,
     TrackingSnapshot, Track, TrackPosition, PeakEntry, IdentityConfidence,
     FocusContinuity, MotionConfidence, MotionSample, RotationHistoryEntry,
-    MotionVector, TrendSample,
+    MotionVector, TrendSample, VelocitySample,
 ):
     register_record_type(_cls)
 

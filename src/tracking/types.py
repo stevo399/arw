@@ -10,6 +10,17 @@ from src.velocity import RotationSignature
 # "intense precipitation" and "severe core" intensity bands).
 CORE_MIN_DBZ = 50.0
 MAX_TREND_SAMPLES = 6
+# Reported motion is the median of at most this many measured velocities.
+MAX_MEASURED_VELOCITIES = 3
+
+
+@dataclass
+class VelocitySample:
+    """A storm's velocity measured by pattern matching against the previous scan."""
+
+    timestamp: datetime
+    east_kmh: float
+    north_kmh: float
 
 
 @dataclass
@@ -139,6 +150,7 @@ class Track:
     motion_history: list[MotionSample] = field(default_factory=list)
     rotation_history: list[RotationHistoryEntry] = field(default_factory=list)
     trend_samples: list[TrendSample] = field(default_factory=list)
+    measured_velocities: list[VelocitySample] = field(default_factory=list)
     is_primary_focus: bool = False
     # (scan timestamp, object id) of the last scan this track was matched in.
     # Reacquisition rebuilds the track's mask from that scan.
