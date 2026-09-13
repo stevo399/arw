@@ -265,3 +265,56 @@ def test_an_object_matched_to_another_track_is_never_a_split_child(monkeypatch):
         assert all(association.primary_matches.get(child) in (None, track_id) for child in children), (
             f"track {track_id} lists objects matched to other tracks as split children: {children}"
         )
+
+
+def _random_blob(rng, shape) -> np.ndarray:
+    mask = np.zeros(shape, dtype=bool)
+    if rng.random() < 0.05:
+        return mask  # empty
+    row, col = int(rng.integers(0, shape[0])), int(rng.integers(0, shape[1]))
+    height, width = int(rng.integers(1, 40)), int(rng.integers(1, 40))
+    mask[row:row + height, col:col + width] = rng.random((min(height, shape[0] - row), min(width, shape[1] - col))) < 0.8
+    return mask
+
+
+def test_windowed_overlap_scores_equal_the_full_grid_functions_exactly():
+    from src.tracking.association import (
+        _iou_from_extents,
+        _overlap_from_extents,
+        _shift_mask,
+        compute_iou,
+        compute_overlap,
+        mask_extent,
+    )
+
+    rng = np.random.default_rng(12)
+    shape = (120, 160)
+    for _ in range(600):
+        a, b = _random_blob(rng, shape), _random_blob(rng, shape)
+        if rng.random() < 0.3:  # force overlap
+            b = a.copy() if rng.random() < 0.5 else np.roll(a, (int(rng.integers(-5, 6)), int(rng.integers(-5, 6))), axis=(0, 1))
+        shift_rows, shift_cols = float(rng.uniform(-60, 60)), float(rng.uniform(-80, 80))
+        shifted = _shift_mask(a, shift_rows, shift_cols)
+        assert _overlap_from_extents(mask_extent(a), mask_extent(b)) == compute_overlap(a, b)
+        assert _iou_from_extents(mask_extent(shifted), mask_extent(b)) == compute_iou(shifted, b)
+
+
+def test_each_track_mask_is_shifted_once_not_once_per_candidate(monkeypatch):
+    import src.tracking.association as association_module
+
+    t1 = datetime(2026, 4, 8, 18, 30)
+    storms = 12
+    masks = {i + 1: _block((10 + i * 28, 38 + i * 28), (100, 110)) for i in range(storms)}
+    objects = [_make_object(i + 1, 35.0 + i * 0.3, -97.0) for i in range(storms)]
+    previous = _make_scan("KTLX", t1, objects, masks)
+    current = _make_scan("KTLX", t1 + timedelta(minutes=5), [_make_object(i + 1, 35.0 + i * 0.3, -97.0) for i in range(storms)], dict(masks))
+    tracker = StormTracker()
+    tracker.update(previous)
+
+    shifts = []
+    real_shift = association_module._shift_mask
+    monkeypatch.setattr(association_module, "_shift_mask", lambda *args: shifts.append(args) or real_shift(*args))
+    association = associate_tracks(previous, current, tracker.all_tracks, tracker._obj_to_track)
+
+    assert association.primary_matches == {i + 1: i + 1 for i in range(storms)}
+    assert len(shifts) == storms

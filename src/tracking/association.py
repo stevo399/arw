@@ -89,6 +89,57 @@ def compute_iou(mask_a: np.ndarray, mask_b: np.ndarray) -> float:
     return float(intersection) / float(union)
 
 
+@dataclass(frozen=True)
+class MaskExtent:
+    """A mask with its bounding window and gate count.
+
+    Overlap between two masks can only occur inside both windows, so counting
+    within the windows' intersection gives exactly the full-grid counts.
+    Scoring every track against every object on full grids took 207 of 209
+    seconds for a 218-by-225-storm KJAX update (2026-09-13).
+    """
+
+    mask: np.ndarray
+    rows: slice
+    cols: slice
+    count: int
+
+
+def mask_extent(mask: np.ndarray) -> MaskExtent:
+    count = int(np.count_nonzero(mask))
+    if count == 0:
+        return MaskExtent(mask, slice(0, 0), slice(0, 0), 0)
+    rows = np.flatnonzero(mask.any(axis=1))
+    cols = np.flatnonzero(mask.any(axis=0))
+    return MaskExtent(mask, slice(int(rows[0]), int(rows[-1]) + 1), slice(int(cols[0]), int(cols[-1]) + 1), count)
+
+
+def _intersection_count(a: MaskExtent, b: MaskExtent) -> int:
+    row_start, row_stop = max(a.rows.start, b.rows.start), min(a.rows.stop, b.rows.stop)
+    col_start, col_stop = max(a.cols.start, b.cols.start), min(a.cols.stop, b.cols.stop)
+    if row_start >= row_stop or col_start >= col_stop:
+        return 0
+    return int(np.count_nonzero(
+        a.mask[row_start:row_stop, col_start:col_stop] & b.mask[row_start:row_stop, col_start:col_stop]
+    ))
+
+
+def _overlap_from_extents(a: MaskExtent, b: MaskExtent) -> float:
+    """Exactly `compute_overlap(a.mask, b.mask)`."""
+    if a.count == 0:
+        return 0.0
+    return float(_intersection_count(a, b)) / float(a.count)
+
+
+def _iou_from_extents(a: MaskExtent, b: MaskExtent) -> float:
+    """Exactly `compute_iou(a.mask, b.mask)`."""
+    intersection = _intersection_count(a, b)
+    union = a.count + b.count - intersection
+    if union <= 0:
+        return 0.0
+    return float(intersection) / float(union)
+
+
 def compute_advected_iou(prev_mask: np.ndarray, new_mask: np.ndarray, shift_rows: float, shift_cols: float) -> float:
     """Compute IoU after advecting the previous mask with the scene motion."""
     return compute_iou(_shift_mask(prev_mask, shift_rows, shift_cols), new_mask)
@@ -97,20 +148,25 @@ def compute_advected_iou(prev_mask: np.ndarray, new_mask: np.ndarray, shift_rows
 def _candidate_score(
     track: Track,
     new_object,
-    prev_mask: np.ndarray,
-    new_mask: np.ndarray,
+    prev_extent: MaskExtent,
+    shifted_extent: MaskExtent,
+    new_extent: MaskExtent,
     max_distance_km: float,
     predicted_lat: float,
     predicted_lon: float,
-    motion_shift_rows: float,
-    motion_shift_cols: float,
 ) -> AssociationScore | None:
+    """Score one track against one object.
+
+    `shifted_extent` is the track's previous mask already shifted by its
+    motion (computed once per track); overlaps are counted exactly within
+    the masks' windows.
+    """
     current_object = track.current_object
     if current_object is None:
         return None
 
-    overlap = compute_overlap(prev_mask, new_mask)
-    advected_overlap = compute_advected_iou(prev_mask, new_mask, motion_shift_rows, motion_shift_cols)
+    overlap = _overlap_from_extents(prev_extent, new_extent)
+    advected_overlap = _iou_from_extents(shifted_extent, new_extent)
     centroid_distance = haversine_distance_km(
         current_object.centroid_lat,
         current_object.centroid_lon,
@@ -197,6 +253,13 @@ def associate_tracks(
     scores_by_track: dict[int, list[AssociationScore]] = {track_id: [] for track_id in track_ids}
     scores_by_object: dict[int, list[AssociationScore]] = {obj_id: [] for obj_id in new_ids}
 
+    new_extents: dict[int, MaskExtent] = {}
+
+    def new_extent(object_id: int) -> MaskExtent:
+        if object_id not in new_extents:
+            new_extents[object_id] = mask_extent(new_masks[object_id])
+        return new_extents[object_id]
+
     for track in active_tracks:
         current_object = track.current_object
         if current_object is None:
@@ -249,17 +312,18 @@ def associate_tracks(
             if total_weight > 0.0:
                 blended_shift_rows = -(((local_pixel_motion.shift_rows * local_weight) + (pixel_motion.shift_rows * global_weight)) / total_weight)
                 blended_shift_cols = -(((local_pixel_motion.shift_cols * local_weight) + (pixel_motion.shift_cols * global_weight)) / total_weight)
+        prev_extent = mask_extent(prev_mask)
+        shifted_extent = mask_extent(_shift_mask(prev_mask, blended_shift_rows, blended_shift_cols))
         for new_id, new_object in new_objects.items():
             score = _candidate_score(
                 track=track,
                 new_object=new_object,
-                prev_mask=prev_mask,
-                new_mask=new_masks[new_id],
+                prev_extent=prev_extent,
+                shifted_extent=shifted_extent,
+                new_extent=new_extent(new_id),
                 max_distance_km=max_distance_km,
                 predicted_lat=predicted_lat,
                 predicted_lon=predicted_lon,
-                motion_shift_rows=blended_shift_rows,
-                motion_shift_cols=blended_shift_cols,
             )
             if score is None:
                 continue
@@ -374,7 +438,7 @@ def _reacquire_missing_tracks(
         return
 
     seen_scans: dict[datetime, BufferedScan | None] = {}
-    new_mask_cache: dict[int, np.ndarray] = {}
+    new_mask_cache: dict[int, MaskExtent] = {}
     cost_matrix = np.full((len(candidates), len(unclaimed)), UNMATCHED_COST, dtype=float)
     for row, track in enumerate(candidates):
         seen_at, seen_object_id = track.last_seen_ref
@@ -401,23 +465,26 @@ def _reacquire_missing_tracks(
             last_object.centroid_lat, last_object.centroid_lon, scaled_motion
         )
         max_distance_km = MAX_STORM_SPEED_KMH * elapsed_hours
+        prev_extent = mask_extent(prev_mask)
+        shifted_extent = mask_extent(
+            _shift_mask(prev_mask, -pixel_motion.shift_rows * scale, -pixel_motion.shift_cols * scale)
+        )
         for col, object_id in enumerate(unclaimed):
             if object_id not in new_mask_cache:
-                new_mask_cache[object_id] = new_masks[object_id]
-            new_mask = new_mask_cache[object_id]
-            if new_mask.shape != prev_mask.shape:
+                new_mask_cache[object_id] = mask_extent(new_masks[object_id])
+            candidate_extent = new_mask_cache[object_id]
+            if candidate_extent.mask.shape != prev_mask.shape:
                 continue
             new_object = new_objects[object_id]
             score = _candidate_score(
                 track=track,
                 new_object=new_object,
-                prev_mask=prev_mask,
-                new_mask=new_mask,
+                prev_extent=prev_extent,
+                shifted_extent=shifted_extent,
+                new_extent=candidate_extent,
                 max_distance_km=max_distance_km,
                 predicted_lat=predicted_lat,
                 predicted_lon=predicted_lon,
-                motion_shift_rows=-pixel_motion.shift_rows * scale,
-                motion_shift_cols=-pixel_motion.shift_cols * scale,
             )
             if score is None or score.advected_overlap_score < MIN_ADVECTED_OVERLAP_PCT:
                 continue
