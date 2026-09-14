@@ -90,3 +90,46 @@ def fetch_spc_reports(spc_day: date, kind: str) -> str:
     with open(path, "wb") as handle:
         handle.write(body)
     return path
+
+
+LEVEL3_BUCKET = "unidata-nexrad-level3"
+
+
+def _level3_client():
+    """Unsigned S3 client for NWS Level III products. Isolated for mocking."""
+    import boto3
+    from botocore import UNSIGNED
+    from botocore.config import Config
+
+    return boto3.client("s3", config=Config(signature_version=UNSIGNED), region_name="us-east-1")
+
+
+def level3_key_time(key: str) -> datetime:
+    return datetime.strptime("_".join(key.split("_")[2:8]), "%Y_%m_%d_%H_%M_%S")
+
+
+def list_level3_keys(site_id: str, product: str, start: datetime, end: datetime) -> list[str]:
+    """Level III product keys for a site whose product time lies within [start, end]."""
+    client = _level3_client()
+    site = site_id[1:] if len(site_id) == 4 else site_id
+    keys: list[str] = []
+    day = start.date()
+    while day <= end.date():
+        prefix = f"{site}_{product}_{day:%Y_%m_%d}"
+        for page in client.get_paginator("list_objects_v2").paginate(Bucket=LEVEL3_BUCKET, Prefix=prefix):
+            for item in page.get("Contents", []):
+                if start <= level3_key_time(item["Key"]) <= end:
+                    keys.append(item["Key"])
+        day += timedelta(days=1)
+    return sorted(keys)
+
+
+def download_level3(key: str) -> str:
+    """Download one Level III product into the cache (once). Returns the local path."""
+    site = key.split("_")[0]
+    path = os.path.join(os.path.abspath(CACHE_DIR), "level3", site, key)
+    if os.path.isfile(path):
+        return path
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    _level3_client().download_file(LEVEL3_BUCKET, key, path)
+    return path
