@@ -34,6 +34,20 @@
     3. tornado hit fraction at L >= 3 × null-storm false-alarm fraction at L.
   - **Configuration selection rule:** among swept configurations, choose the one with the most tornado event hits at rank 1 whose null-storm false-alarm fraction at rank 1 does not exceed the baseline detector's. Break ties by the lower null-storm false-alarm fraction, then the higher NMD matched count, then the earlier grid order.
 
+## Corrections made during execution (2026-09-14)
+
+- **Azimuthal pairs.** The rule is adjacent rays at the **same gate** only. The plan's
+  "`delta_az == 0` skipped" still admitted diagonal pairs, which mix radial convergence in. The
+  test `test_azimuthal_pairs_only_rejects_convergence_and_keeps_rotation` caught this.
+- **Diameter test.** A candidate's diameter comes from its shear boundary, not the whole velocity
+  block. The large-candidate test uses a long range extent (40 gates, about 18 km).
+- **Clear air.** A report-free noon volume is `clear_air` only when under 1% of valid gates reach
+  35 dBZ (spec B1). Otherwise it is `null_storm`, scored only by null-storm probes: three such
+  volumes held 3-18% strong echo.
+- **Baseline and sweep in one run.** The sweep output's first entry is the baseline configuration.
+  `docs/test_reports/2026-09-14-rotation-baseline.json` is that entry, extracted, not a separate
+  run.
+
 ---
 
 ### File Structure
