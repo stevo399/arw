@@ -30,7 +30,7 @@ from src.tracking.types import (
     TrendSample,
     VelocitySample,
 )
-from src.velocity import RotationSignature
+from src.velocity import RotationSignature, VelocityRegion
 
 _RECORD_TYPES: dict[str, type] = {}
 
@@ -46,7 +46,7 @@ for _cls in (
     DetectedObject, IntensityLayerData, RotationSignature, ScanQuality,
     TrackingSnapshot, Track, TrackPosition, PeakEntry, IdentityConfidence,
     FocusContinuity, MotionConfidence, MotionSample, RotationHistoryEntry,
-    MotionVector, TrendSample, VelocitySample,
+    MotionVector, TrendSample, VelocitySample, VelocityRegion,
 ):
     register_record_type(_cls)
 

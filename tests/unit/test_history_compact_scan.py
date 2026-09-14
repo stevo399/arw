@@ -106,3 +106,24 @@ def test_timestamp_key_normalizes_to_naive_utc():
     aware = datetime(2026, 9, 12, 13, 0, tzinfo=timezone(timedelta(hours=-5)))
     assert timestamp_key(aware) == T0
     assert timestamp_key(T0) == T0
+
+
+def test_velocity_regions_round_trip_and_older_records_without_them_load_empty():
+    import zlib
+
+    from src.history import records as record_codec
+    from src.velocity import VelocityRegion
+
+    scan = _scan_with_content()
+    scan.velocity_regions = [VelocityRegion(
+        region_type="inbound", peak_velocity_ms=-24.5, mean_velocity_ms=-12.0, area_km2=40.5,
+        centroid_lat=35.4, centroid_lon=-97.1, distance_km=22.0, bearing_deg=80.0,
+        sweep_count=2, elevation_angles=[0.5, 0.9],
+    )]
+    compact = CompactScan.from_buffered_scan(scan)
+    assert compact.to_buffered_scan().velocity_regions == scan.velocity_regions
+
+    older = compact.read_records()
+    del older["velocity_regions"]
+    legacy = CompactScan(**{**compact.__dict__, "records": zlib.compress(record_codec.dumps(older).encode("utf-8"))})
+    assert legacy.to_buffered_scan().velocity_regions == []

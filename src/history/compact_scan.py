@@ -87,6 +87,7 @@ class CompactScan:
             "detected_objects": list(scan.detected_objects),
             "scan_quality": scan.scan_quality,
             "rotation_signatures": list(scan.rotation_signatures),
+            "velocity_regions": list(scan.velocity_regions),
             "precipitation_band_evidence": scan.precipitation_band_evidence,
             "tracking": scan.tracking,
         }
@@ -143,6 +144,8 @@ class CompactScan:
             scan_quality=records["scan_quality"],
             source_path=self.source_path,
             rotation_signatures=records["rotation_signatures"],
+            # Records written before live velocity analysis have no regions.
+            velocity_regions=records.get("velocity_regions", []),
             precipitation_band_evidence=records["precipitation_band_evidence"],
             tracking=records["tracking"],
         )
