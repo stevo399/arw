@@ -400,7 +400,12 @@ class StormTracker:
             if track.last_pattern_match is not None
             and (scan.timestamp - track.last_pattern_match.timestamp).total_seconds() <= MAX_MEASUREMENT_AGE_MINUTES * 60.0
         }
-        accepted = guard_matches(matches, centres, previous=previous_matches)
+        accepted = guard_matches(
+            matches,
+            centres,
+            previous=previous_matches,
+            ranges_km={track.track_id: track.current_object.distance_km for _, track in seen},
+        )
         for track_id, (east, north) in valid_matches(matches).items():
             tracks_by_id[track_id].last_pattern_match = VelocitySample(timestamp=scan.timestamp, east_kmh=east, north_kmh=north)
 

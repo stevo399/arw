@@ -47,6 +47,15 @@ MIN_UNJUDGED_CORRELATION = 0.6
 # stationary echo among moving storms from taking their motion
 # (docs/test_reports/2026-09-13-isolated-storm-motion-evaluation.md).
 MAX_SELF_AGREEMENT_KMH = 10.0
+# An isolated storm's match needs corroboration by its own previous match when
+# it is faster or farther than these.  Of 29 uncorroborated isolated matches
+# above 80 km/h, 28 predicted worse than no motion, and no match corroborated
+# by neighbours exceeded 80 km/h; beyond 350 km isolated matches predicted no
+# better than no motion with a worse tail.  With both limits the worst tenth
+# of isolated predictions fell from 5.84 to 5.24 km
+# (docs/test_reports/2026-09-13-isolated-storm-motion-evaluation.md).
+MAX_UNJUDGED_SPEED_KMH = 80.0
+MAX_UNJUDGED_RANGE_KM = 350.0
 
 
 @dataclass(frozen=True)
@@ -188,13 +197,16 @@ def guard_matches(
     matches: dict[int, PatternMatch],
     centres: dict[int, tuple[float, float]],
     previous: dict[int, tuple[float, float]] | None = None,
+    ranges_km: dict[int, float] | None = None,
 ) -> dict[int, tuple[float, float]]:
     """Accepted (east, north) km/h velocities by track id.
 
     A peak on the search edge, or faster than the search speed limit, is not a
     match.  A storm with at least three other matches within 60 km is rejected
     when its velocity departs from their vector median by more than 25 km/h;
-    a storm with fewer is rejected when its match correlates below 0.6.
+    a storm with fewer is rejected when its match correlates below 0.6, is
+    faster than 80 km/h, or lies farther than 350 km from the radar
+    (`ranges_km`).
 
     A match either rule rejects is still accepted when it agrees within
     10 km/h with the same storm's previous valid match (`previous`): two scans
@@ -202,6 +214,7 @@ def guard_matches(
     among moving storms.
     """
     previous = previous or {}
+    ranges_km = ranges_km or {}
     candidates = valid_matches(matches)
     accepted: dict[int, tuple[float, float]] = {}
     for track_id, velocity in candidates.items():
@@ -214,7 +227,11 @@ def guard_matches(
             east, north = _vector_median(neighbours)
             passes = math.hypot(velocity[0] - east, velocity[1] - north) <= MAX_NEIGHBOUR_DEPARTURE_KMH
         else:
-            passes = matches[track_id].correlation >= MIN_UNJUDGED_CORRELATION
+            passes = (
+                matches[track_id].correlation >= MIN_UNJUDGED_CORRELATION
+                and math.hypot(*velocity) <= MAX_UNJUDGED_SPEED_KMH
+                and ranges_km.get(track_id, 0.0) <= MAX_UNJUDGED_RANGE_KM
+            )
         earlier = previous.get(track_id)
         corroborated = earlier is not None and math.hypot(velocity[0] - earlier[0], velocity[1] - earlier[1]) <= MAX_SELF_AGREEMENT_KMH
         if passes or corroborated:

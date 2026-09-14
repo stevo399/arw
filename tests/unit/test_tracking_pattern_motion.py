@@ -133,7 +133,7 @@ def test_nearby_velocity_is_the_vector_median_of_other_storms_within_60_km():
 
 def test_guard_drops_a_match_faster_than_the_search_limit_in_any_direction():
     # 144 km/h east and 123 km/h north each fit a square search window; together 189 km/h does not.
-    accepted = guard_matches({1: _match(144.0, 123.0), 2: _match(100.0, 0.0)}, {1: (35.5, -97.0), 2: (38.0, -97.0)})
+    accepted = guard_matches({1: _match(144.0, 123.0), 2: _match(70.0, 0.0)}, {1: (35.5, -97.0), 2: (38.0, -97.0)})
     assert set(accepted) == {2}
 
 
@@ -157,3 +157,14 @@ def test_agreement_never_rescues_an_edge_peak_or_a_match_beyond_the_speed_limit(
     centres = {1: (35.5, -97.0), 2: (38.0, -97.0)}
     matches = {1: _match(20.0, 10.0, at_edge=True), 2: _match(140.0, 100.0)}
     assert guard_matches(matches, centres, previous={1: (20.0, 10.0), 2: (140.0, 100.0)}) == {}
+
+
+def test_an_isolated_match_that_is_fast_or_far_needs_its_previous_match_to_agree():
+    """29 uncorroborated isolated matches above 80 km/h: 28 predicted worse than no motion."""
+    centres = {1: (35.5, -97.0)}
+    fast = {1: _match(-78.0, -90.0, correlation=0.64)}
+    assert guard_matches(fast, centres, ranges_km={1: 200.0}) == {}
+    assert guard_matches(fast, centres, ranges_km={1: 200.0}, previous={1: (-75.0, -92.0)}) == {1: (-78.0, -90.0)}
+    far = {1: _match(20.0, 10.0, correlation=0.9)}
+    assert guard_matches(far, centres, ranges_km={1: 360.0}) == {}
+    assert guard_matches(far, centres, ranges_km={1: 340.0}) == {1: (20.0, 10.0)}

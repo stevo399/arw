@@ -102,3 +102,39 @@ beyond the speed limit are never rescued.
 
 A stationary storm therefore reports nearby storms' motion for one scan, until its second agreeing
 match corroborates the first.
+
+## Follow-up: fast or distant isolated matches
+
+The benchmark on corroboration (commit `7c98738`) still reported 74 mph in the KSOX window. A new
+storm took nearby storms' motion, 119 km/h SW. That came from one isolated storm 440 km from the
+radar whose match correlated 0.64, just above the 0.6 requirement. Both storms were weak echoes
+(30-32 dBZ).
+
+**Isolated matches accepted by correlation >= 0.6, by speed and range:**
+
+| Group | n | Median km: match / no motion | p90 km: match / no motion | Match closer |
+|---|---|---|---|---|
+| Speed under 40 km/h | 704 | 1.09 / 1.68 | 4.79 / 5.44 | 63% |
+| Speed 40-80 km/h | 55 | 2.00 / 3.15 | 9.86 / 6.28 | 73% |
+| Speed 100-150 km/h | 5 | 12.34 / 1.57 | 25.48 / 6.05 | 0% |
+| Range 0-150 km | 203 | 0.68 / 1.50 | 4.68 / 5.58 | 63% |
+| Range 150-250 km | 251 | 1.02 / 1.92 | 4.48 / 4.90 | 69% |
+| Range 250-350 km | 215 | 1.51 / 1.98 | 5.95 / 5.87 | 64% |
+| Range 350-500 km | 99 | 1.91 / 1.90 | 9.21 / 5.84 | 51% |
+
+**All isolated matches faster than 80 km/h, at any correlation:** 29. In 28, no motion predicted
+better, and none was corroborated by the storm's previous match.
+
+**Storms judged by neighbours:** no accepted match exceeded 80 km/h in 4,165.
+
+**Rule.** An isolated match that is faster than 80 km/h, or lies farther than 350 km from the
+radar, is accepted only when the storm's previous match agrees with it.
+
+| Isolated storms (868) | Accepted | Median km | p90 km | Mean IoU |
+|---|---|---|---|---|
+| Correlation >= 0.6, or agrees with previous | 89.6% | 1.252 | 5.84 | 0.4549 |
+| **...and fast or far needs agreement** | **83.2%** | **1.247** | **5.24** | **0.4582** |
+| No motion | 0% | 1.853 | 5.86 | 0.3958 |
+
+Limits of 60 or 100 km/h and 300 km scored within 0.1 km of this. A fast storm that is really
+isolated reports its motion one scan later, once two matches agree.
