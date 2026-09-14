@@ -38,3 +38,18 @@ def test_download_level3_caches_by_site(tmp_path):
         path = ingest.download_level3("MVX_NMD_2026_09_12_00_05_32")
     assert path.replace("\\", "/").endswith("level3/MVX/MVX_NMD_2026_09_12_00_05_32")
     client.return_value.download_file.assert_called_once()
+
+
+from unittest.mock import MagicMock
+
+
+def test_fetch_scans_between_spans_midnight_and_filters_to_the_window():
+    scans = {
+        "2026-09-11": [MagicMock(filename="KMVX20260911_235500_V06")],
+        "2026-09-12": [MagicMock(filename="KMVX20260912_000532_V06"), MagicMock(filename="KMVX20260912_004000_V06")],
+    }
+    with patch("src.ingest.list_scans_for_date", side_effect=lambda site, day: scans[day]), \
+         patch("src.ingest.download_scan", side_effect=lambda site, scan: f"/cache/{scan.filename}"):
+        paths = ingest.fetch_scans_between("KMVX", datetime(2026, 9, 11, 23, 50), datetime(2026, 9, 12, 0, 30))
+    assert paths == ["/cache/KMVX20260911_235500_V06", "/cache/KMVX20260912_000532_V06"]
+    assert ingest.scan_time("KTLX20130520_195527_V06.gz") == datetime(2013, 5, 20, 19, 55, 27)

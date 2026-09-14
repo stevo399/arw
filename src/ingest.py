@@ -133,3 +133,20 @@ def download_level3(key: str) -> str:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     _level3_client().download_file(LEVEL3_BUCKET, key, path)
     return path
+
+
+def scan_time(filename: str) -> datetime:
+    """Start time of a Level II volume from its file name (KTLX20130520_195527_V06[.gz])."""
+    return datetime.strptime(os.path.basename(filename)[4:19], "%Y%m%d_%H%M%S")
+
+
+def fetch_scans_between(site_id: str, start: datetime, end: datetime) -> list[str]:
+    """Download every Level II volume for a site starting within [start, end]."""
+    paths: list[str] = []
+    day = start.date()
+    while day <= end.date():
+        for scan in list_scans_for_date(site_id, day.strftime("%Y-%m-%d")):
+            if start <= scan_time(scan.filename) <= end:
+                paths.append(download_scan(site_id, scan))
+        day += timedelta(days=1)
+    return sorted(paths, key=scan_time)
