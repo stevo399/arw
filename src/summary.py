@@ -5,11 +5,14 @@ from src.detection import DetectedObject, degrees_to_bearing
 from src.motion import MotionVector
 from src.tracking.motion import NEARBY_SOURCE
 
-# Rotation evidence levels that beat report-free storms on the rotation corpus
-# by the pre-registered speak rule (docs/test_reports/2026-09-14-rotation-corpus.md,
-# "Sweep and selection"). Other levels stay in the data, labelled, but are
-# never read aloud: they were no better than chance there.
-SPOKEN_ROTATION_EVIDENCE: frozenset[str] = frozenset({"persistent"})
+# Rotation evidence levels that are read aloud.  Empty: no level is validated.
+# "persistent" passed the pre-registered speak rule on rotation corpus v2, but
+# the live check on 2026-09-14 spoke it for one-gate noise couplets in ordinary
+# rain, because persistence accepts any couplet on the same tracked storm
+# within about 16 km (docs/test_reports/2026-09-14-rotation-corpus.md, "Live
+# check").  Owner decision: speak no rotation until a stricter test passes.
+# Every assessment stays in the data, labelled with its evidence level.
+SPOKEN_ROTATION_EVIDENCE: frozenset[str] = frozenset()
 
 KM_PER_MILE = 1.60934
 

@@ -131,9 +131,18 @@ def _storm_feature_with_rotation(evidence_level):
     return build_storm_geojson(scan)["features"][0]
 
 
-def test_storm_description_reads_rotation_only_at_the_validated_level():
-    # Descriptions are read aloud; the same validated set as speech applies
-    # (docs/test_reports/2026-09-14-rotation-corpus.md).
+def test_storm_description_reads_no_rotation_while_no_level_is_validated():
+    for level in ("unconfirmed", "corroborated", "vertically_confirmed", "persistent"):
+        feature = _storm_feature_with_rotation(level)
+        description = feature["properties"]["description"].lower()
+        assert "rotation" not in description and "couplet" not in description, level
+        assert feature["properties"]["rotation_evidence_level"] == level
+
+
+def test_storm_description_reads_rotation_only_at_the_validated_level(monkeypatch):
+    # Descriptions are read aloud; the same spoken set as speech applies.  A
+    # level is patched in to keep the wording tested.
+    monkeypatch.setattr("src.summary.SPOKEN_ROTATION_EVIDENCE", frozenset({"persistent"}))
     for level in ("unconfirmed", "corroborated", "vertically_confirmed"):
         feature = _storm_feature_with_rotation(level)
         description = feature["properties"]["description"].lower()

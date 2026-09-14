@@ -1,4 +1,5 @@
 # tests/unit/test_summary.py
+import pytest
 from datetime import datetime, timedelta
 
 from src.summary import generate_summary, km_to_miles
@@ -356,11 +357,26 @@ def _make_object_with_rotation(strength="moderate", evidence_level="unconfirmed"
     )
 
 
-# Only persistent rotation evidence beat report-free storms on the rotation
-# corpus (docs/test_reports/2026-09-14-rotation-corpus.md). Unconfirmed,
-# corroborated and vertically confirmed couplets were no better than chance
-# there, so these tests previously asserting their speech now assert silence.
-def test_summary_includes_persistent_rotation_for_strongest_object():
+# No rotation evidence level is spoken (docs/test_reports/2026-09-14-rotation-corpus.md,
+# "Live check").  The wording and gating tests below patch in a spoken level so
+# the speech path stays correct for when a level is validated.
+@pytest.fixture
+def persistent_spoken(monkeypatch):
+    monkeypatch.setattr("src.summary.SPOKEN_ROTATION_EVIDENCE", frozenset({"persistent"}))
+
+
+def test_no_rotation_evidence_is_spoken_until_a_level_is_validated():
+    from src.summary import SPOKEN_ROTATION_EVIDENCE
+    assert SPOKEN_ROTATION_EVIDENCE == frozenset()
+    for level in ("unconfirmed", "corroborated", "vertically_confirmed", "persistent"):
+        text = generate_summary(
+            site_id="KTLX", site_name="Oklahoma City",
+            timestamp="2026-04-10T21:00:00Z", objects=[_make_object_with_rotation("strong", level)],
+        ).lower()
+        assert "rotation" not in text and "couplet" not in text, (level, text)
+
+
+def test_summary_includes_persistent_rotation_for_strongest_object(persistent_spoken):
     obj = _make_object_with_rotation("moderate", "persistent")
     text = generate_summary(
         site_id="KTLX", site_name="Oklahoma City",
@@ -369,7 +385,7 @@ def test_summary_includes_persistent_rotation_for_strongest_object():
     assert "persistent moderate rotation evidence in base-radial velocity" in text.lower()
 
 
-def test_summary_includes_rotation_strength():
+def test_summary_includes_rotation_strength(persistent_spoken):
     obj = _make_object_with_rotation("strong", "persistent")
     text = generate_summary(
         site_id="KTLX", site_name="Oklahoma City",
@@ -378,12 +394,7 @@ def test_summary_includes_rotation_strength():
     assert "persistent strong rotation evidence in base-radial velocity" in text.lower()
 
 
-def test_spoken_rotation_evidence_is_the_level_validated_on_the_corpus():
-    from src.summary import SPOKEN_ROTATION_EVIDENCE
-    assert SPOKEN_ROTATION_EVIDENCE == frozenset({"persistent"})
-
-
-def test_rotation_evidence_below_the_validated_level_is_not_spoken():
+def test_rotation_evidence_below_the_validated_level_is_not_spoken(persistent_spoken):
     for level in ("unconfirmed", "corroborated", "vertically_confirmed"):
         obj = _make_object_with_rotation("strong", level)
         text = generate_summary(
@@ -393,7 +404,7 @@ def test_rotation_evidence_below_the_validated_level_is_not_spoken():
         assert "rotation" not in text and "couplet" not in text, (level, text)
 
 
-def test_standalone_rotation_is_spoken_only_at_the_validated_level():
+def test_standalone_rotation_is_spoken_only_at_the_validated_level(persistent_spoken):
     strongest = DetectedObject(
         object_id=1, centroid_lat=35.5, centroid_lon=-97.0, distance_km=50.0, bearing_deg=90.0,
         peak_dbz=60.0, peak_label="intense precipitation", area_km2=100.0,
@@ -408,7 +419,7 @@ def test_standalone_rotation_is_spoken_only_at_the_validated_level():
         assert ("rotation" in text or "couplet" in text) == spoken, (level, text)
 
 
-def test_rotation_weakening_is_spoken_only_after_validated_evidence():
+def test_rotation_weakening_is_spoken_only_after_validated_evidence(persistent_spoken):
     from types import SimpleNamespace
     from src.summary import _format_rotation
     obj = DetectedObject(

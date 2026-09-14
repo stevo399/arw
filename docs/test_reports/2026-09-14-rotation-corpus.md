@@ -178,3 +178,84 @@ used as evidence.
 Synthetic test consequence: `test_detect_rotation_multi_sweep_increases_sweep_count` used ±22 m/s
 beside each other (Nyquist 26.2), which falls inside the fold band. Its peaks were lowered to ±18-20
 m/s because the test concerns sweep counting, not folds.
+
+## Live pipeline (Task 10)
+
+### Cost
+
+`analyze_velocity` uses the selected configuration.
+- **Densest cached volumes, before speedups:** KJAX 7.8 s, KEMX 16.2 s, KTLX 10.1 s. Region merging
+  (full-grid masks), azimuth alignment, association and shear-component extraction dominated.
+- **After the speedups (commit `65e3f15`):** 1.5-3.1 s on KJAX, KEMX, two KTLX volumes, KAMA and KIWA.
+  Output is byte-identical under both the selected and baseline configurations (12 of 12 compared).
+- **Added to a full live scan:** 30.4 -> 34.5 s on KJAX 2026-09-14 08:09Z (129 storms); 5.2 -> 8.9 s
+  on KAMA 08:17Z (1,036 candidates). This includes the quality-advisory refresh that now receives
+  assessments.
+
+### Wiring
+
+- **Live scans:** they now run velocity analysis.
+- **Persistence:** when a scan is tracked, `RadarHistory.add_live_scan` promotes rotation seen again
+  on the same tracked storm to `persistent`. The promoted level goes into the scan, its storms and the
+  tracker's history entry.
+- **Compact scans:** they now keep velocity regions. Without this, `/velocity` returned none for
+  retained scans.
+
+**Known limit, not yet fixed:** the quality advisory is refreshed before tracking, so it sees
+assessments before promotion.
+
+### Real-data checks
+
+**Proof** (`tests/e2e/test_proof_rotation_corpus.py`):
+- The recorded selection equals the detector defaults.
+- The six KIWA clear-air volumes, run through the live path, produce no spoken-level assessment and
+  no rotation in any summary or map description.
+- The Spring Grove tornado (KAKQ) gets persistent evidence within 10 km of its report.
+
+**Other cases through the live path:**
+- KAMA 2026-07-12: persistent evidence 8.2 km from the tornado report.
+- KMBX 2026-09-07: 8.0 km.
+- Spring Grove: 0.6 km.
+
+These are the same three hits as the corpus evaluation.
+
+**Tracking benchmark** (`docs/test_reports/2026-09-14-benchmark-after-rotation.json`): identical to
+`2026-09-13-benchmark-after-measured-motion.json` except 29 summary texts. Each difference removes
+spoken unconfirmed couplets. Every KSOX and KEYX window summary had been saying "strong unconfirmed
+velocity couplet".
+
+### Live check: persistent evidence is not ready to speak
+
+Setup: server on port 8011 with a fresh history directory, KJAX, KAMA and KIWA, 2026-09-14
+08:09-08:24Z.
+
+**First scans:** unconfirmed and vertically confirmed assessments only; nothing spoken.
+
+**Second scans:** spoken with no severe reports anywhere after 04Z on the SPC day:
+- **KJAX 08:17Z:** "Weak persistent rotation evidence 13 miles S of the radar" and "Moderate
+  persistent rotation evidence 171 miles SSW".
+- **KAMA 08:24Z:** "Moderate persistent rotation evidence 14 miles E" and "26 miles ENE".
+
+**The KJAX persistent assessments are noise:**
+- 1-2 gate couplets, 0.2-0.5 km across;
+- about ±11 m/s;
+- mostly on one tilt;
+- inside a 34 dBZ echo 18-23 km from the radar.
+
+**Cause:** persistence accepts any couplet on the same tracked storm in the previous scan. The
+allowed separation is the two couplets' mean diameter plus 120 km/h × gap, about 16 km for an 8-minute
+gap. On a large storm with many noise couplets, that is met almost by chance. The corpus measured
+4.7% of report-free storms carrying persistent evidence. The speak rule allowed that, and with 5 weak
+tornado events it could not show how often such sentences occur on a busy radar.
+
+**Owner decision (2026-09-14):**
+- Speak no rotation at any level: `SPOKEN_ROTATION_EVIDENCE` is empty.
+- Assessments stay in the data, labelled with their evidence level.
+- The speech wording and gating remain tested with a patched level.
+- The detector work stops here for now.
+
+**What a next attempt needs:**
+- A persistence test that requires the same circulation, not the same storm: a displacement bound
+  from the storm's measured motion, plus a minimum size and tilt count.
+- A larger corpus that includes tonight's false alarms and more tornado days, including strong ones.
+- Pre-registration before it is scored.

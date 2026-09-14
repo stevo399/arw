@@ -4,7 +4,10 @@ The full corpus sweep takes about an hour, so its recorded result
 (docs/test_reports/2026-09-14-rotation-sweep.json) is checked against the
 code's constants instead:
 - The detector's defaults are the configuration the pre-registered rule selects.
-- The spoken evidence levels are exactly the speakable ranks.
+- Every spoken evidence level is among the speakable ranks.  Passing the corpus
+  is necessary, not sufficient: "persistent" passed it but was withdrawn after
+  the live check (docs/test_reports/2026-09-14-rotation-corpus.md), so the
+  spoken set is currently empty.
 
 The production live path (`_process_scan_file` then `RadarHistory.add_live_scan`,
 which promotes persistence) is then run on real corpus volumes:
@@ -49,7 +52,7 @@ def _run_live(case, tmp_path):
     return scans
 
 
-def test_recorded_selection_matches_the_detector_defaults_and_spoken_levels():
+def test_recorded_selection_matches_the_detector_defaults_and_bounds_the_spoken_levels():
     sys.path.insert(0, str(ROOT / "scripts"))
     from select_rotation_config import main as select
 
@@ -58,9 +61,10 @@ def test_recorded_selection_matches_the_detector_defaults_and_spoken_levels():
     assert chosen["config"] == asdict(RotationDetectorConfig())
 
     speakable_ranks = [int(rank) for rank, summary in chosen["summary"].items() if summary["speakable"]]
-    assert speakable_ranks, "no rank was speakable; nothing may be spoken"
-    lowest = min(speakable_ranks)
-    assert SPOKEN_ROTATION_EVIDENCE == frozenset(level for level, rank in EVIDENCE_RANK.items() if rank >= lowest)
+    corpus_speakable = frozenset(
+        level for level, rank in EVIDENCE_RANK.items() if speakable_ranks and rank >= min(speakable_ranks)
+    )
+    assert SPOKEN_ROTATION_EVIDENCE <= corpus_speakable
 
 
 def test_clear_air_live_scans_speak_no_rotation(tmp_path):
@@ -98,5 +102,5 @@ def test_live_path_finds_persistent_rotation_at_the_spring_grove_tornado(tmp_pat
                 storm = next(o for o in buffered.detected_objects if o.object_id == rotation.associated_object_id)
                 hits.append((buffered.timestamp, round(distance, 1), storm.rotation))
     assert hits, "no persistent rotation within 10 km of the Spring Grove tornado report"
-    # The storm the hit belongs to carries persistent rotation, so its description reads it aloud.
+    # The storm the hit belongs to carries the persistent assessment in its data.
     assert all(rotation is not None and rotation.evidence_level == "persistent" for _, _, rotation in hits), hits

@@ -311,9 +311,8 @@ def _process_scan_file(site_id: str, filepath: str) -> BufferedScan:
     # Velocity regions and rotation candidates, each candidate assessed against
     # the exact reflectivity-cell footprints above.  Measured at 1.5-3.1 s on
     # the densest cached volumes (docs/test_reports/2026-09-14-rotation-corpus.md).
-    # Every assessment is kept in the data, labelled with its evidence level,
-    # but only levels validated on the rotation corpus are spoken
-    # (src.summary.SPOKEN_ROTATION_EVIDENCE).  Persistence is promoted when the
+    # Every assessment is kept in the data, labelled with its evidence level;
+    # none is spoken until a level is validated (src.summary.SPOKEN_ROTATION_EVIDENCE).  Persistence is promoted when the
     # scan is tracked (src.history.store).
     regions, rotations, annotated_objects = analyze_velocity(
         vel_data, result.objects, result.object_masks, ref_data,
