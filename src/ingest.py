@@ -1,5 +1,6 @@
 import os
-from datetime import datetime
+import urllib.request
+from datetime import date, datetime, timedelta
 from pathlib import Path
 import nexradaws
 
@@ -35,7 +36,6 @@ def list_latest_scans(site_id: str) -> list:
     now = datetime.utcnow()
     scans = list_scans_for_date(site_id, now.strftime("%Y-%m-%d"))
     if not scans:
-        from datetime import timedelta
         yesterday = now - timedelta(days=1)
         scans = list_scans_for_date(site_id, yesterday.strftime("%Y-%m-%d"))
     return scans
@@ -71,3 +71,22 @@ def fetch_scan(site_id: str, dt: datetime | None = None) -> str:
             datetime.strptime(s.filename.split("_V")[0][-15:], "%Y%m%d_%H%M%S") - dt
         ).total_seconds() if hasattr(s, 'filename') else float('inf'))
     return download_scan(site_id, scan)
+
+
+SPC_REPORT_URL = "https://www.spc.noaa.gov/climo/reports/{yymmdd}_rpts_{name}.csv"
+SPC_FILE_NAMES = {"tornado": "torn", "hail": "hail", "wind": "wind"}
+
+
+def fetch_spc_reports(spc_day: date, kind: str) -> str:
+    """Download one SPC daily report CSV into the cache (once). Returns the local path."""
+    name = f"{spc_day:%y%m%d}_rpts_{SPC_FILE_NAMES[kind]}.csv"
+    path = os.path.join(os.path.abspath(CACHE_DIR), "spc", name)
+    if os.path.isfile(path):
+        return path
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    url = SPC_REPORT_URL.format(yymmdd=f"{spc_day:%y%m%d}", name=SPC_FILE_NAMES[kind])
+    with urllib.request.urlopen(url, timeout=60) as response:
+        body = response.read()
+    with open(path, "wb") as handle:
+        handle.write(body)
+    return path
