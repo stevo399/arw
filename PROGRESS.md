@@ -263,6 +263,37 @@
 
   Report: `docs/test_reports/2026-09-13-measured-motion.md`
 
+## Rotation detection (2026-09-14) -- branch `detection-truth`, issue #9
+- **Validation data:**
+  - rotation corpus v2 from SPC reports and NWS mesocyclone detections (NMD), 22 cases and 68 volumes
+    (`scripts/build_rotation_corpus.py`, `src/validation/`);
+  - pre-registered metrics, speak rule and selection rule
+    (`docs/superpowers/plans/2026-09-14-rotation-detection-truth.md`).
+- **Detector:** rules are configurable (`RotationDetectorConfig`). The pre-registered rule selected:
+  - shear 15 m/s;
+  - couplets across the beam only;
+  - tilts merge only when circulations overlap on the ground;
+  - aliasing-fold jumps rejected.
+
+  Results: persistent level 3/5 tornadoes, 0 clear-air false alarms; NMD agreement 6 -> 14. It loses
+  the San Antonio tornado at the unconfirmed level. Moore 2013 is still detected with fold rejection.
+- **Velocity analysis 3-5x faster with byte-identical output:** 1.5-3.1 s per dense volume, down from
+  6.8-17.2 s.
+- **Live pipeline:**
+  - every live scan runs velocity analysis, adding about 4 s per scan;
+  - tracking promotes rotation seen again on the same storm to persistent;
+  - compact scans keep velocity regions.
+- **No rotation is spoken (owner decision).** Persistent evidence passed the corpus rule, but the live
+  check spoke it for one-gate noise in ordinary rain (KJAX, KAMA, 08:17-08:24Z). Cause: persistence
+  accepts any couplet on the same storm within about 16 km. Assessments remain in the data, labelled.
+- **Also:** unconfirmed couplets are no longer spoken or read in map descriptions. The benchmark is
+  unchanged except for those summary sentences.
+- **Verified:** full suite 602 passed, 3 xfailed. Report: `docs/test_reports/2026-09-14-rotation-corpus.md`.
+- **Known limits:**
+  - the quality advisory sees assessments before persistence promotion;
+  - scans requested for a past time are not tracked, so they get no persistence.
+- #10 KLIX is retired (replacement KHDC), found while building the corpus.
+
 ## In Progress
 - Owner review: keyboard-and-NVDA pass through the Weather Kitten recent-scans section
 - Spec 2 restoration is validated and documented; commit/merge decision pending
@@ -274,6 +305,10 @@
 - #7 Intensity-band layer still takes 8-14 s on busy scans; further gains need changes inside coverage
   simplification or contour georeferencing
 - #5 Reduce the Level II parse peak (356 MB); #6 rendered-layer retention (up to ~6.7 MB per busy scan)
+- #9 Rotation: before speaking any level, persistence must require the same circulation (motion-bounded
+  displacement, minimum size and tilts). Test it on a larger pre-registered corpus with tonight's false
+  alarms and strong tornadoes
+- #10 Replace retired KLIX with KHDC in the site list
 - #8 Classifier calibration. The membership parameters need deriving from data, not from a design
   document. The two strict xfails are the measure: they start passing when it works
 - Spec 3 (SCIT cell identification), Spec 4 (hail/mesocyclone, needs volumetric parsing)
@@ -282,7 +317,6 @@
 - **The classifier is miscalibrated and its parameters are unvalidated.** Not blocking, because
   quality control no longer deletes anything — errors degrade annotation quality rather than
   removing weather. But no hazard call should be trusted until the two strict xfails pass
-- #9 Rotation detection is over-sensitive. Safe to fix now: the flag-don't-filter change dissolved
-  the earlier coupling where this defect was masking the classifier defect
+- #9 Rotation: no evidence level is spoken. Detection runs live and is labelled in the data only
 - Level III / MRMS cross-check (original Proof 3) deferred. Cross-checking a known-miscalibrated
   classifier against NWS products would mostly re-measure the miscalibration
