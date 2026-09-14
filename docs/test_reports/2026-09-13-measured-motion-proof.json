@@ -10,8 +10,8 @@
   ],
   "reported_motion_sources": {
     "not_measured": 64,
-    "pattern_match": 231,
-    "nearby_storms": 89
+    "pattern_match": 230,
+    "nearby_storms": 90
   },
   "all": {
     "n": 190,
@@ -24,7 +24,7 @@
       "stationary": 6.411
     },
     "mean_iou": {
-      "reported": 0.4883,
+      "reported": 0.4887,
       "stationary": 0.3913
     }
   },
@@ -55,7 +55,7 @@
         "stationary": 6.27
       },
       "mean_iou": {
-        "reported": 0.5383,
+        "reported": 0.5387,
         "stationary": 0.4414
       }
     }

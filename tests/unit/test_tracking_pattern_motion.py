@@ -96,8 +96,8 @@ def test_a_storm_absent_from_the_previous_scan_gives_no_match():
     assert match_storm(current, _mask_near(current, 60000.0, 80000.0, 15000.0), previous, HOURS) is None
 
 
-def _match(east, north, at_edge=False):
-    return PatternMatch(east_kmh=east, north_kmh=north, correlation=0.9, at_edge=at_edge)
+def _match(east, north, at_edge=False, correlation=0.9):
+    return PatternMatch(east_kmh=east, north_kmh=north, correlation=correlation, at_edge=at_edge)
 
 
 def test_guard_drops_a_match_on_the_edge_of_the_search_window():
@@ -112,10 +112,16 @@ def test_guard_drops_a_velocity_far_from_its_neighbours():
     assert set(accepted) == {1, 2, 3, 4}
 
 
-def test_guard_keeps_a_storm_without_enough_neighbours_to_judge():
+def test_guard_keeps_a_well_correlated_storm_without_enough_neighbours_to_judge():
     centres = {1: (35.5, -97.0), 2: (35.55, -97.0), 3: (37.5, -97.0)}
-    matches = {1: _match(20.0, 5.0), 2: _match(-60.0, 40.0), 3: _match(10.0, 10.0)}
+    matches = {1: _match(20.0, 5.0), 2: _match(-60.0, 40.0), 3: _match(10.0, 10.0, correlation=0.6)}
     assert set(guard_matches(matches, centres)) == {1, 2, 3}
+
+
+def test_guard_drops_a_poorly_correlated_storm_that_neighbours_cannot_judge():
+    centres = {1: (35.5, -97.0), 2: (37.5, -97.0)}
+    matches = {1: _match(-68.0, 150.0, correlation=0.3), 2: _match(-78.0, -90.0, correlation=0.59)}
+    assert guard_matches(matches, centres) == {}
 
 
 def test_nearby_velocity_is_the_vector_median_of_other_storms_within_60_km():

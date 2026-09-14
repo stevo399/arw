@@ -9,8 +9,9 @@ previous scan's field exists whether or not the storm was detected in it.
 Matching alone locks onto the wrong echo in dense scenes, so every match is
 guarded (evidence: docs/test_reports/2026-09-13-pattern-motion-evaluation.md):
 the template carries every echo within 10 km of the storm, a correlation peak
-on the edge of the search window is not a match, and a velocity far from its
-neighbours' vector median is rejected.
+on the edge of the search window is not a match, a velocity far from its
+neighbours' vector median is rejected, and a storm too isolated for neighbours
+to judge needs a strong correlation.
 """
 
 from dataclasses import dataclass
@@ -34,6 +35,12 @@ MIN_TEMPLATE_CELLS = 8
 NEIGHBOUR_RADIUS_KM = 60.0
 MIN_NEIGHBOURS_TO_JUDGE = 3
 MAX_NEIGHBOUR_DEPARTURE_KMH = 25.0
+# A storm too isolated for its neighbours to judge needs a strong match: on
+# 868 such matches, requiring this correlation kept the median prediction
+# error (1.26 against 1.85 km for no motion) while bringing the worst tenth
+# back to no-motion's (5.84 against 5.86 km); accepting all left it at 7.39 km
+# (docs/test_reports/2026-09-13-isolated-storm-motion-evaluation.md).
+MIN_UNJUDGED_CORRELATION = 0.6
 
 
 @dataclass(frozen=True)
@@ -168,10 +175,11 @@ def guard_matches(
     """Accepted (east, north) km/h velocities by track id.
 
     A peak on the search edge, or faster than the search speed limit, is not a
-    match.  A storm with at least three
-    other matches within 60 km is rejected when its velocity departs from their
-    vector median by more than 25 km/h.
+    match.  A storm with at least three other matches within 60 km is rejected
+    when its velocity departs from their vector median by more than 25 km/h;
+    a storm with fewer is rejected when its match correlates below 0.6.
     """
+    correlations = {track_id: match.correlation for track_id, match in matches.items()}
     candidates = {
         track_id: (match.east_kmh, match.north_kmh)
         for track_id, match in matches.items()
@@ -189,6 +197,8 @@ def guard_matches(
             east, north = _vector_median(neighbours)
             if math.hypot(velocity[0] - east, velocity[1] - north) > MAX_NEIGHBOUR_DEPARTURE_KMH:
                 continue
+        elif correlations[track_id] < MIN_UNJUDGED_CORRELATION:
+            continue
         accepted[track_id] = velocity
     return accepted
 
