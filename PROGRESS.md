@@ -263,7 +263,7 @@
 
   Report: `docs/test_reports/2026-09-13-measured-motion.md`
 
-## Rotation detection (2026-09-14) -- branch `detection-truth`, issue #9
+## Rotation detection (2026-09-14) -- merged to master and pushed, issue #9 (open)
 - **Validation data:**
   - rotation corpus v2 from SPC reports and NWS mesocyclone detections (NMD), 22 cases and 68 volumes
     (`scripts/build_rotation_corpus.py`, `src/validation/`);
@@ -293,6 +293,9 @@
   - the quality advisory sees assessments before persistence promotion;
   - scans requested for a past time are not tracked, so they get no persistence.
 - #10 KLIX is retired (replacement KHDC), found while building the corpus.
+- **Lesson:** a small corpus of weak tornadoes could not reveal how often a level is spoken on a
+  busy radar. A future speak rule should include a live or many-volume false-alarm rate.
+- **Not started:** Part B of the spec, the classifier (#8).
 
 ## In Progress
 - Owner review: keyboard-and-NVDA pass through the Weather Kitten recent-scans section

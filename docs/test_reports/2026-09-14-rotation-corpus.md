@@ -1,5 +1,23 @@
 # Rotation validation corpus v2 (2026-09-14)
 
+## Outcome
+
+- **Detector corrected, and selected by a pre-registered rule.** Couplets must lie across the beam,
+  tilts merge only on ground overlap, and aliasing folds are rejected. Persistent level: 3/5 tornadoes
+  (baseline 2/5), 0 clear-air false alarms. NMD agreement at rank 1: 6 -> 14. See "Sweep and
+  selection".
+- **Velocity analysis runs on every live scan.** It is 3-5x faster than before with byte-identical
+  output, and adds about 4 s per scan. Rotation seen again on a tracked storm is promoted to
+  persistent. See "Live pipeline".
+- **No rotation is spoken.** Persistent evidence passed the corpus speak rule but failed the live
+  check: it was spoken for one-gate noise couplets in ordinary rain, with no severe reports. The
+  cause is that persistence accepts any couplet on the same tracked storm within about 16 km.
+  Assessments stay in the data, labelled. See "Live check".
+- **Lesson.** A 5-event corpus of weak tornadoes cannot show how often a level is spoken on a busy
+  radar. The speak rule needs a live or many-volume false-alarm rate, not only a per-storm fraction.
+- **Open work:** issue #9 (a same-circulation persistence test on a larger corpus) and #10 (KLIX
+  retired). Part B, the classifier (#8), was not started.
+
 **Where things are:**
 - Plan: `docs/superpowers/plans/2026-09-14-rotation-detection-truth.md`.
 - Manifest: `docs/validation/rotation-signal-corpus-v2.json`.

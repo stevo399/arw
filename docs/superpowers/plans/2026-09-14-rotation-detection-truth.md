@@ -15,6 +15,23 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-14-detection-truth-design.md` (Part A). Part B (classifier) gets its own plan after this one.
 
+## Outcome (2026-09-14): executed through Task 10 and merged; no rotation is spoken
+
+- **Tasks 1-10 are done.** The pre-registered selection chose configuration 1: shear 15 m/s, fold
+  rejection, couplets across the beam only, ground-overlap merging. Only rank 3 (persistent) passed
+  the speak rule.
+- **Task 10's live check failed the speak rule's intent.** Persistent evidence was spoken for
+  one-gate noise couplets in ordinary rain at KJAX and KAMA, with no severe reports.
+- **Owner decision:** `SPOKEN_ROTATION_EVIDENCE` is empty. Analysis still runs live, and assessments
+  stay in the data, labelled.
+- **Extra work beyond the plan:**
+  - speedups with byte-identical output;
+  - compact scans keep velocity regions;
+  - map descriptions follow the spoken set.
+- **Not done:** Part B (classifier, #8) has no plan yet.
+
+Full results and the live-check evidence: `docs/test_reports/2026-09-14-rotation-corpus.md`. Follow-up: issue #9.
+
 ## Global Constraints
 
 - Only `src/ingest.py` makes network calls (CLAUDE.md). Validation modules and scripts read the cache.

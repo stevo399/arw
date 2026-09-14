@@ -2,6 +2,12 @@
 
 Date: 2026-09-14. GitHub issues #8 and #9.
 
+**Status (2026-09-14):**
+- **Part A (rotation):** implemented and merged. Owner decision 3 (live rotation "after validation")
+  is only partly met: analysis runs live, but no evidence level is spoken. Persistent evidence passed
+  the corpus but failed the live check. Details: `docs/test_reports/2026-09-14-rotation-corpus.md`.
+- **Part B (classifier):** not started.
+
 ## Owner decisions (2026-09-14)
 
 1. **Classifier truth:** fit to labels built from independent physical evidence, and cross-check
