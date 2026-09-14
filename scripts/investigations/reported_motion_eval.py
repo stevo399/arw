@@ -49,13 +49,20 @@ def outline_iou(mask_a, sweep_a, mask_b, sweep_b, east_m, north_m, grid_m=500.0)
 def predicted(lat, lon, east_km, north_km):
     return lat + north_km / KM_PER_DEGREE_LAT, lon + east_km / (KM_PER_DEGREE_LAT * math.cos(math.radians(lat)))
 
+from datetime import datetime
+
 STRUCTURAL = {"merge_survivor", "split_child", "reacquired"}
+# The cache gained live volumes after 2026-09-13 12:00Z; evaluate the same
+# 213 scans as the earlier motion evaluations.
+CACHE_CUTOFF = datetime(2026, 9, 13, 12, 0)
 rows = []
 sources = Counter()
 labels = Counter()
 fastest = []
 
 for site, run in windows():
+    if run[0][0] >= CACHE_CUTOFF:
+        continue
     history = RadarHistory.open(site, None)
     previous = None
     for stamp, path in run:

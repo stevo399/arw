@@ -164,3 +164,21 @@ already showed no gain from matching beyond 350 km, even for storms neighbours j
 **Rule.** No pattern match farther than 350 km from the radar is accepted, whether judged or
 corroborated, and none is computed. Storms beyond that range report nearby storms' measured
 motion when a storm within 60 km has one, and otherwise report motion as unknown.
+
+## Follow-up: 80 km/h needs corroboration for every storm
+
+After the range cutoff (commit `aa7dae2`), the all-windows check's fastest report was 117 km/h at
+KJAX 2026-09-07 23:10:13Z.
+- The measured storm was 348 km from the radar, just inside the cutoff, and its match correlated
+  0.55.
+- Three neighbours judged it consistent; their own matches were equally noisy at that range.
+- Its centre actually moved 35 and then 10 km/h.
+- Four storms took its motion as nearby storms'.
+
+Across all 6,698 evaluation rows, exactly one neighbour-judged match was accepted above 80 km/h:
+KIWA 00:04:10Z, 84 km/h, correlation 0.56, 339 km. It predicted worse than no motion (8.9 against
+2.3 km) and was not corroborated.
+
+**Rule.** The 80 km/h corroboration requirement now applies to every storm. On the evaluation
+data it changes that single case, for the better. A genuinely fast storm reports its motion once
+two of its matches agree.

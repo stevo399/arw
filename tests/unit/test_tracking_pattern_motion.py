@@ -173,8 +173,16 @@ def test_no_match_beyond_350_km_is_accepted_judged_or_corroborated():
     """KIWA 2026-09-07 23:37Z: storms 350-405 km out matched in every direction, and one
     within 25 km/h of its neighbours' noisy median was accepted at 116 km/h."""
     centres = {track: (35.5 + 0.05 * track, -97.0) for track in range(1, 6)}
-    matches = {track: _match(-40.0, 100.0) for track in range(1, 6)}
+    matches = {track: _match(-40.0, 60.0) for track in range(1, 6)}
     far = {track: 360.0 for track in range(1, 6)}
-    assert guard_matches(matches, centres, ranges_km=far, previous={1: (-40.0, 100.0)}) == {}
+    assert guard_matches(matches, centres, ranges_km=far, previous={1: (-40.0, 60.0)}) == {}
     near = {track: 340.0 for track in range(1, 6)}
     assert set(guard_matches(matches, centres, ranges_km=near)) == {1, 2, 3, 4, 5}
+
+
+def test_any_match_faster_than_80_kmh_needs_its_previous_match_to_agree():
+    """KJAX 2026-09-07 23:10Z: three noisy neighbours judged a 117 km/h match consistent."""
+    centres = {track: (35.5 + 0.05 * track, -97.0) for track in range(1, 5)}
+    matches = {1: _match(-99.0, -63.0, correlation=0.55), 2: _match(-90.0, -70.0), 3: _match(-105.0, -55.0), 4: _match(-95.0, -60.0)}
+    assert guard_matches(matches, centres) == {}
+    assert set(guard_matches(matches, centres, previous={1: (-95.0, -60.0)})) == {1}
