@@ -30,7 +30,12 @@ from src.tracker import StormTracker
 from src.validation.nmd import parse_nmd
 from src.validation.rotation_metrics import Point, VolumeResult, summarize
 from src.validation.spc import StormReport
-from src.velocity import RotationDetectorConfig, analyze_velocity, promote_persistent_rotation_assessments
+from src.velocity import (
+    RotationDetectorConfig,
+    _associate_rotation_candidates,
+    detect_rotation_signatures,
+    promote_persistent_rotation_assessments,
+)
 
 CORPUS = ROOT / "docs/validation/rotation-signal-corpus-v2.json"
 NMD_MATCH_SECONDS = 180
@@ -101,8 +106,11 @@ def main(out_path: str, sweep: bool) -> None:
             centroids = [Point(o.centroid_lat, o.centroid_lon) for o in detection.objects]
             for index, config in enumerate(configs):
                 started = time.perf_counter()
-                _regions, assessments, _objects = analyze_velocity(
-                    vel, detection.objects, detection.object_masks, ref, config=config,
+                # Exactly the rotation list analyze_velocity returns, without the
+                # configuration-independent velocity regions.
+                assessments = _associate_rotation_candidates(
+                    detect_rotation_signatures(vel, config), detection.object_masks, ref,
+                    {obj.object_id: obj for obj in detection.objects},
                 )
                 seconds[index] += time.perf_counter() - started
                 track_history = {}
