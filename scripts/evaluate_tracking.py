@@ -260,7 +260,11 @@ def run_benchmark(entry: dict) -> BenchmarkResult:
             radar_lon=reflectivity.radar_lon,
             elevation_deg=reflectivity.elevation_angle,
         )
-        regions, rotations, annotated_objects = analyze_velocity(vel_data, detection.objects)
+        # The assessed path production uses: candidates attach only to the storm
+        # whose footprint they overlap (docs/superpowers/plans/2026-09-14-rotation-detection-truth.md).
+        regions, rotations, annotated_objects = analyze_velocity(
+            vel_data, detection.objects, detection.object_masks, reflectivity,
+        )
         buffered = BufferedScan(
             timestamp=datetime.fromisoformat(reflectivity.timestamp),
             site_id=site_id,
