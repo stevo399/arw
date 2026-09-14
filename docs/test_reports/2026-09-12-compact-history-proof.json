@@ -74,19 +74,19 @@
   },
   "memory": {
     "compact_scan_bytes": [
-      279983,
-      281441,
-      281577,
-      283433,
-      282301,
-      148512,
-      149040,
-      150919,
-      151851,
-      150028
+      280013,
+      281901,
+      281965,
+      283814,
+      282716,
+      148524,
+      149058,
+      150947,
+      151905,
+      150058
     ],
-    "retained_compact_bytes": 2159085,
-    "compact_limit_bytes": 3117763.0000000005,
+    "retained_compact_bytes": 2160901,
+    "compact_limit_bytes": 3121954.0000000005,
     "rendered_scan_bytes": [
       6708752,
       6518056,
@@ -103,7 +103,7 @@
     "rendered_limit_bytes": 88555526.4,
     "old_pipeline_largest_scan_array_bytes": 98928000,
     "old_pipeline_two_scans_two_radars_bytes": 395712000,
-    "transient_peak_traced_bytes": 546449144,
+    "transient_peak_traced_bytes": 546463986,
     "retained_full_grids": []
   },
   "restart": {

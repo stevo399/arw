@@ -135,3 +135,25 @@ def test_guard_drops_a_match_faster_than_the_search_limit_in_any_direction():
     # 144 km/h east and 123 km/h north each fit a square search window; together 189 km/h does not.
     accepted = guard_matches({1: _match(144.0, 123.0), 2: _match(100.0, 0.0)}, {1: (35.5, -97.0), 2: (38.0, -97.0)})
     assert set(accepted) == {2}
+
+
+def test_a_storm_moving_differently_from_its_neighbours_is_accepted_when_its_previous_match_agrees():
+    """A stationary echo among storms moving NE (KEYX 23:42Z, 2026-04-10)."""
+    centres = {track: (35.5 + 0.05 * track, -97.0) for track in range(1, 6)}
+    matches = {1: _match(-0.7, 0.8), 2: _match(30.0, 32.0), 3: _match(14.0, 32.0), 4: _match(27.0, 26.0), 5: _match(25.0, 32.0)}
+    assert 1 not in guard_matches(matches, centres)
+    assert 1 in guard_matches(matches, centres, previous={1: (0.5, -0.7)})
+    assert 1 not in guard_matches(matches, centres, previous={1: (20.0, 20.0)})
+
+
+def test_a_poorly_correlated_isolated_match_is_accepted_when_its_previous_match_agrees():
+    centres = {1: (35.5, -97.0)}
+    matches = {1: _match(20.0, 10.0, correlation=0.5)}
+    assert guard_matches(matches, centres) == {}
+    assert guard_matches(matches, centres, previous={1: (24.0, 14.0)}) == {1: (20.0, 10.0)}
+
+
+def test_agreement_never_rescues_an_edge_peak_or_a_match_beyond_the_speed_limit():
+    centres = {1: (35.5, -97.0), 2: (38.0, -97.0)}
+    matches = {1: _match(20.0, 10.0, at_edge=True), 2: _match(140.0, 100.0)}
+    assert guard_matches(matches, centres, previous={1: (20.0, 10.0), 2: (140.0, 100.0)}) == {}

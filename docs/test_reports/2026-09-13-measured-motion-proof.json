@@ -24,7 +24,7 @@
       "stationary": 6.411
     },
     "mean_iou": {
-      "reported": 0.4887,
+      "reported": 0.4885,
       "stationary": 0.3913
     }
   },
@@ -40,7 +40,7 @@
         "stationary": 6.374
       },
       "mean_iou": {
-        "reported": 0.3123,
+        "reported": 0.3122,
         "stationary": 0.2146
       }
     },
@@ -55,7 +55,7 @@
         "stationary": 6.27
       },
       "mean_iou": {
-        "reported": 0.5387,
+        "reported": 0.5385,
         "stationary": 0.4414
       }
     }

@@ -69,3 +69,36 @@ An isolated storm's match is accepted only when its correlation is at least 0.6.
 Rules adding a speed cap or agreement with the previous match gave slightly smaller tails at the
 cost of extra assumptions; a hard speed cap would reject real fast storms. Both KSOX false matches
 above are now rejected: one by the speed limit (165 km/h), the other by correlation (0.30).
+
+## Follow-up: a stationary echo among moving storms
+
+The benchmark on the guards above (commit `c15b027`) still reported the KEYX focus storm
+"likely moving NE at 20-27 mph with nearby storms", although its centre stayed 39-40 miles WNW for
+20 minutes.
+
+**What instrumentation showed (KEYX 23:42-23:56Z):**
+- The storm's own pattern match was about 0 km/h with correlation 0.79 to 0.88, at every scan.
+- Within 60 km, a few other echoes also matched at about 0 km/h, and a larger group of storms moved
+  NE at about 40 km/h.
+- The neighbours' vector median was the moving group's, so the storm's correct match was rejected
+  and nearby storms' motion was reported in its place.
+
+**What the evaluation data showed.** Of the 431 matches the neighbour guard rejected, most were
+wrong (median error 4.88 km against 2.04 km for no motion). Where production then reported nearby
+storms' motion, that helped on average (1.44 against 1.94 km).
+
+The exception was a rejected match that agreed within 10 km/h with the same storm's previous
+match. On those 44, the storm's own match predicted best: median 1.24 km, against 1.48 for what
+production reported and 1.66 for no motion, with mean IoU 0.481.
+
+**Rule, scored on all 5,464 eligible matches.** Accepting any match the guards reject when it
+agrees within 10 km/h with that storm's previous valid match:
+- raised acceptance from 90.3% to 91.3%;
+- improved median error from 1.239 to 1.232 km and mean IoU from 0.4500 to 0.4508;
+- left the 90th percentile unchanged (7.05 against 7.06 km).
+
+Tolerances of 5 and 15 km/h gave the same picture. Adopted at 10 km/h. Edge peaks and matches
+beyond the speed limit are never rescued.
+
+A stationary storm therefore reports nearby storms' motion for one scan, until its second agreeing
+match corroborates the first.

@@ -41,6 +41,12 @@ MAX_NEIGHBOUR_DEPARTURE_KMH = 25.0
 # back to no-motion's (5.84 against 5.86 km); accepting all left it at 7.39 km
 # (docs/test_reports/2026-09-13-isolated-storm-motion-evaluation.md).
 MIN_UNJUDGED_CORRELATION = 0.6
+# A match the guards reject is accepted when it agrees this closely with the
+# same storm's previous match.  On 5,464 matches this changed no tail and
+# slightly improved median error and outline overlap, and it keeps a
+# stationary echo among moving storms from taking their motion
+# (docs/test_reports/2026-09-13-isolated-storm-motion-evaluation.md).
+MAX_SELF_AGREEMENT_KMH = 10.0
 
 
 @dataclass(frozen=True)
@@ -168,9 +174,20 @@ def _within_neighbour_radius(centres: dict[int, tuple[float, float]], a: int, b:
     return haversine_distance_km(*centres[a], *centres[b]) <= NEIGHBOUR_RADIUS_KM
 
 
+def valid_matches(matches: dict[int, PatternMatch]) -> dict[int, tuple[float, float]]:
+    """Matches that are matches at all: not on the search edge, within the speed limit."""
+    return {
+        track_id: (match.east_kmh, match.north_kmh)
+        for track_id, match in matches.items()
+        # The search window is square, so its corners reach beyond the speed limit.
+        if not match.at_edge and math.hypot(match.east_kmh, match.north_kmh) <= MAX_MATCH_SPEED_KMH
+    }
+
+
 def guard_matches(
     matches: dict[int, PatternMatch],
     centres: dict[int, tuple[float, float]],
+    previous: dict[int, tuple[float, float]] | None = None,
 ) -> dict[int, tuple[float, float]]:
     """Accepted (east, north) km/h velocities by track id.
 
@@ -178,14 +195,14 @@ def guard_matches(
     match.  A storm with at least three other matches within 60 km is rejected
     when its velocity departs from their vector median by more than 25 km/h;
     a storm with fewer is rejected when its match correlates below 0.6.
+
+    A match either rule rejects is still accepted when it agrees within
+    10 km/h with the same storm's previous valid match (`previous`): two scans
+    corroborate each other where neighbours cannot, as for a stationary echo
+    among moving storms.
     """
-    correlations = {track_id: match.correlation for track_id, match in matches.items()}
-    candidates = {
-        track_id: (match.east_kmh, match.north_kmh)
-        for track_id, match in matches.items()
-        # The search window is square, so its corners reach beyond the speed limit.
-        if not match.at_edge and math.hypot(match.east_kmh, match.north_kmh) <= MAX_MATCH_SPEED_KMH
-    }
+    previous = previous or {}
+    candidates = valid_matches(matches)
     accepted: dict[int, tuple[float, float]] = {}
     for track_id, velocity in candidates.items():
         neighbours = [
@@ -195,11 +212,13 @@ def guard_matches(
         ]
         if len(neighbours) >= MIN_NEIGHBOURS_TO_JUDGE:
             east, north = _vector_median(neighbours)
-            if math.hypot(velocity[0] - east, velocity[1] - north) > MAX_NEIGHBOUR_DEPARTURE_KMH:
-                continue
-        elif correlations[track_id] < MIN_UNJUDGED_CORRELATION:
-            continue
-        accepted[track_id] = velocity
+            passes = math.hypot(velocity[0] - east, velocity[1] - north) <= MAX_NEIGHBOUR_DEPARTURE_KMH
+        else:
+            passes = matches[track_id].correlation >= MIN_UNJUDGED_CORRELATION
+        earlier = previous.get(track_id)
+        corroborated = earlier is not None and math.hypot(velocity[0] - earlier[0], velocity[1] - earlier[1]) <= MAX_SELF_AGREEMENT_KMH
+        if passes or corroborated:
+            accepted[track_id] = velocity
     return accepted
 
 

@@ -150,6 +150,9 @@ class Track:
     rotation_history: list[RotationHistoryEntry] = field(default_factory=list)
     trend_samples: list[TrendSample] = field(default_factory=list)
     measured_velocities: list[VelocitySample] = field(default_factory=list)
+    # This storm's latest valid pattern match, accepted or not; a later match
+    # agreeing with it corroborates both.
+    last_pattern_match: VelocitySample | None = None
     is_primary_focus: bool = False
     # (scan timestamp, object id) of the last scan this track was matched in.
     # Reacquisition rebuilds the track's mask from that scan.

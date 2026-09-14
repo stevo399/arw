@@ -7,10 +7,10 @@ import numpy as np
 
 from src.buffer import BufferedScan, TrackingSnapshot
 from src.detection import DetectedObject
-from src.tracking.motion import MotionVector, recent_heading_flip_count, report_motion, unknown_motion
+from src.tracking.motion import MAX_MEASUREMENT_AGE_MINUTES, MotionVector, recent_heading_flip_count, report_motion, unknown_motion
 from src.tracking.association import MAX_REACQUISITION_MINUTES, associate_tracks
 from src.tracking.events import normalize_merge_event, normalize_reacquired_event, normalize_split_event
-from src.tracking.pattern_motion import guard_matches, match_storm, nearby_velocity
+from src.tracking.pattern_motion import guard_matches, match_storm, nearby_velocity, valid_matches
 from src.tracking.types import (
     MAX_MEASURED_VELOCITIES,
     FocusContinuity,
@@ -394,7 +394,15 @@ class StormTracker:
                 )
                 if found is not None:
                     matches[track.track_id] = found
-        accepted = guard_matches(matches, centres)
+        previous_matches = {
+            track.track_id: (track.last_pattern_match.east_kmh, track.last_pattern_match.north_kmh)
+            for _, track in seen
+            if track.last_pattern_match is not None
+            and (scan.timestamp - track.last_pattern_match.timestamp).total_seconds() <= MAX_MEASUREMENT_AGE_MINUTES * 60.0
+        }
+        accepted = guard_matches(matches, centres, previous=previous_matches)
+        for track_id, (east, north) in valid_matches(matches).items():
+            tracks_by_id[track_id].last_pattern_match = VelocitySample(timestamp=scan.timestamp, east_kmh=east, north_kmh=north)
 
         for _, track in seen:
             velocity = accepted.get(track.track_id)

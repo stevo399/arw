@@ -119,3 +119,41 @@ def test_a_lone_new_storm_has_unknown_motion():
 
     (track,) = tracker.active_tracks
     assert track.get_motion().heading_label == "unknown"
+
+
+def test_a_stationary_storm_among_moving_storms_reports_its_own_motion_once_corroborated():
+    """Neighbours' vector median rejects its first measurement; the second agrees with the first.
+
+    The stationary storm is 35 km or more from the moving ones, so the echo
+    matched around it is its own, and within 60 km of three of them, so they
+    judge it.
+    """
+    still = (115000.0, 100000.0)
+
+    def scan(minutes):
+        hours = minutes / 60.0
+        cells = [(x + EAST_KMH * hours * 1000.0, y + NORTH_KMH * hours * 1000.0, 52.0, 4000.0, 5000.0) for x, y in STORMS]
+        cells.append((still[0], still[1], 50.0, 3000.0, 3000.0))
+        sweep = _sweep(cells)
+        detection = detect_objects_with_grid(
+            reflectivity=sweep.reflectivity, azimuths=sweep.azimuths, ranges_m=sweep.ranges_m,
+            radar_lat=sweep.radar_lat, radar_lon=sweep.radar_lon, elevation_deg=sweep.elevation_angle,
+            elevations=sweep.elevations,
+        )
+        return BufferedScan(
+            timestamp=T0 + timedelta(minutes=minutes), site_id="KTLX", reflectivity_data=sweep,
+            detected_objects=detection.objects, labeled_grid=detection.labeled_grid, object_masks=detection.object_masks,
+        )
+
+    def still_track(tracker):
+        # The stationary storm is the smallest.
+        return min(tracker.active_tracks, key=lambda track: track.current_object.area_km2)
+
+    tracker = StormTracker()
+    tracker.update(scan(0))
+    tracker.update(scan(5))
+    assert still_track(tracker).get_motion().source == "nearby_storms"
+    tracker.update(scan(10))
+    motion = still_track(tracker).get_motion()
+    assert motion.source == "pattern_match"
+    assert motion.heading_label == "nearly stationary"
