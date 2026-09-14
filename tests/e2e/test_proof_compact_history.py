@@ -29,7 +29,7 @@ import pytest
 import src.server as server
 from src.history.layer_cache import RenderedLayerCache
 from src.history.records import dumps
-from src.history.store import HistoryRegistry, RadarHistory
+from src.history.store import HistoryRegistry, RadarHistory, _promote_persistent_rotation
 from src.tracker import StormTracker
 
 KTLX_WINDOW = [
@@ -77,6 +77,9 @@ def test_history_tracking_is_identical_to_retained_scan_tracking(tmp_path):
         original = _analyze(path)
         old_input, reacquire_input = _twin(original), _twin(original)
         previous.update(old_input)
+        # Live tracking promotes rotation seen again on a tracked storm
+        # (rotation detection plan 2026-09-14); the reference does the same.
+        _promote_persistent_rotation(previous, old_input)
         for obj in old_input.detected_objects:
             obj.temporal_status = previous.temporal_status_for_current_object(obj.object_id)
         old_snapshot = dumps(previous.snapshot())

@@ -30,6 +30,7 @@ from src.detection import detect_objects_with_grid
 from src.preprocess import preprocess_sweep, refresh_quality_advisory
 from src.geometry import align_field_by_azimuth
 from src.summary import generate_summary
+from src.velocity import analyze_velocity
 from src.map_layer import (
     compute_precipitation_band_evidence,
     build_precipitation_field_geojson,
@@ -307,15 +308,16 @@ def _process_scan_file(site_id: str, filepath: str) -> BufferedScan:
         elevations=ref_data.elevations,
         gate_classification=ref_data.gate_classification,
     )
-    # Velocity-region and rotational-couplet detection is a separate,
-    # high-cost diagnostic product.  Do not hold the first reflectivity map
-    # hostage to it: the live snapshot has already used the nearest Doppler
-    # cut for QC, while these advanced velocity diagnostics can be added by a
-    # dedicated analysis request.  This avoids multi-minute cold-map waits on
-    # high-resolution volumes without pretending a rotation assessment exists.
-    regions: list = []
-    rotations: list = []
-    annotated_objects = result.objects
+    # Velocity regions and rotation candidates, each candidate assessed against
+    # the exact reflectivity-cell footprints above.  Measured at 1.5-3.1 s on
+    # the densest cached volumes (docs/test_reports/2026-09-14-rotation-corpus.md).
+    # Every assessment is kept in the data, labelled with its evidence level,
+    # but only levels validated on the rotation corpus are spoken
+    # (src.summary.SPOKEN_ROTATION_EVIDENCE).  Persistence is promoted when the
+    # scan is tracked (src.history.store).
+    regions, rotations, annotated_objects = analyze_velocity(
+        vel_data, result.objects, result.object_masks, ref_data,
+    )
     scan_timestamp = (
         datetime.fromisoformat(ref_data.timestamp)
         if isinstance(ref_data.timestamp, str)

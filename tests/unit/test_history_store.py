@@ -198,3 +198,49 @@ def test_missing_track_is_lost_when_its_scan_leaves_the_ring(tmp_path):
     history.add_live_scan(_reacquisition_scan(10, [_storm_b(1)]))  # evicts the 0-minute scan
 
     assert history.tracker.get_track(1).status == "lost"
+
+
+def _scan_with_rotation(minute: int, evidence_level: str = "unconfirmed"):
+    from dataclasses import replace
+    from src.velocity import RotationSignature
+
+    scan = _scan(minute)
+    storm = scan.detected_objects[0]
+    rotation = RotationSignature(
+        centroid_lat=storm.centroid_lat, centroid_lon=storm.centroid_lon, distance_km=40.0, bearing_deg=270.0,
+        max_shear_ms=30.0, max_inbound_ms=-15.0, max_outbound_ms=15.0, diameter_km=2.0, sweep_count=1,
+        elevation_angles=[0.5], strength="moderate", associated_object_id=storm.object_id,
+        evidence_level=evidence_level,
+    )
+    scan.detected_objects[0] = replace(storm, rotation=rotation)
+    scan.rotation_signatures = [rotation]
+    return scan
+
+
+def test_rotation_seen_again_on_the_same_tracked_storm_is_promoted_to_persistent(tmp_path):
+    history = RadarHistory.open("KTLX", tmp_path)
+    history.add_live_scan(_scan_with_rotation(0))
+    first = history.newest().to_buffered_scan()
+    assert [r.evidence_level for r in first.rotation_signatures] == ["unconfirmed"]
+
+    history.add_live_scan(_scan_with_rotation(5))
+    newest = history.newest().to_buffered_scan()
+    assert [r.evidence_level for r in newest.rotation_signatures] == ["persistent"]
+    assert newest.detected_objects[0].rotation.evidence_level == "persistent"
+    # The tracker's entry for this scan carries the final assessment, so
+    # speech that reads track history ("rotation weakening") sees it.
+    track_id = history.tracker._obj_to_track[newest.detected_objects[0].object_id]
+    entry = history.tracker.get_track(track_id).rotation_history[-1]
+    assert entry.timestamp == T0 + timedelta(minutes=5)
+    assert entry.rotation.evidence_level == "persistent"
+    snapshot_track = next(t for t in newest.tracking.active_tracks if t.track_id == track_id)
+    assert snapshot_track.rotation_history[-1].rotation.evidence_level == "persistent"
+
+
+def test_rotation_is_not_promoted_across_a_gap_longer_than_the_persistence_window(tmp_path):
+    history = RadarHistory.open("KTLX", tmp_path)
+    history.add_live_scan(_scan_with_rotation(0))
+    history.add_live_scan(_scan(5))                 # the storm continues without rotation
+    history.add_live_scan(_scan_with_rotation(25))  # 25 minutes after the last rotation
+    newest = history.newest().to_buffered_scan()
+    assert [r.evidence_level for r in newest.rotation_signatures] == ["unconfirmed"]

@@ -27,6 +27,7 @@ from src.history.disk import (
     save_compact_scan,
 )
 from src.tracker import StormTracker
+from src.velocity import promote_persistent_rotation_assessments
 
 _logger = logging.getLogger(__name__)
 
@@ -104,6 +105,7 @@ class RadarHistory:
                 return None
             verify_label_masks(buffered)  # refuse before the tracker advances
             self.tracker.update(buffered)
+            _promote_persistent_rotation(self.tracker, buffered)
             for obj in buffered.detected_objects:
                 obj.temporal_status = self.tracker.temporal_status_for_current_object(obj.object_id)
             buffered.tracking = self.tracker.snapshot()
@@ -196,6 +198,7 @@ class RadarHistory:
         for index, compact in enumerate(list(self._ring)):
             buffered = compact.to_buffered_scan()
             self.tracker.update(buffered)
+            _promote_persistent_rotation(self.tracker, buffered)
             for obj in buffered.detected_objects:
                 obj.temporal_status = self.tracker.temporal_status_for_current_object(obj.object_id)
             snapshot = self.tracker.snapshot()
@@ -259,3 +262,45 @@ class HistoryRegistry:
     def clear(self) -> None:
         with self._lock:
             self._histories.clear()
+
+
+def _promote_persistent_rotation(tracker: StormTracker, buffered: BufferedScan) -> None:
+    """Promote rotation seen again on the same tracked storm to "persistent".
+
+    Runs right after the tracker has matched this scan's storms, so the
+    tracker's cell identity decides "the same storm".  The promoted assessment
+    replaces the original everywhere this scan exposes it: the scan's rotation
+    list, each storm's rotation, and the tracker's history entry for this
+    scan, which speech reads for "rotation weakening".
+    """
+    rotations = list(getattr(buffered, "rotation_signatures", None) or [])
+    if not rotations:
+        return
+    histories = {
+        obj.object_id: tracker.rotation_history_for_current_object(obj.object_id)
+        for obj in buffered.detected_objects
+    }
+    promoted = promote_persistent_rotation_assessments(rotations, histories, buffered.timestamp)
+    # Matched by value, not identity: a scan restored from disk holds separate
+    # copies.  Equal assessments promote identically (promotion reads only
+    # their fields), so value matching is exact.
+    replacements = [(original, final) for original, final in zip(rotations, promoted) if final != original]
+    if not replacements:
+        return
+    buffered.rotation_signatures = promoted
+
+    def _final(rotation):
+        if rotation is None:
+            return None
+        return next((final for original, final in replacements if original == rotation), None)
+
+    for obj in buffered.detected_objects:
+        final = _final(getattr(obj, "rotation", None))
+        if final is not None:
+            obj.rotation = final
+    for track in tracker._tracks:
+        for entry in track.rotation_history:
+            if entry.timestamp == buffered.timestamp:
+                final = _final(entry.rotation)
+                if final is not None:
+                    entry.rotation = final
