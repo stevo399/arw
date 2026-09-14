@@ -144,6 +144,39 @@ def _merge_cross_sweep_regions(
 MIN_SHEAR_MS = 15.0
 MAX_COUPLET_DISTANCE_KM = 5.0
 ROTATION_MERGE_DISTANCE_KM = 10.0
+# A fold, not shear: the two values differ by nearly twice the Nyquist
+# velocity while both lie near the Nyquist limit.
+FOLD_DIFFERENCE_FRACTION = 0.8   # of twice the Nyquist velocity
+FOLD_SIDE_FRACTION = 0.5         # of the Nyquist velocity, on both sides
+GROUND_OVERLAP_MARGIN_KM = 1.0
+
+
+@dataclass(frozen=True)
+class RotationDetectorConfig:
+    """Rules for rotation candidates.
+
+    The defaults reproduce the detector as it was before 2026-09-14 exactly,
+    so it can be measured as the baseline; values are selected on the
+    rotation corpus (docs/superpowers/plans/2026-09-14-rotation-detection-truth.md).
+
+    azimuthal_pairs_only: a candidate pair lies on adjacent rays at the same
+    gate.  Opposite signs along one ray are convergence or divergence, and a
+    diagonal pair mixes that radial difference in, so neither is rotation.
+    ground_overlap_merge: candidates from different tilts confirm each other
+    only when they overlap on the ground (centres within their mean diameter
+    plus 1 km), not merely when they lie within 10 km.
+    """
+
+    min_shear_ms: float = MIN_SHEAR_MS
+    min_side_ms: float = 0.0
+    max_diameter_km: float | None = None
+    fold_rejection: bool = False
+    azimuthal_pairs_only: bool = False
+    ground_overlap_merge: bool = False
+
+    @classmethod
+    def baseline(cls) -> "RotationDetectorConfig":
+        return cls()
 
 
 @dataclass
@@ -293,6 +326,8 @@ def _detect_shear_single_sweep(
     radar_lon: float,
     elevation_angle: float,
     elevations: np.ndarray,
+    nyquist_velocity: float | None = None,
+    config: RotationDetectorConfig = RotationDetectorConfig(),
 ) -> list[RotationSignature]:
     """Find gate-to-gate shear couplets on one sweep."""
     n_az, n_rng = velocity.shape
@@ -307,6 +342,8 @@ def _detect_shear_single_sweep(
     for delta_az in [-1, 0, 1]:
         for delta_rng in [-1, 0, 1]:
             if delta_az == 0 and delta_rng == 0:
+                continue
+            if config.azimuthal_pairs_only and (delta_az == 0 or delta_rng != 0):
                 continue
             shifted_az = np.roll(velocity, delta_az, axis=0)
             shifted_rng = np.roll(shifted_az, delta_rng, axis=1)
@@ -336,7 +373,14 @@ def _detect_shear_single_sweep(
             both_valid &= gate_distance_km <= MAX_COUPLET_DISTANCE_KM
             sign_change = both_valid & ((v1 < 0) != (v2 < 0))
             shear = np.where(sign_change, np.abs(v1 - v2), np.nan)
-            strong_shear = ~np.isnan(shear) & (shear >= MIN_SHEAR_MS)
+            strong_shear = ~np.isnan(shear) & (shear >= config.min_shear_ms)
+            if config.min_side_ms > 0.0:
+                strong_shear &= (np.minimum(v1, v2) <= -config.min_side_ms) & (np.maximum(v1, v2) >= config.min_side_ms)
+            if config.fold_rejection and nyquist_velocity:
+                fold = (np.abs(v1 - v2) >= FOLD_DIFFERENCE_FRACTION * 2.0 * nyquist_velocity) & (
+                    np.minimum(np.abs(v1), np.abs(v2)) >= FOLD_SIDE_FRACTION * nyquist_velocity
+                )
+                strong_shear &= ~fold
 
             new_shear = strong_shear & (~shear_mask | (shear > shear_values))
             shear_mask |= strong_shear
@@ -385,6 +429,8 @@ def _detect_shear_single_sweep(
             (az_extent * math.pi / 180 * distance_km * 1000.0) ** 2
             + rng_extent ** 2
         ) / 1000.0
+        if config.max_diameter_km is not None and diameter_km > config.max_diameter_km:
+            continue
 
         results.append(RotationSignature(
             centroid_lat=round(centroid_lat, 4),
@@ -427,6 +473,7 @@ def _merge_elevation_angles(existing: list[float], new: list[float]) -> list[flo
 
 def _merge_cross_sweep_rotations(
     all_sweep_results: list[list[RotationSignature]],
+    config: RotationDetectorConfig = RotationDetectorConfig(),
 ) -> list[RotationSignature]:
     """Merge rotation signatures from multiple sweeps by ground distance."""
     if not all_sweep_results:
@@ -442,7 +489,12 @@ def _merge_cross_sweep_rotations(
                     existing_sig.centroid_lat, existing_sig.centroid_lon,
                     sig.centroid_lat, sig.centroid_lon,
                 )
-                if distance_km <= ROTATION_MERGE_DISTANCE_KM:
+                limit_km = (
+                    (existing_sig.diameter_km + sig.diameter_km) / 2.0 + GROUND_OVERLAP_MARGIN_KM
+                    if config.ground_overlap_merge
+                    else ROTATION_MERGE_DISTANCE_KM
+                )
+                if distance_km <= limit_km:
                     merged_elevation_angles = _merge_elevation_angles(
                         existing_sig.elevation_angles, sig.elevation_angles
                     )
@@ -494,7 +546,10 @@ def detect_velocity_regions(vel_data: VelocityData) -> list[VelocityRegion]:
     return _merge_cross_sweep_regions(all_sweep_results)
 
 
-def detect_rotation_signatures(vel_data: VelocityData) -> list[RotationSignature]:
+def detect_rotation_signatures(
+    vel_data: VelocityData,
+    config: RotationDetectorConfig = RotationDetectorConfig(),
+) -> list[RotationSignature]:
     """Detect rotation signatures across all sweeps."""
     all_sweep_results: list[list[RotationSignature]] = []
 
@@ -507,10 +562,12 @@ def detect_rotation_signatures(vel_data: VelocityData) -> list[RotationSignature
             radar_lon=vel_data.radar_lon,
             elevation_angle=sweep.elevation_angle,
             elevations=sweep.elevations,
+            nyquist_velocity=sweep.nyquist_velocity,
+            config=config,
         )
         all_sweep_results.append(sweep_results)
 
-    return _merge_cross_sweep_rotations(all_sweep_results)
+    return _merge_cross_sweep_rotations(all_sweep_results, config)
 
 
 MAX_ASSOCIATION_DISTANCE_KM = 30.0
@@ -639,6 +696,7 @@ def analyze_velocity(
     objects: list[DetectedObject],
     object_masks: dict[int, np.ndarray] | None = None,
     sweep=None,
+    config: RotationDetectorConfig = RotationDetectorConfig(),
 ) -> tuple[list[VelocityRegion], list[RotationSignature], list[DetectedObject]]:
     """Run full velocity analysis and associate results with detected objects.
 
@@ -648,7 +706,7 @@ def analyze_velocity(
         return [], [], objects
 
     regions = detect_velocity_regions(vel_data)
-    rotations = detect_rotation_signatures(vel_data)
+    rotations = detect_rotation_signatures(vel_data, config)
     if object_masks is not None and sweep is not None:
         rotations = _associate_rotation_candidates(
             rotations, object_masks, sweep,
