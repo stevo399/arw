@@ -252,11 +252,19 @@ def align_field_by_azimuth(
     apart. Range gates are identical between the cuts, so only the ray axis
     needs remapping.
     """
+    return np.asarray(field)[azimuth_alignment_index(source_azimuths, target_azimuths)]
+
+
+def azimuth_alignment_index(source_azimuths: np.ndarray, target_azimuths: np.ndarray) -> np.ndarray:
+    """For each target ray, the index of the source ray nearest in azimuth.
+
+    `align_field_by_azimuth(field, s, t)` equals `field[azimuth_alignment_index(s, t)]`;
+    computing the index once lets many fields from one sweep share it.
+    """
     source_azimuths = np.asarray(source_azimuths, dtype=float)
     target_azimuths = np.asarray(target_azimuths, dtype=float)
     offsets = (source_azimuths[None, :] - target_azimuths[:, None] + 180.0) % 360.0 - 180.0
-    nearest = np.argmin(np.abs(offsets), axis=1)
-    return np.asarray(field)[nearest]
+    return np.argmin(np.abs(offsets), axis=1)
 
 
 def gate_areas_km2(

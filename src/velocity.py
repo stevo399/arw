@@ -7,7 +7,7 @@ from scipy.ndimage import find_objects
 
 from src.detection import DetectedObject
 from src.geometry import (
-    align_field_by_azimuth,
+    azimuth_alignment_index,
     gate_areas_km2,
     gate_coordinates,
     label_periodic_azimuth,
@@ -114,16 +114,26 @@ def _merge_cross_sweep_regions(
     if not all_sweep_results:
         return []
 
-    merged: list[tuple[VelocityRegion, np.ndarray]] = []
+    # Each mask is held as its sorted flat gate indices plus the ray and gate
+    # intervals it spans.  Counts equal the full-grid boolean counts exactly;
+    # pairs whose intervals are disjoint share no gate, so their overlap is 0
+    # and they cannot merge (the threshold is positive).
+    merged: list[tuple[VelocityRegion, np.ndarray, tuple[int, int, int, int]]] = []
 
     for sweep_results in all_sweep_results:
         for region, mask in sweep_results:
+            mask = np.asarray(mask, dtype=bool)
+            indices = np.flatnonzero(mask)
+            bounds = _index_bounds(indices, mask.shape[1])
             matched = False
-            for i, (existing_region, existing_mask) in enumerate(merged):
+            for i, (existing_region, existing_indices, existing_bounds) in enumerate(merged):
                 if existing_region.region_type != region.region_type:
                     continue
-                overlap = np.count_nonzero(mask & existing_mask)
-                union = np.count_nonzero(mask | existing_mask)
+                if (bounds[0] > existing_bounds[1] or existing_bounds[0] > bounds[1]
+                        or bounds[2] > existing_bounds[3] or existing_bounds[2] > bounds[3]):
+                    continue
+                overlap = int(np.intersect1d(indices, existing_indices, assume_unique=True).size)
+                union = int(indices.size + existing_indices.size - overlap)
                 if union > 0 and overlap / union >= CROSS_SWEEP_OVERLAP_THRESHOLD:
                     if region.region_type == "inbound":
                         new_peak = min(existing_region.peak_velocity_ms, region.peak_velocity_ms)
@@ -142,18 +152,35 @@ def _merge_cross_sweep_regions(
                         bearing_deg=existing_region.bearing_deg,
                         sweep_count=existing_region.sweep_count + 1,
                         elevation_angles=existing_region.elevation_angles + region.elevation_angles,
-                    ), existing_mask | mask)
+                    ), *_merged_indices(existing_indices, indices, existing_bounds, bounds))
                     matched = True
                     break
             if not matched:
-                merged.append((region, mask))
+                merged.append((region, indices, bounds))
 
-    return [region for region, _ in merged]
+    return [region for region, _, _ in merged]
+
+
+def _index_bounds(indices: np.ndarray, gate_count: int) -> tuple[int, int, int, int]:
+    """(first ray, last ray, first gate, last gate) spanned by flat gate indices."""
+    if indices.size == 0:
+        return (1, 0, 1, 0)  # an empty interval: disjoint from everything
+    rays, gates = np.divmod(indices, gate_count)
+    return (int(rays.min()), int(rays.max()), int(gates.min()), int(gates.max()))
+
+
+def _merged_indices(first, second, first_bounds, second_bounds):
+    return np.union1d(first, second), (
+        min(first_bounds[0], second_bounds[0]), max(first_bounds[1], second_bounds[1]),
+        min(first_bounds[2], second_bounds[2]), max(first_bounds[3], second_bounds[3]),
+    )
 
 
 MIN_SHEAR_MS = 15.0
 MAX_COUPLET_DISTANCE_KM = 5.0
 ROTATION_MERGE_DISTANCE_KM = 10.0
+# Far wider than any disagreement between vectorized and scalar haversine.
+MERGE_SCREEN_MARGIN_KM = 0.01
 # A fold, not shear: the two values differ by nearly twice the Nyquist
 # velocity while both lie near the Nyquist limit.
 FOLD_DIFFERENCE_FRACTION = 0.8   # of twice the Nyquist velocity
@@ -413,16 +440,22 @@ def _detect_shear_single_sweep(
     range_bin_areas = gate_areas_km2(azimuths, ranges_m, elevation_angle)
     results: list[RotationSignature] = []
 
-    for component_id in range(1, count + 1):
-        component_mask = labeled_shear == component_id
+    # Each component is examined inside its bounding window: identical gates in
+    # identical (row-major) order to a full-grid mask.
+    for component_id, window in enumerate(find_objects(labeled_shear), start=1):
+        if window is None:
+            continue
+        component_mask = labeled_shear[window] == component_id
         if np.count_nonzero(component_mask) < 2:
             continue
 
-        az_indices, rng_indices = np.where(component_mask)
-        component_shear = shear_values[component_mask]
+        window_rows, window_cols = np.nonzero(component_mask)
+        az_indices = window_rows + window[0].start
+        rng_indices = window_cols + window[1].start
+        component_shear = shear_values[window][component_mask]
         max_shear = float(np.nanmax(component_shear))
-        max_inbound = float(np.nanmin(inbound_values[component_mask]))
-        max_outbound = float(np.nanmax(outbound_values[component_mask]))
+        max_inbound = float(np.nanmin(inbound_values[window][component_mask]))
+        max_outbound = float(np.nanmax(outbound_values[window][component_mask]))
 
         weights = np.nan_to_num(component_shear, nan=0.0)
         centroid = weighted_geographic_centroid(
@@ -493,11 +526,29 @@ def _merge_cross_sweep_rotations(
         return []
 
     merged: list[RotationSignature] = []
+    merged_lat: list[float] = []
+    merged_lon: list[float] = []
+    merged_diameter: list[float] = []
 
     for sweep_results in all_sweep_results:
         for sig in sweep_results:
             matched = False
-            for i, existing_sig in enumerate(merged):
+            # A vectorized distance screens out signatures well beyond their
+            # limit; the exact scalar test below still decides, in order.
+            screened: list[int] | np.ndarray = []
+            if merged:
+                approx_km = _haversine_array_km(
+                    np.asarray(merged_lat), np.asarray(merged_lon), sig.centroid_lat, sig.centroid_lon,
+                )
+                limits_km = (
+                    (np.asarray(merged_diameter) + sig.diameter_km) / 2.0 + GROUND_OVERLAP_MARGIN_KM
+                    if config.ground_overlap_merge
+                    else np.full(len(merged), ROTATION_MERGE_DISTANCE_KM)
+                )
+                screened = np.flatnonzero(approx_km <= limits_km + MERGE_SCREEN_MARGIN_KM)
+            for i in screened:
+                i = int(i)
+                existing_sig = merged[i]
                 distance_km = _haversine_km(
                     existing_sig.centroid_lat, existing_sig.centroid_lon,
                     sig.centroid_lat, sig.centroid_lon,
@@ -526,10 +577,14 @@ def _merge_cross_sweep_rotations(
                             max(existing_sig.max_shear_ms, sig.max_shear_ms)
                         ),
                     )
+                    merged_diameter[i] = merged[i].diameter_km
                     matched = True
                     break
             if not matched:
                 merged.append(sig)
+                merged_lat.append(sig.centroid_lat)
+                merged_lon.append(sig.centroid_lon)
+                merged_diameter.append(sig.diameter_km)
 
     return merged
 
@@ -540,6 +595,7 @@ def detect_velocity_regions(vel_data: VelocityData) -> list[VelocityRegion]:
 
     reference_azimuths = vel_data.sweeps[0].azimuths if vel_data.sweeps else None
     for sweep in vel_data.sweeps:
+        nearest_rays = azimuth_alignment_index(sweep.azimuths, reference_azimuths)
         sweep_results = _detect_regions_single_sweep(
             velocity=sweep.velocity,
             azimuths=sweep.azimuths,
@@ -552,7 +608,7 @@ def detect_velocity_regions(vel_data: VelocityData) -> list[VelocityRegion]:
         # Each cut starts at whatever azimuth the antenna points, so the same
         # region lies at different ray indices in each; compare by azimuth.
         all_sweep_results.append([
-            (region, align_field_by_azimuth(mask, sweep.azimuths, reference_azimuths))
+            (region, mask[nearest_rays])
             for region, mask in sweep_results
         ])
 
@@ -616,16 +672,30 @@ def _associate_rotation_candidates(
         sweep.azimuths, sweep.ranges_m, sweep.elevation_angle,
         sweep.radar_lat, sweep.radar_lon,
     )
+    # An object sharing no ray or no gate with a footprint's window overlaps it
+    # by 0, exactly what counting would give, so it is not counted.
+    object_extents = {}
+    for object_id, mask in object_masks.items():
+        mask = np.asarray(mask)
+        gates = np.flatnonzero(mask.any(axis=0))
+        object_extents[object_id] = (
+            mask, mask.any(axis=1),
+            int(gates[0]) if gates.size else 1, int(gates[-1]) if gates.size else 0,
+        )
     assessed: list[RotationSignature] = []
     for candidate in candidates:
         # Keep a non-zero radius for a one-gate component whose geometric
         # extent rounds to 0.0 km in the public product.
         radius_km = max(candidate.diameter_km / 2.0, 0.25)
         rows, cols, footprint = _candidate_footprint(lat, lon, sweep, candidate, radius_km)
-        overlaps = {
-            object_id: int(np.count_nonzero(np.asarray(mask)[rows][:, cols] & footprint))
-            for object_id, mask in object_masks.items()
-        }
+        first_gate, last_gate = cols.start, cols.stop - 1
+        overlaps = {}
+        for object_id, (mask, rays_present, object_first_gate, object_last_gate) in object_extents.items():
+            if (object_first_gate > last_gate or first_gate > object_last_gate
+                    or not rays_present[rows].any()):
+                overlaps[object_id] = 0
+                continue
+            overlaps[object_id] = int(np.count_nonzero(mask[rows][:, cols] & footprint))
         object_id, overlap = max(overlaps.items(), key=lambda item: item[1], default=(None, 0))
         if not overlap:
             assessed.append(candidate)
