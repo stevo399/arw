@@ -341,7 +341,7 @@ def test_generate_summary_uses_primary_focus_object_directly_when_available():
     assert "37 miles N of the radar" in text
 
 
-def _make_object_with_rotation(strength="moderate"):
+def _make_object_with_rotation(strength="moderate", evidence_level="unconfirmed"):
     return DetectedObject(
         object_id=1, centroid_lat=35.5, centroid_lon=-97.0,
         distance_km=50.0, bearing_deg=90.0,
@@ -351,27 +351,74 @@ def _make_object_with_rotation(strength="moderate"):
             distance_km=50.0, bearing_deg=90.0,
             max_shear_ms=30.0, max_inbound_ms=-20.0, max_outbound_ms=15.0,
             diameter_km=3.0, sweep_count=2, elevation_angles=[0.5, 1.5],
-            strength=strength,
+            strength=strength, evidence_level=evidence_level,
         ),
     )
 
 
-def test_summary_includes_rotation_for_strongest_object():
-    obj = _make_object_with_rotation("moderate")
+# Only persistent rotation evidence beat report-free storms on the rotation
+# corpus (docs/test_reports/2026-09-14-rotation-corpus.md). Unconfirmed,
+# corroborated and vertically confirmed couplets were no better than chance
+# there, so these tests previously asserting their speech now assert silence.
+def test_summary_includes_persistent_rotation_for_strongest_object():
+    obj = _make_object_with_rotation("moderate", "persistent")
     text = generate_summary(
         site_id="KTLX", site_name="Oklahoma City",
         timestamp="2026-04-10T21:00:00Z", objects=[obj],
     )
-    assert "unconfirmed moderate velocity couplet in base-radial velocity" in text.lower()
+    assert "persistent moderate rotation evidence in base-radial velocity" in text.lower()
 
 
 def test_summary_includes_rotation_strength():
-    obj = _make_object_with_rotation("strong")
+    obj = _make_object_with_rotation("strong", "persistent")
     text = generate_summary(
         site_id="KTLX", site_name="Oklahoma City",
         timestamp="2026-04-10T21:00:00Z", objects=[obj],
     )
-    assert "unconfirmed strong velocity couplet in base-radial velocity" in text.lower()
+    assert "persistent strong rotation evidence in base-radial velocity" in text.lower()
+
+
+def test_spoken_rotation_evidence_is_the_level_validated_on_the_corpus():
+    from src.summary import SPOKEN_ROTATION_EVIDENCE
+    assert SPOKEN_ROTATION_EVIDENCE == frozenset({"persistent"})
+
+
+def test_rotation_evidence_below_the_validated_level_is_not_spoken():
+    for level in ("unconfirmed", "corroborated", "vertically_confirmed"):
+        obj = _make_object_with_rotation("strong", level)
+        text = generate_summary(
+            site_id="KTLX", site_name="Oklahoma City",
+            timestamp="2026-04-10T21:00:00Z", objects=[obj],
+        ).lower()
+        assert "rotation" not in text and "couplet" not in text, (level, text)
+
+
+def test_standalone_rotation_is_spoken_only_at_the_validated_level():
+    strongest = DetectedObject(
+        object_id=1, centroid_lat=35.5, centroid_lon=-97.0, distance_km=50.0, bearing_deg=90.0,
+        peak_dbz=60.0, peak_label="intense precipitation", area_km2=100.0,
+    )
+    for level, spoken in (("vertically_confirmed", False), ("persistent", True)):
+        other = _make_object_with_rotation("moderate", level)
+        other.object_id, other.peak_dbz = 2, 45.0
+        text = generate_summary(
+            site_id="KTLX", site_name="Oklahoma City",
+            timestamp="2026-04-10T21:00:00Z", objects=[strongest, other],
+        ).lower()
+        assert ("rotation" in text or "couplet" in text) == spoken, (level, text)
+
+
+def test_rotation_weakening_is_spoken_only_after_validated_evidence():
+    from types import SimpleNamespace
+    from src.summary import _format_rotation
+    obj = DetectedObject(
+        object_id=1, centroid_lat=35.5, centroid_lon=-97.0, distance_km=50.0, bearing_deg=90.0,
+        peak_dbz=55.0, peak_label="intense precipitation", area_km2=100.0,
+    )
+    for level, expected in (("unconfirmed", ""), ("persistent", " Rotation weakening.")):
+        earlier = _make_object_with_rotation("moderate", level).rotation
+        track = SimpleNamespace(rotation_history=[SimpleNamespace(rotation=earlier), SimpleNamespace(rotation=None)])
+        assert _format_rotation(obj, track) == expected, level
 
 
 def test_summary_no_rotation_when_none():

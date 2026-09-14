@@ -5,6 +5,12 @@ from src.detection import DetectedObject, degrees_to_bearing
 from src.motion import MotionVector
 from src.tracking.motion import NEARBY_SOURCE
 
+# Rotation evidence levels that beat report-free storms on the rotation corpus
+# by the pre-registered speak rule (docs/test_reports/2026-09-14-rotation-corpus.md,
+# "Sweep and selection"). Other levels stay in the data, labelled, but are
+# never read aloud: they were no better than chance there.
+SPOKEN_ROTATION_EVIDENCE: frozenset[str] = frozenset({"persistent"})
+
 KM_PER_MILE = 1.60934
 
 
@@ -142,9 +148,14 @@ def _format_rotation(obj: DetectedObject, track=None) -> str:
     rotation = getattr(obj, "rotation", None)
     if rotation is None:
         if track is not None and hasattr(track, "rotation_history"):
-            recent = [e for e in track.rotation_history[-3:] if e.rotation is not None]
+            recent = [
+                e for e in track.rotation_history[-3:]
+                if e.rotation is not None and e.rotation.evidence_level in SPOKEN_ROTATION_EVIDENCE
+            ]
             if len(recent) > 0 and track.rotation_history[-1].rotation is None:
                 return " Rotation weakening."
+        return ""
+    if rotation.evidence_level not in SPOKEN_ROTATION_EVIDENCE:
         return ""
     reference = "base-radial velocity" if rotation.motion_reference.startswith("base_radial") else rotation.motion_reference
     if rotation.evidence_level == "persistent":
@@ -244,6 +255,7 @@ def generate_summary(
         obj for obj in objects
         if obj.object_id != strongest.object_id
         and getattr(obj, "rotation", None) is not None
+        and obj.rotation.evidence_level in SPOKEN_ROTATION_EVIDENCE
     ]
     for obj in standalone_rotations[:2]:
         rot = obj.rotation

@@ -11,7 +11,7 @@ from src.contours import DEFAULT_SIMPLIFY_M, LevelContourCache, contour_mask, ex
 from src.detection import DetectedObject, IntensityLayerData, classify_intensity, degrees_to_bearing
 from src.geometry import gate_areas_km2
 from src.qc.classifier import CODE_TO_CLASS
-from src.summary import km2_to_mi2, km_to_miles
+from src.summary import SPOKEN_ROTATION_EVIDENCE, km2_to_mi2, km_to_miles
 
 
 def _storm_fill_color(peak_dbz: float) -> str:
@@ -138,7 +138,9 @@ def _storm_description(obj: DetectedObject, rotation) -> str:
         )
     else:
         parts.append("Persistence was not checked because no prior scan was available.")
-    if rotation is not None:
+    # Descriptions are read aloud, so only validated evidence levels appear;
+    # the feature's rotation properties still carry every level, labelled.
+    if rotation is not None and rotation.evidence_level in SPOKEN_ROTATION_EVIDENCE:
         reference = "base-radial velocity" if rotation.motion_reference == "base_radial" else rotation.motion_reference
         if rotation.evidence_level == "persistent":
             parts.append(f"Persistent {rotation.strength} rotation evidence in {reference}.")
