@@ -10,7 +10,7 @@ from src.detection import DetectedObject
 from src.tracking.motion import MAX_MEASUREMENT_AGE_MINUTES, MotionVector, recent_heading_flip_count, report_motion, unknown_motion
 from src.tracking.association import MAX_REACQUISITION_MINUTES, associate_tracks
 from src.tracking.events import normalize_merge_event, normalize_reacquired_event, normalize_split_event
-from src.tracking.pattern_motion import guard_matches, match_storm, nearby_velocity, valid_matches
+from src.tracking.pattern_motion import MAX_MATCH_RANGE_KM, guard_matches, match_storm, nearby_velocity, valid_matches
 from src.tracking.types import (
     MAX_MEASURED_VELOCITIES,
     FocusContinuity,
@@ -386,6 +386,8 @@ class StormTracker:
         if previous_scan is not None:
             hours = (scan.timestamp - previous_scan.timestamp).total_seconds() / 3600.0
             for object_id, track in seen:
+                if track.current_object.distance_km > MAX_MATCH_RANGE_KM:
+                    continue  # never accepted; see pattern_motion.MAX_MATCH_RANGE_KM
                 found = match_storm(
                     scan.reflectivity_data,
                     np.asarray(scan.object_masks[object_id]),
@@ -400,13 +402,9 @@ class StormTracker:
             if track.last_pattern_match is not None
             and (scan.timestamp - track.last_pattern_match.timestamp).total_seconds() <= MAX_MEASUREMENT_AGE_MINUTES * 60.0
         }
-        accepted = guard_matches(
-            matches,
-            centres,
-            previous=previous_matches,
-            ranges_km={track.track_id: track.current_object.distance_km for _, track in seen},
-        )
-        for track_id, (east, north) in valid_matches(matches).items():
+        ranges_km = {track.track_id: track.current_object.distance_km for _, track in seen}
+        accepted = guard_matches(matches, centres, previous=previous_matches, ranges_km=ranges_km)
+        for track_id, (east, north) in valid_matches(matches, ranges_km).items():
             tracks_by_id[track_id].last_pattern_match = VelocitySample(timestamp=scan.timestamp, east_kmh=east, north_kmh=north)
 
         for _, track in seen:

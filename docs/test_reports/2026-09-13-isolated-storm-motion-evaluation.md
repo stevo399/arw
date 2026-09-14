@@ -128,7 +128,8 @@ better, and none was corroborated by the storm's previous match.
 **Storms judged by neighbours:** no accepted match exceeded 80 km/h in 4,165.
 
 **Rule.** An isolated match that is faster than 80 km/h, or lies farther than 350 km from the
-radar, is accepted only when the storm's previous match agrees with it.
+radar, is accepted only when the storm's previous match agrees with it. (The range part was
+superseded; see the next section.)
 
 | Isolated storms (868) | Accepted | Median km | p90 km | Mean IoU |
 |---|---|---|---|---|
@@ -138,3 +139,28 @@ radar, is accepted only when the storm's previous match agrees with it.
 
 Limits of 60 or 100 km/h and 300 km scored within 0.1 km of this. A fast storm that is really
 isolated reports its motion one scan later, once two matches agree.
+
+## Follow-up: no matching beyond 350 km
+
+The all-windows check of reported motion (`scripts/investigations/reported_motion_eval.py`,
+commit `5e4814b`) found its fastest report, 116 km/h, at KIWA 2026-09-07 23:37:44Z. Five storms
+350 to 405 km from the radar reported it.
+
+**What instrumentation showed:**
+- Their raw matches pointed every which way: (-63, -40), (-7, -153, on the search edge),
+  (-40, +109), (+8, -13) and (+128, +69) km/h east and north.
+- One of them, with 4 judging matches within 60 km, lay within 25 km/h of the vector median of
+  those equally noisy neighbours and was accepted.
+- Four storms then took its motion as nearby storms'.
+
+A neighbour median cannot guard against neighbours that are all noise. The evaluation above
+already showed no gain from matching beyond 350 km, even for storms neighbours judged:
+
+| Accepted matches, range 350-500 km | n | Median km: match / no motion | p90 km: match / no motion | Mean IoU: match / no motion |
+|---|---|---|---|---|
+| Judged by neighbours | 156 | 2.33 / 2.35 | 8.56 / 8.54 | 0.293 / 0.270 |
+| Isolated | 99 | 1.91 / 1.90 | 9.21 / 5.84 | 0.440 / 0.444 |
+
+**Rule.** No pattern match farther than 350 km from the radar is accepted, whether judged or
+corroborated, and none is computed. Storms beyond that range report nearby storms' measured
+motion when a storm within 60 km has one, and otherwise report motion as unknown.

@@ -165,6 +165,16 @@ def test_an_isolated_match_that_is_fast_or_far_needs_its_previous_match_to_agree
     fast = {1: _match(-78.0, -90.0, correlation=0.64)}
     assert guard_matches(fast, centres, ranges_km={1: 200.0}) == {}
     assert guard_matches(fast, centres, ranges_km={1: 200.0}, previous={1: (-75.0, -92.0)}) == {1: (-78.0, -90.0)}
-    far = {1: _match(20.0, 10.0, correlation=0.9)}
-    assert guard_matches(far, centres, ranges_km={1: 360.0}) == {}
-    assert guard_matches(far, centres, ranges_km={1: 340.0}) == {1: (20.0, 10.0)}
+    near = {1: _match(20.0, 10.0, correlation=0.9)}
+    assert guard_matches(near, centres, ranges_km={1: 340.0}) == {1: (20.0, 10.0)}
+
+
+def test_no_match_beyond_350_km_is_accepted_judged_or_corroborated():
+    """KIWA 2026-09-07 23:37Z: storms 350-405 km out matched in every direction, and one
+    within 25 km/h of its neighbours' noisy median was accepted at 116 km/h."""
+    centres = {track: (35.5 + 0.05 * track, -97.0) for track in range(1, 6)}
+    matches = {track: _match(-40.0, 100.0) for track in range(1, 6)}
+    far = {track: 360.0 for track in range(1, 6)}
+    assert guard_matches(matches, centres, ranges_km=far, previous={1: (-40.0, 100.0)}) == {}
+    near = {track: 340.0 for track in range(1, 6)}
+    assert set(guard_matches(matches, centres, ranges_km=near)) == {1, 2, 3, 4, 5}
