@@ -3,6 +3,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 
 import numpy as np
+from scipy.ndimage import find_objects
 
 from src.detection import DetectedObject
 from src.geometry import (
@@ -54,15 +55,24 @@ def _detect_regions_single_sweep(
         valid = ~np.isnan(velocity) & condition
         labeled_grid, count = label_periodic_azimuth(valid, structure=np.ones((3, 3), dtype=int))
 
-        for component_id in range(1, count + 1):
-            mask = labeled_grid == component_id
-            az_indices, rng_indices = np.where(mask)
+        # Each component is examined inside its bounding window: identical gates
+        # in identical (row-major) order to a full-grid mask, without scanning
+        # the whole sweep once per component.
+        for component_id, window in enumerate(find_objects(labeled_grid), start=1):
+            if window is None:
+                continue
+            window_mask = labeled_grid[window] == component_id
+            window_rows, window_cols = np.nonzero(window_mask)
+            az_indices = window_rows + window[0].start
+            rng_indices = window_cols + window[1].start
             area_km2 = float(np.sum(range_bin_areas[rng_indices]))
 
             if area_km2 < MIN_REGION_AREA_KM2:
                 continue
 
-            region_velocities = velocity[mask]
+            mask = np.zeros(labeled_grid.shape, dtype=bool)
+            mask[window] = window_mask
+            region_velocities = velocity[window][window_mask]
             if region_type == "inbound":
                 peak = float(np.nanmin(region_velocities))
             else:
@@ -605,12 +615,12 @@ def _associate_rotation_candidates(
     )
     assessed: list[RotationSignature] = []
     for candidate in candidates:
-        distance = _haversine_array_km(lat, lon, candidate.centroid_lat, candidate.centroid_lon)
         # Keep a non-zero radius for a one-gate component whose geometric
         # extent rounds to 0.0 km in the public product.
-        footprint = distance <= max(candidate.diameter_km / 2.0, 0.25)
+        radius_km = max(candidate.diameter_km / 2.0, 0.25)
+        rows, cols, footprint = _candidate_footprint(lat, lon, sweep, candidate, radius_km)
         overlaps = {
-            object_id: int(np.count_nonzero(mask & footprint))
+            object_id: int(np.count_nonzero(np.asarray(mask)[rows][:, cols] & footprint))
             for object_id, mask in object_masks.items()
         }
         object_id, overlap = max(overlaps.items(), key=lambda item: item[1], default=(None, 0))
@@ -631,6 +641,54 @@ def _associate_rotation_candidates(
             evidence_level=evidence_level,
         ))
     return assessed
+
+
+FOOTPRINT_WINDOW_MARGIN_KM = 3.0
+
+
+def _candidate_footprint(lat, lon, sweep, candidate, radius_km):
+    """Gates within `radius_km` of a candidate: (ray indices, gate slice, footprint).
+
+    Searched inside a polar window around the candidate instead of the whole
+    sweep.  If any footprint gate lies on the window's edge, the window might
+    have cut the footprint short, so the full sweep is used instead: the
+    result always equals the full-grid footprint.
+    """
+    ray_count, gate_count = lat.shape
+    full = (np.arange(ray_count), slice(0, gate_count))
+    distance_km = _haversine_km(sweep.radar_lat, sweep.radar_lon, candidate.centroid_lat, candidate.centroid_lon)
+    reach_km = radius_km + FOOTPRINT_WINDOW_MARGIN_KM
+    if distance_km > reach_km:
+        ranges_km = np.asarray(sweep.ranges_m, dtype=float) / 1000.0
+        first_gate = int(np.searchsorted(ranges_km, distance_km - reach_km * 2.0))
+        last_gate = int(np.searchsorted(ranges_km, distance_km + reach_km * 2.0))
+        half_width_deg = math.degrees(math.asin(min(reach_km / distance_km, 1.0))) * 2.0 + 1.0
+        # From the candidate's position, not its stored (rounded) bearing field.
+        phi1, phi2 = math.radians(sweep.radar_lat), math.radians(candidate.centroid_lat)
+        delta_lon = math.radians(candidate.centroid_lon - sweep.radar_lon)
+        bearing_deg = math.degrees(math.atan2(
+            math.sin(delta_lon) * math.cos(phi2),
+            math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(delta_lon),
+        )) % 360.0
+        offsets = (np.asarray(sweep.azimuths, dtype=float) - bearing_deg + 180.0) % 360.0 - 180.0
+        window_rays = np.flatnonzero(np.abs(offsets) <= half_width_deg)
+        window_gates = slice(max(first_gate - 1, 0), min(last_gate + 1, gate_count))
+        if window_rays.size and window_gates.stop > window_gates.start:
+            footprint = _haversine_array_km(
+                lat[window_rays][:, window_gates], lon[window_rays][:, window_gates],
+                candidate.centroid_lat, candidate.centroid_lon,
+            ) <= radius_km
+            ray_edge = np.abs(offsets[window_rays]) >= half_width_deg - 1.5
+            touches_edge = (
+                footprint[ray_edge].any()
+                or (window_gates.start > 0 and footprint[:, 0].any())
+                or (window_gates.stop < gate_count and footprint[:, -1].any())
+            )
+            if not touches_edge:
+                return window_rays, window_gates, footprint
+    rows, cols = full
+    footprint = _haversine_array_km(lat, lon, candidate.centroid_lat, candidate.centroid_lon) <= radius_km
+    return rows, cols, footprint
 
 
 def _haversine_array_km(lat1, lon1, lat2: float, lon2: float) -> np.ndarray:
