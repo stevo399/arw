@@ -232,7 +232,7 @@
   steps without merges/splits is best; nearby storms' motion is best for new storms. Report
   `docs/test_reports/2026-09-13-motion-prediction-evaluation.md`
 
-## Measured storm motion (2026-09-13) -- branch `measured-motion`
+## Measured storm motion (2026-09-13) -- merged to master and pushed (`091be12`)
 - **Owner decision:** test pattern matching before building. Guarded pattern matching beat centre
   steps and the scene estimate (`docs/test_reports/2026-09-13-pattern-motion-evaluation.md`)
 - **Storm motion is now measured:** each storm's surrounding echo is matched against the previous
@@ -264,17 +264,17 @@
   Report: `docs/test_reports/2026-09-13-measured-motion.md`
 
 ## In Progress
-- Branch `measured-motion`: finished and verified; merge decision pending
 - Owner review: keyboard-and-NVDA pass through the Weather Kitten recent-scans section
 - Spec 2 restoration is validated and documented; commit/merge decision pending
 
 ## Next
-- Speech calls the focus storm "Strongest" although focus is not chosen by strength
-- Intensity-band layer still takes 8-14 s on busy scans; further gains need changes inside coverage
+- #2 Speech calls the focus storm "Strongest" although focus is not chosen by strength
+- #3 Track positions and ended tracks accumulate without bound in tracker state
+- #4 Measured storm motion: known limits to address or re-verify
+- #7 Intensity-band layer still takes 8-14 s on busy scans; further gains need changes inside coverage
   simplification or contour georeferencing
-- Reduce the Level II parse peak (356 MB) and rendered-layer retention (up to ~6.7 MB per busy scan)
-- Issue #1 (motion fit spans a track's lifetime) is superseded by measured motion; close it
-- Classifier calibration. The membership parameters need deriving from data, not from a design
+- #5 Reduce the Level II parse peak (356 MB); #6 rendered-layer retention (up to ~6.7 MB per busy scan)
+- #8 Classifier calibration. The membership parameters need deriving from data, not from a design
   document. The two strict xfails are the measure: they start passing when it works
 - Spec 3 (SCIT cell identification), Spec 4 (hail/mesocyclone, needs volumetric parsing)
 
@@ -282,7 +282,7 @@
 - **The classifier is miscalibrated and its parameters are unvalidated.** Not blocking, because
   quality control no longer deletes anything — errors degrade annotation quality rather than
   removing weather. But no hazard call should be trusted until the two strict xfails pass
-- Rotation detection is over-sensitive. Safe to fix now: the flag-don't-filter change dissolved
+- #9 Rotation detection is over-sensitive. Safe to fix now: the flag-don't-filter change dissolved
   the earlier coupling where this defect was masking the classifier defect
 - Level III / MRMS cross-check (original Proof 3) deferred. Cross-checking a known-miscalibrated
   classifier against NWS products would mostly re-measure the miscalibration
