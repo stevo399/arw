@@ -4,12 +4,17 @@ Synthetic sweeps from tests/unit/test_velocity.py: 360 rays one degree apart,
 gates from 2 to 230 km (gate 155 is 72.8 km out, where one degree spans
 1.27 km), Nyquist velocity 26.2 m/s.
 """
+from dataclasses import replace
+
 import numpy as np
 
 from src.velocity import RotationDetectorConfig, detect_rotation_signatures
 from tests.unit.test_velocity import _make_sweep, _make_velocity_data
 
-AZIMUTHAL = RotationDetectorConfig(azimuthal_pairs_only=True)
+# Each rule is tested by switching it on from the baseline, so these tests do not
+# depend on which rules the corpus selected as defaults.
+BASELINE = RotationDetectorConfig.baseline()
+AZIMUTHAL = replace(BASELINE, azimuthal_pairs_only=True)
 
 
 def _radial_convergence():
@@ -43,7 +48,7 @@ def test_min_side_requires_both_inbound_and_outbound_strength():
     grid[55:60, 150:160] = 30.0
     velocity = _make_velocity_data([_make_sweep(grid)])
     assert detect_rotation_signatures(velocity, AZIMUTHAL)
-    assert detect_rotation_signatures(velocity, RotationDetectorConfig(azimuthal_pairs_only=True, min_side_ms=10.0)) == []
+    assert detect_rotation_signatures(velocity, replace(AZIMUTHAL, min_side_ms=10.0)) == []
 
 
 def test_fold_rejection_drops_a_jump_near_twice_nyquist():
@@ -52,7 +57,7 @@ def test_fold_rejection_drops_a_jump_near_twice_nyquist():
     grid[55:60, 150:160] = -24.0
     velocity = _make_velocity_data([_make_sweep(grid)])
     assert detect_rotation_signatures(velocity, AZIMUTHAL)
-    assert detect_rotation_signatures(velocity, RotationDetectorConfig(azimuthal_pairs_only=True, fold_rejection=True)) == []
+    assert detect_rotation_signatures(velocity, replace(AZIMUTHAL, fold_rejection=True)) == []
 
 
 def test_ground_overlap_merge_needs_candidates_to_overlap_not_just_lie_within_10_km():
@@ -63,7 +68,7 @@ def test_ground_overlap_merge_needs_candidates_to_overlap_not_just_lie_within_10
         _make_sweep(_azimuthal_couplet(57), elevation=0.88),
     ])
     by_distance = detect_rotation_signatures(velocity, AZIMUTHAL)
-    by_overlap = detect_rotation_signatures(velocity, RotationDetectorConfig(azimuthal_pairs_only=True, ground_overlap_merge=True))
+    by_overlap = detect_rotation_signatures(velocity, replace(AZIMUTHAL, ground_overlap_merge=True))
     assert max(s.sweep_count for s in by_distance) == 2
     assert max(s.sweep_count for s in by_overlap) == 1
 
@@ -73,7 +78,7 @@ def test_ground_overlap_merge_still_confirms_a_circulation_seen_on_two_tilts():
         _make_sweep(_azimuthal_couplet(50), elevation=0.48),
         _make_sweep(_azimuthal_couplet(50), elevation=0.88),
     ])
-    signatures = detect_rotation_signatures(velocity, RotationDetectorConfig(azimuthal_pairs_only=True, ground_overlap_merge=True))
+    signatures = detect_rotation_signatures(velocity, replace(AZIMUTHAL, ground_overlap_merge=True))
     assert [s.sweep_count for s in signatures] == [2]
 
 
@@ -83,4 +88,12 @@ def test_max_diameter_drops_candidates_larger_than_a_mesocyclone():
     grid[55:60, 100:140] = 20.0
     velocity = _make_velocity_data([_make_sweep(grid)])
     assert detect_rotation_signatures(velocity, AZIMUTHAL)
-    assert detect_rotation_signatures(velocity, RotationDetectorConfig(azimuthal_pairs_only=True, max_diameter_km=10.0)) == []
+    assert detect_rotation_signatures(velocity, replace(AZIMUTHAL, max_diameter_km=10.0)) == []
+
+
+def test_defaults_are_the_configuration_selected_on_the_corpus():
+    assert RotationDetectorConfig() == RotationDetectorConfig(
+        min_shear_ms=15.0, min_side_ms=0.0, max_diameter_km=None,
+        fold_rejection=True, azimuthal_pairs_only=True, ground_overlap_merge=True,
+    )
+    assert RotationDetectorConfig() != BASELINE

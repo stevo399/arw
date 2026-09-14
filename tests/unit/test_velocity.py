@@ -154,8 +154,12 @@ def test_detect_rotation_multi_sweep_increases_sweep_count():
     Elevations here match the Doppler cuts of a real split-cut VCP
     (0.48, 0.88, 1.27) rather than the invented 0.5/1.5 pair used previously.
     """
+    # Peaks stay below the fold band (a jump of 0.8 x 2 x Nyquist = 41.9 m/s
+    # with both sides above half Nyquist): -22/+22 beside each other is, on raw
+    # velocity, indistinguishable from an aliasing fold and is rejected by the
+    # rule selected in docs/superpowers/plans/2026-09-14-rotation-detection-truth.md.
     grids = []
-    for inbound_peak, outbound_peak in ((-20.0, 20.0), (-22.0, 22.0), (-21.0, 21.0)):
+    for inbound_peak, outbound_peak in ((-18.0, 18.0), (-20.0, 20.0), (-19.0, 19.0)):
         grid = np.full((360, 500), np.nan)
         grid[50:60, 150:160] = inbound_peak
         grid[60:70, 150:160] = outbound_peak
@@ -438,9 +442,14 @@ def test_rotation_single_sweep_many_couplets_yield_sweep_count_one():
     grid = _make_multi_couplet_single_sweep_grid()
     vel_data = _make_velocity_data([_make_sweep(grid, elevation=0.48)])
     signatures = detect_rotation_signatures(vel_data)
-    assert len(signatures) == 1
-    assert signatures[0].sweep_count == 1
-    assert signatures[0].elevation_angles == [0.48]
+    # The couplets span about 10 km of arc. Under 10 km merging they formed one
+    # signature; ground-overlap merging (plan 2026-09-14-rotation-detection-truth)
+    # keeps couplets that do not overlap a ~4 km circulation apart. The defect
+    # under test is sweep_count inflation, which must not occur in any group.
+    assert signatures
+    for signature in signatures:
+        assert signature.sweep_count == 1
+        assert signature.elevation_angles == [0.48]
 
 
 def _make_single_couplet_grid(az0: int = 40, rng_slice: slice = slice(20, 30)) -> np.ndarray:
@@ -484,12 +493,16 @@ def test_rotation_sweep_count_equals_distinct_elevation_count():
     ]
     vel_data = _make_velocity_data(sweeps)
     signatures = detect_rotation_signatures(vel_data)
-    assert len(signatures) == 1
-    sig = signatures[0]
-    assert sig.sweep_count == len(set(sig.elevation_angles))
-    assert sig.sweep_count <= len(sweeps)
-    assert sig.sweep_count == 3
-    assert set(sig.elevation_angles) == {0.48, 0.88, 1.27}
+    # Ground-overlap merging (plan 2026-09-14-rotation-detection-truth) can split
+    # sweep 1's 10 km line of couplets into more than one signature, so the
+    # invariant is checked on every signature, and the three tilts still meet.
+    assert signatures
+    for sig in signatures:
+        assert sig.sweep_count == len(set(sig.elevation_angles))
+        assert sig.sweep_count <= len(sweeps)
+    confirmed = max(signatures, key=lambda sig: sig.sweep_count)
+    assert confirmed.sweep_count == 3
+    assert set(confirmed.elevation_angles) == {0.48, 0.88, 1.27}
 
 
 def test_sweep_count_never_exceeds_three_sweeps_on_real_data():

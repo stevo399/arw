@@ -60,3 +60,121 @@ Detections = NWS mesocyclone detections (NMD) counted across the case's products
    within 200 km and 3 hours held widespread rain (3-18% of gates at 35 dBZ or more). The builder
    now applies the spec's clear-air definition (under 1% at 35 dBZ or more). Those three volumes
    became `null_storm` cases, scored only by null-storm probes.
+
+## Sweep and selection (Task 7)
+
+**Files:**
+- Sweep: `docs/test_reports/2026-09-14-rotation-sweep.json`, from
+  `scripts/evaluate_rotation_corpus_v2.py OUT --sweep`.
+- Baseline only: `docs/test_reports/2026-09-14-rotation-baseline.json`.
+- Selector: `scripts/select_rotation_config.py`.
+
+**What was run:** 68 volumes; the baseline plus 24 configurations. Every swept configuration uses both
+physics corrections: azimuthal pairs only, and ground-overlap merging.
+
+**Columns:**
+- Hits r1/r2/r3 are tornado events hit at evidence rank 1 (any), 2 (vertically confirmed or better) and
+  3 (persistent).
+- "Null r1" counts storm centroids more than 50 km from any report or NMD detection that carry a
+  rank-1 assessment.
+- "Clear r1" counts rank-1 assessments in clear-air volumes.
+- "Speak" lists the ranks that pass the pre-registered speak rule.
+- "Sec" is detector plus association time across all 68 volumes.
+
+| # | shear | side | diam | fold | hits r1 | r2 | r3 | null r1 | NMD | clear r1 | speak | sec |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| base | 15 | 0 | none | no | 4/5 | 3 | 2 | 910/5144 (0.177) | 6 | 16 | 3 | 403 |
+| 0 | 15 | 0 | none | no | 3/5 | 3 | 3 | 840/5144 (0.163) | 6 | 44 | 3 | 316 |
+| **1** | **15** | **0** | **none** | **yes** | **3/5** | **3** | **3** | **827/5144 (0.161)** | **14** | **42** | **3** | **315** |
+| 2 | 15 | 0 | 10 | no | 3/5 | 3 | 3 | 841/5144 (0.163) | 10 | 44 | 3 | 317 |
+| 3 | 15 | 0 | 10 | yes | 3/5 | 3 | 3 | 828/5144 (0.161) | 14 | 42 | 3 | 318 |
+| 4 | 15 | 10 | none | no | 2/5 | 2 | 2 | 278/5144 (0.054) | 5 | 10 | 3 | 111 |
+| 5 | 15 | 10 | none | yes | 2/5 | 2 | 2 | 257/5144 (0.050) | 12 | 6 | 3 | 101 |
+| 6 | 15 | 10 | 10 | no | 2/5 | 2 | 2 | 279/5144 (0.054) | 9 | 10 | 3 | 111 |
+| 7 | 15 | 10 | 10 | yes | 2/5 | 2 | 2 | 257/5144 (0.050) | 12 | 6 | 3 | 101 |
+| 8 | 20 | 0 | none | no | 2/5 | 2 | 2 | 606/5144 (0.118) | 4 | 26 | 3 | 201 |
+| 9 | 20 | 0 | none | yes | 2/5 | 2 | 2 | 590/5144 (0.115) | 12 | 26 | 3 | 200 |
+| 10 | 20 | 0 | 10 | no | 2/5 | 2 | 2 | 607/5144 (0.118) | 8 | 26 | 3 | 202 |
+| 11 | 20 | 0 | 10 | yes | 2/5 | 2 | 2 | 590/5144 (0.115) | 12 | 26 | 3 | 200 |
+| 12 | 20 | 10 | none | no | 2/5 | 2 | 2 | 278/5144 (0.054) | 5 | 10 | 3 | 110 |
+| 13 | 20 | 10 | none | yes | 2/5 | 2 | 2 | 257/5144 (0.050) | 12 | 6 | 3 | 100 |
+| 14 | 20 | 10 | 10 | no | 2/5 | 2 | 2 | 279/5144 (0.054) | 9 | 10 | 3 | 111 |
+| 15 | 20 | 10 | 10 | yes | 2/5 | 2 | 2 | 257/5144 (0.050) | 12 | 6 | 3 | 101 |
+| 16 | 25 | 0 | none | no | 2/5 | 2 | 2 | 430/5144 (0.084) | 4 | 15 | 3 | 145 |
+| 17 | 25 | 0 | none | yes | 2/5 | 2 | 2 | 413/5144 (0.080) | 12 | 15 | 3 | 143 |
+| 18 | 25 | 0 | 10 | no | 2/5 | 2 | 2 | 431/5144 (0.084) | 8 | 15 | 3 | 146 |
+| 19 | 25 | 0 | 10 | yes | 2/5 | 2 | 2 | 413/5144 (0.080) | 12 | 15 | 3 | 143 |
+| 20 | 25 | 10 | none | no | 2/5 | 2 | 2 | 246/5144 (0.048) | 5 | 10 | 3 | 104 |
+| 21 | 25 | 10 | none | yes | 2/5 | 2 | 2 | 226/5144 (0.044) | 12 | 6 | 3 | 93 |
+| 22 | 25 | 10 | 10 | no | 2/5 | 2 | 2 | 247/5144 (0.048) | 9 | 10 | 3 | 103 |
+| 23 | 25 | 10 | 10 | yes | 2/5 | 2 | 2 | 226/5144 (0.044) | 12 | 6 | 3 | 93 |
+
+**Selected by the pre-registered rule: configuration 1.**
+- Rule: most rank-1 tornado hits with a null fraction no higher than the baseline's (0.177). Ties
+  go to the lower null fraction.
+- Configuration 1 settings: shear 15 m/s, no side minimum, no diameter limit, fold rejection,
+  azimuthal pairs only, ground-overlap merge.
+- These are now the `RotationDetectorConfig` defaults. `RotationDetectorConfig.baseline()` keeps the
+  earlier rules.
+
+### Selected configuration by evidence rank
+
+| Rank | Tornado hits | Null false alarms | Clear-air false alarms | NMD matched | Speakable |
+|---|---|---|---|---|---|
+| 1 (any) | 3/5 | 827/5144 (0.161) | 42 | 14 | no |
+| 2 (vertically confirmed) | 3/5 | 373/5144 (0.073) | 14 | 10 | no |
+| 3 (persistent) | 3/5 | 240/5144 (0.047) | **0** | 7 | **yes** |
+
+Baseline, for comparison: rank 3 hit 2/5 at 219/5144 (0.043). Rank 3 was its only speakable rank too.
+
+### Trade-offs
+
+1. **The corrections lose one weak tornado at rank 1: San Antonio, KEWX, 10:20Z.**
+   - The baseline reached it only through pairs along the beam or 10 km merging. Those rules are
+     physically wrong: opposite signs along a ray are convergence or divergence, not rotation.
+   - At rank 3 the selected configuration hits 3 events against the baseline's 2.
+2. **Clear-air rank-1 assessments rose from 16 to 42.**
+   - quiet-KAMA accounts for 37 and KIWA for 4. quiet-KAMA's noon volume holds scattered
+     convection (0.69% of gates at 35 dBZ or more).
+   - Ranks 1 and 2 fail the speak rule for this reason, and rank 3 has none.
+3. **Agreement with NWS mesocyclone detections improved from 6 to 14 at rank 1.**
+   - Most of the gain comes from fold rejection: configuration 0, without it, stays at 6.
+   - The cause was not traced. Likely, but unverified: a fold candidate merged with a real one
+     and moved the merged centroid away from the circulation.
+4. **Configurations with a 10 m/s side minimum (4-7, 12-15, 20-23) cut false alarms by about 70%.**
+   They also lose Spring Grove (KAKQ) at rank 1, and hit one fewer event at ranks 2 and 3. The pre-registered rule ranks hits
+   first, so they were not selected. They remain the obvious candidates if a larger corpus shows the
+   extra hit is chance.
+5. **The corpus is small.**
+   - 5 scorable tornado events, all weak.
+   - A 1-event difference is within chance.
+   - Nothing here shows the detector is good at rank 1 or 2. It shows only that persistent evidence
+     beats report-free storms by the pre-registered margin.
+
+### Strong-rotation check: fold rejection on Moore 2013 (EF5, KTLX)
+
+Fold rejection treats any gate pair jumping by at least 0.8 × 2 × Nyquist, with both sides above half
+Nyquist, as an aliasing fold. On raw velocity a very strong real couplet looks the same. The corpus
+holds only weak tornadoes, so the sweep could not measure that cost. Two cached Moore volumes were
+checked on the live path (raw velocity, Nyquist 26.1 m/s):
+
+**Volume KTLX20130520_195527:**
+- SPC report: Newcastle, 19:56Z.
+- Baseline and physics-only: 52 m/s, both sides saturated at ±26, 3.8-4.0 km from the report, on 3
+  tilts.
+- With fold rejection: that pair is dropped. The circulation is still found 4.8 km from the report
+  at 41 m/s, on 3 tilts (`vertically_confirmed`).
+
+**Volume KTLX20130520_200356:** it has no tornado position report to score against, so it is not
+used as evidence.
+
+**Conclusion:**
+- Fold rejection did not erase this EF5 circulation, so the selection stands.
+- On raw velocity no shear above twice Nyquist can be measured, with or without the rule.
+- Detection of the strongest couplets therefore depends on the neighbouring, less-extreme pairs
+  surviving, as they did here.
+- One case is not a guarantee. More strong-tornado volumes belong in the next corpus.
+
+Synthetic test consequence: `test_detect_rotation_multi_sweep_increases_sweep_count` used ±22 m/s
+beside each other (Nyquist 26.2), which falls inside the fold band. Its peaks were lowered to ±18-20
+m/s because the test concerns sweep counting, not folds.

@@ -165,9 +165,11 @@ GROUND_OVERLAP_MARGIN_KM = 1.0
 class RotationDetectorConfig:
     """Rules for rotation candidates.
 
-    The defaults reproduce the detector as it was before 2026-09-14 exactly,
-    so it can be measured as the baseline; values are selected on the
-    rotation corpus (docs/superpowers/plans/2026-09-14-rotation-detection-truth.md).
+    The defaults are the configuration selected on rotation corpus v2 by the
+    pre-registered rule (docs/test_reports/2026-09-14-rotation-corpus.md,
+    "Sweep and selection"): shear 15 m/s, no side minimum, no diameter limit,
+    fold rejection, azimuthal pairs only, ground-overlap merging.
+    `baseline()` is the detector as it was before 2026-09-14.
 
     azimuthal_pairs_only: a candidate pair lies on adjacent rays at the same
     gate.  Opposite signs along one ray are convergence or divergence, and a
@@ -180,13 +182,14 @@ class RotationDetectorConfig:
     min_shear_ms: float = MIN_SHEAR_MS
     min_side_ms: float = 0.0
     max_diameter_km: float | None = None
-    fold_rejection: bool = False
-    azimuthal_pairs_only: bool = False
-    ground_overlap_merge: bool = False
+    fold_rejection: bool = True
+    azimuthal_pairs_only: bool = True
+    ground_overlap_merge: bool = True
 
     @classmethod
     def baseline(cls) -> "RotationDetectorConfig":
-        return cls()
+        return cls(min_shear_ms=15.0, min_side_ms=0.0, max_diameter_km=None, fold_rejection=False,
+                   azimuthal_pairs_only=False, ground_overlap_merge=False)
 
 
 @dataclass
