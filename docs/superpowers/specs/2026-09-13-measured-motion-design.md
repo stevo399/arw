@@ -107,3 +107,19 @@ and 6 km/h is the 95% bound for a zero velocity under that noise. "Stationary" i
    - reacquisition survey rerun;
    - live check;
    - report and `PROGRESS.md`.
+
+## Amendments from verification (2026-09-13)
+
+The benchmark and the all-windows check found false matches the evaluated guards let through. Each
+rule below was added from evidence recorded in
+`docs/test_reports/2026-09-13-isolated-storm-motion-evaluation.md`:
+
+- Matches are within 150 km/h in any direction, not per axis (the square window reached 190 km/h).
+- Velocities measured more than 20 minutes ago are not reported.
+- A storm with fewer than 3 judging neighbours needs correlation of at least 0.6.
+- A match rejected by these rules is accepted when it agrees within 10 km/h with the storm's
+  previous valid match (a stationary echo among moving storms).
+- No match beyond 350 km from the radar is computed or accepted.
+- Any match faster than 80 km/h needs that corroboration.
+
+Results: `docs/test_reports/2026-09-13-measured-motion.md`.

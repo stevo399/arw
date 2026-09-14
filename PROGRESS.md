@@ -232,10 +232,39 @@
   steps without merges/splits is best; nearby storms' motion is best for new storms. Report
   `docs/test_reports/2026-09-13-motion-prediction-evaluation.md`
 
+## Measured storm motion (2026-09-13) -- branch `measured-motion`
+- **Owner decision:** test pattern matching before building. Guarded pattern matching beat centre
+  steps and the scene estimate (`docs/test_reports/2026-09-13-pattern-motion-evaluation.md`)
+- **Storm motion is now measured:** each storm's surrounding echo is matched against the previous
+  scan on a ground grid (`src/tracking/pattern_motion.py`).
+  - **Guards:** edge peaks and matches over 150 km/h or beyond 350 km are not matches; neighbours'
+    vector median judges storms with 3+ matches within 60 km; isolated storms need correlation
+    0.6; anything over 80 km/h needs corroboration.
+  - **Rescue:** a rejected match agreeing within 10 km/h with the storm's previous match is
+    accepted.
+  - **Evidence:** every guard came from the benchmark or the all-windows check
+    (`docs/test_reports/2026-09-13-isolated-storm-motion-evaluation.md`)
+- **Reporting:**
+  - a storm seen twice reports the median of its last three measured velocities;
+  - otherwise nearby storms' motion, spoken as "likely moving ... with nearby storms" (always for
+    one-position storms, owner decision);
+  - otherwise "motion not yet known". Never "stationary"; "nearly stationary" below the 6 km/h
+    noise bound
+- Storm matching and reacquisition use measured motion; the scene estimate (`motion_field.py`) is
+  removed. Tracker state version 2
+- **Verified:**
+  - all 213 cached scans: reported motion predicts the next position better than no motion
+    (median 1.29 against 2.23 km, p90 7.57 against 7.73, outline IoU 0.452 against 0.359);
+  - fastest report 79.5 km/h;
+  - benchmark storm matching unchanged;
+  - reacquired 40 -> 48;
+  - live KJAX/KIWA/KMLB coherent;
+  - full suite 567 passed, 3 xfailed.
+
+  Report: `docs/test_reports/2026-09-13-measured-motion.md`
+
 ## In Progress
-- Motion redesign: design proposed to owner, awaiting approval. Replace the scene-wide estimate;
-  report motion from recent clean steps; nearby storms' motion for young storms (owner decision);
-  never report "stationary" for a storm with one position
+- Branch `measured-motion`: finished and verified; merge decision pending
 - Owner review: keyboard-and-NVDA pass through the Weather Kitten recent-scans section
 - Spec 2 restoration is validated and documented; commit/merge decision pending
 
@@ -244,7 +273,7 @@
 - Intensity-band layer still takes 8-14 s on busy scans; further gains need changes inside coverage
   simplification or contour georeferencing
 - Reduce the Level II parse peak (356 MB) and rendered-layer retention (up to ~6.7 MB per busy scan)
-- Issue #1: window the motion fit
+- Issue #1 (motion fit spans a track's lifetime) is superseded by measured motion; close it
 - Classifier calibration. The membership parameters need deriving from data, not from a design
   document. The two strict xfails are the measure: they start passing when it works
 - Spec 3 (SCIT cell identification), Spec 4 (hail/mesocyclone, needs volumetric parsing)

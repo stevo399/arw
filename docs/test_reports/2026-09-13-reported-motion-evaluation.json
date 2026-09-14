@@ -1,0 +1,268 @@
+{
+  "reported_motion_sources": {
+    "not_measured": 1761,
+    "pattern_match": 6757,
+    "nearby_storms": 2645
+  },
+  "reported_heading_labels": {
+    "ENE": 1917,
+    "unknown": 1761,
+    "E": 1403,
+    "NE": 1262,
+    "nearly stationary": 1177,
+    "ESE": 968,
+    "NNE": 556,
+    "WSW": 384,
+    "W": 293,
+    "N": 288,
+    "SE": 233,
+    "NNW": 219,
+    "NW": 151,
+    "WNW": 142,
+    "S": 139,
+    "SW": 98,
+    "SSE": 88,
+    "SSW": 84
+  },
+  "fastest_reported": [
+    [
+      79.5,
+      "KIWA",
+      "2026-09-12 23:24:46+00:00",
+      74,
+      "nearby_storms"
+    ],
+    [
+      69.0,
+      "KMLB",
+      "2026-09-08 01:35:14+00:00",
+      51,
+      "pattern_match"
+    ],
+    [
+      68.9,
+      "KJAX",
+      "2026-09-07 23:10:13+00:00",
+      78,
+      "pattern_match"
+    ],
+    [
+      68.2,
+      "KIWA",
+      "2026-09-07 23:20:55+00:00",
+      107,
+      "nearby_storms"
+    ],
+    [
+      67.3,
+      "KIWA",
+      "2026-09-07 23:29:19+00:00",
+      107,
+      "pattern_match"
+    ],
+    [
+      67.0,
+      "KIWA",
+      "2026-09-11 19:56:30+00:00",
+      58,
+      "nearby_storms"
+    ],
+    [
+      67.0,
+      "KIWA",
+      "2026-09-11 19:56:30+00:00",
+      44,
+      "nearby_storms"
+    ],
+    [
+      67.0,
+      "KIWA",
+      "2026-09-11 19:56:30+00:00",
+      43,
+      "nearby_storms"
+    ],
+    [
+      67.0,
+      "KIWA",
+      "2026-09-11 19:56:30+00:00",
+      24,
+      "nearby_storms"
+    ],
+    [
+      67.0,
+      "KIWA",
+      "2026-09-11 19:56:30+00:00",
+      15,
+      "pattern_match"
+    ]
+  ],
+  "all": {
+    "n": 6137,
+    "median_error_km": {
+      "reported": 1.285,
+      "stationary": 2.228
+    },
+    "p90_error_km": {
+      "reported": 7.57,
+      "stationary": 7.726
+    },
+    "mean_iou": {
+      "reported": 0.4522,
+      "stationary": 0.3592
+    }
+  },
+  "clean_targets": {
+    "n": 5097,
+    "median_error_km": {
+      "reported": 1.152,
+      "stationary": 2.127
+    },
+    "p90_error_km": {
+      "reported": 6.9,
+      "stationary": 7.399
+    },
+    "mean_iou": {
+      "reported": 0.4592,
+      "stationary": 0.3595
+    }
+  },
+  "by_source": {
+    "nearby_storms": {
+      "n": 1445,
+      "median_error_km": {
+        "reported": 1.586,
+        "stationary": 2.273
+      },
+      "p90_error_km": {
+        "reported": 8.606,
+        "stationary": 8.426
+      },
+      "mean_iou": {
+        "reported": 0.3222,
+        "stationary": 0.2524
+      }
+    },
+    "pattern_match": {
+      "n": 4692,
+      "median_error_km": {
+        "reported": 1.211,
+        "stationary": 2.218
+      },
+      "p90_error_km": {
+        "reported": 6.984,
+        "stationary": 7.514
+      },
+      "mean_iou": {
+        "reported": 0.4922,
+        "stationary": 0.3921
+      }
+    }
+  },
+  "by_site": {
+    "KEYX": {
+      "n": 147,
+      "median_error_km": {
+        "reported": 0.635,
+        "stationary": 1.533
+      },
+      "p90_error_km": {
+        "reported": 2.548,
+        "stationary": 4.646
+      },
+      "mean_iou": {
+        "reported": 0.5304,
+        "stationary": 0.4328
+      }
+    },
+    "KFWS": {
+      "n": 266,
+      "median_error_km": {
+        "reported": 0.916,
+        "stationary": 1.513
+      },
+      "p90_error_km": {
+        "reported": 5.619,
+        "stationary": 5.886
+      },
+      "mean_iou": {
+        "reported": 0.5264,
+        "stationary": 0.4696
+      }
+    },
+    "KIWA": {
+      "n": 680,
+      "median_error_km": {
+        "reported": 1.509,
+        "stationary": 2.011
+      },
+      "p90_error_km": {
+        "reported": 7.175,
+        "stationary": 7.203
+      },
+      "mean_iou": {
+        "reported": 0.387,
+        "stationary": 0.336
+      }
+    },
+    "KJAX": {
+      "n": 2219,
+      "median_error_km": {
+        "reported": 1.4,
+        "stationary": 2.149
+      },
+      "p90_error_km": {
+        "reported": 8.743,
+        "stationary": 8.935
+      },
+      "mean_iou": {
+        "reported": 0.4344,
+        "stationary": 0.3515
+      }
+    },
+    "KMLB": {
+      "n": 848,
+      "median_error_km": {
+        "reported": 1.302,
+        "stationary": 2.068
+      },
+      "p90_error_km": {
+        "reported": 7.583,
+        "stationary": 7.655
+      },
+      "mean_iou": {
+        "reported": 0.4527,
+        "stationary": 0.3758
+      }
+    },
+    "KSOX": {
+      "n": 21,
+      "median_error_km": {
+        "reported": 0.459,
+        "stationary": 0.448
+      },
+      "p90_error_km": {
+        "reported": 2.271,
+        "stationary": 2.225
+      },
+      "mean_iou": {
+        "reported": 0.4599,
+        "stationary": 0.4692
+      }
+    },
+    "KTLX": {
+      "n": 1956,
+      "median_error_km": {
+        "reported": 1.212,
+        "stationary": 2.665
+      },
+      "p90_error_km": {
+        "reported": 6.632,
+        "stationary": 6.86
+      },
+      "mean_iou": {
+        "reported": 0.4787,
+        "stationary": 0.3472
+      }
+    }
+  }
+}
