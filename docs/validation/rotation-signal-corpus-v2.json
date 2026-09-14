@@ -1,0 +1,4563 @@
+{
+  "schema_version": 2,
+  "built_utc": "2026-09-14T05:11:11",
+  "purpose": "Rotation detection validation (docs/superpowers/specs/2026-09-14-detection-truth-design.md, A1). Report locations and NWS detections describe events, not per-gate truth.",
+  "spc_days": [
+    "2026-07-12",
+    "2026-07-14",
+    "2026-09-07",
+    "2026-09-11",
+    "2026-09-12"
+  ],
+  "cases": [
+    {
+      "id": "tornado-20260712-1945-0",
+      "label": "tornado",
+      "site_id": "KAMA",
+      "radar_distance_km": 15.5,
+      "report": {
+        "kind": "tornado",
+        "time_utc": "2026-07-12T19:45:00",
+        "latitude": 35.1,
+        "longitude": -101.76,
+        "magnitude": null,
+        "location": "3 NNE Lake Tanglewood",
+        "state": "TX"
+      },
+      "volumes": [
+        "cache/KAMA/KAMA20260712_192500_V06",
+        "cache/KAMA/KAMA20260712_192920_V06",
+        "cache/KAMA/KAMA20260712_193339_V06",
+        "cache/KAMA/KAMA20260712_193822_V06",
+        "cache/KAMA/KAMA20260712_194257_V06",
+        "cache/KAMA/KAMA20260712_194738_V06",
+        "cache/KAMA/KAMA20260712_195220_V06"
+      ],
+      "nmd": [
+        "cache/level3/AMA/AMA_NMD_2026_07_12_19_20_40",
+        "cache/level3/AMA/AMA_NMD_2026_07_12_19_25_00",
+        "cache/level3/AMA/AMA_NMD_2026_07_12_19_29_20",
+        "cache/level3/AMA/AMA_NMD_2026_07_12_19_33_39",
+        "cache/level3/AMA/AMA_NMD_2026_07_12_19_38_22",
+        "cache/level3/AMA/AMA_NMD_2026_07_12_19_42_57",
+        "cache/level3/AMA/AMA_NMD_2026_07_12_19_47_38",
+        "cache/level3/AMA/AMA_NMD_2026_07_12_19_52_20",
+        "cache/level3/AMA/AMA_NMD_2026_07_12_19_57_02"
+      ]
+    },
+    {
+      "id": "tornado-20260715-1020-1",
+      "label": "tornado",
+      "site_id": "KEWX",
+      "radar_distance_km": 52.4,
+      "report": {
+        "kind": "tornado",
+        "time_utc": "2026-07-15T10:20:00",
+        "latitude": 29.43,
+        "longitude": -98.47,
+        "magnitude": null,
+        "location": "2 ENE San Antonio",
+        "state": "TX"
+      },
+      "volumes": [
+        "cache/KEWX/KEWX20260715_100341_V06",
+        "cache/KEWX/KEWX20260715_101016_V06",
+        "cache/KEWX/KEWX20260715_101652_V06",
+        "cache/KEWX/KEWX20260715_102328_V06"
+      ],
+      "nmd": [
+        "cache/level3/EWX/EWX_NMD_2026_07_15_09_57_06",
+        "cache/level3/EWX/EWX_NMD_2026_07_15_10_03_41",
+        "cache/level3/EWX/EWX_NMD_2026_07_15_10_10_16",
+        "cache/level3/EWX/EWX_NMD_2026_07_15_10_16_52",
+        "cache/level3/EWX/EWX_NMD_2026_07_15_10_23_28",
+        "cache/level3/EWX/EWX_NMD_2026_07_15_10_30_04"
+      ]
+    },
+    {
+      "id": "tornado-20260907-1939-2",
+      "label": "tornado",
+      "site_id": "KLIX",
+      "radar_distance_km": 67.2,
+      "report": {
+        "kind": "tornado",
+        "time_utc": "2026-09-07T19:39:00",
+        "latitude": 30.5,
+        "longitude": -90.5,
+        "magnitude": null,
+        "location": "2 W Hammond",
+        "state": "LA"
+      },
+      "volumes": [],
+      "nmd": []
+    },
+    {
+      "id": "tornado-20260907-2335-3",
+      "label": "tornado",
+      "site_id": "KMBX",
+      "radar_distance_km": 80.3,
+      "report": {
+        "kind": "tornado",
+        "time_utc": "2026-09-07T23:35:00",
+        "latitude": 47.67,
+        "longitude": -100.87,
+        "magnitude": null,
+        "location": "6 S Strawberry Lake",
+        "state": "ND"
+      },
+      "volumes": [
+        "cache/KMBX/KMBX20260907_231900_V06",
+        "cache/KMBX/KMBX20260907_232418_V06",
+        "cache/KMBX/KMBX20260907_232951_V06",
+        "cache/KMBX/KMBX20260907_233526_V06",
+        "cache/KMBX/KMBX20260907_234101_V06"
+      ],
+      "nmd": [
+        "cache/level3/MBX/MBX_NMD_2026_09_07_23_13_42",
+        "cache/level3/MBX/MBX_NMD_2026_09_07_23_19_00",
+        "cache/level3/MBX/MBX_NMD_2026_09_07_23_24_18",
+        "cache/level3/MBX/MBX_NMD_2026_09_07_23_29_51",
+        "cache/level3/MBX/MBX_NMD_2026_09_07_23_35_26",
+        "cache/level3/MBX/MBX_NMD_2026_09_07_23_41_01",
+        "cache/level3/MBX/MBX_NMD_2026_09_07_23_46_36"
+      ]
+    },
+    {
+      "id": "tornado-20260912-1940-7",
+      "label": "tornado",
+      "site_id": "KJAX",
+      "radar_distance_km": 106.4,
+      "report": {
+        "kind": "tornado",
+        "time_utc": "2026-09-12T19:40:00",
+        "latitude": 29.6,
+        "longitude": -81.28,
+        "magnitude": null,
+        "location": "5 WNW Palm Coast",
+        "state": "FL"
+      },
+      "volumes": [
+        "cache/KJAX/KJAX20260912_192423_V06",
+        "cache/KJAX/KJAX20260912_192940_V06",
+        "cache/KJAX/KJAX20260912_193409_V06",
+        "cache/KJAX/KJAX20260912_193850_V06",
+        "cache/KJAX/KJAX20260912_194324_V06",
+        "cache/KJAX/KJAX20260912_194758_V06"
+      ],
+      "nmd": [
+        "cache/level3/JAX/JAX_NMD_2026_09_12_19_18_21",
+        "cache/level3/JAX/JAX_NMD_2026_09_12_19_29_40",
+        "cache/level3/JAX/JAX_NMD_2026_09_12_19_34_09",
+        "cache/level3/JAX/JAX_NMD_2026_09_12_19_38_50",
+        "cache/level3/JAX/JAX_NMD_2026_09_12_19_43_24",
+        "cache/level3/JAX/JAX_NMD_2026_09_12_19_47_58",
+        "cache/level3/JAX/JAX_NMD_2026_09_12_19_52_39"
+      ]
+    },
+    {
+      "id": "tornado-20260912-2046-8",
+      "label": "tornado",
+      "site_id": "KAKQ",
+      "radar_distance_km": 20.0,
+      "report": {
+        "kind": "tornado",
+        "time_utc": "2026-09-12T20:46:00",
+        "latitude": 37.16,
+        "longitude": -76.96,
+        "magnitude": null,
+        "location": "1 ESE Spring Grove",
+        "state": "VA"
+      },
+      "volumes": [
+        "cache/KAKQ/KAKQ20260912_202949_V06",
+        "cache/KAKQ/KAKQ20260912_203516_V06",
+        "cache/KAKQ/KAKQ20260912_204045_V06",
+        "cache/KAKQ/KAKQ20260912_204612_V06",
+        "cache/KAKQ/KAKQ20260912_205141_V06"
+      ],
+      "nmd": [
+        "cache/level3/AKQ/AKQ_NMD_2026_09_12_20_24_20",
+        "cache/level3/AKQ/AKQ_NMD_2026_09_12_20_29_49",
+        "cache/level3/AKQ/AKQ_NMD_2026_09_12_20_35_16",
+        "cache/level3/AKQ/AKQ_NMD_2026_09_12_20_40_45",
+        "cache/level3/AKQ/AKQ_NMD_2026_09_12_20_46_12",
+        "cache/level3/AKQ/AKQ_NMD_2026_09_12_20_51_41",
+        "cache/level3/AKQ/AKQ_NMD_2026_09_12_20_56_59"
+      ]
+    },
+    {
+      "id": "hail-20260715-0431-0",
+      "label": "hail",
+      "site_id": "KTYX",
+      "radar_distance_km": 87.2,
+      "report": {
+        "kind": "hail",
+        "time_utc": "2026-07-15T04:31:00",
+        "latitude": 44.47,
+        "longitude": -75.23,
+        "magnitude": 2.75,
+        "location": "Hermon",
+        "state": "NY"
+      },
+      "volumes": [
+        "cache/KTYX/KTYX20260715_042520_V06",
+        "cache/KTYX/KTYX20260715_042947_V06",
+        "cache/KTYX/KTYX20260715_043405_V06"
+      ],
+      "nmd": [
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_16_33",
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_20_41",
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_25_20",
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_29_47",
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_34_05",
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_38_24"
+      ]
+    },
+    {
+      "id": "hail-20260715-0018-1",
+      "label": "hail",
+      "site_id": "KTFX",
+      "radar_distance_km": 124.9,
+      "report": {
+        "kind": "hail",
+        "time_utc": "2026-07-15T00:18:00",
+        "latitude": 47.01,
+        "longitude": -109.87,
+        "magnitude": 2.5,
+        "location": "1 N Hobson",
+        "state": "MT"
+      },
+      "volumes": [
+        "cache/KTFX/KTFX20260715_001209_V06",
+        "cache/KTFX/KTFX20260715_001652_V06",
+        "cache/KTFX/KTFX20260715_002145_V06"
+      ],
+      "nmd": []
+    },
+    {
+      "id": "hail-20260912-0259-2",
+      "label": "hail",
+      "site_id": "KEWX",
+      "radar_distance_km": 34.0,
+      "report": {
+        "kind": "hail",
+        "time_utc": "2026-09-12T02:59:00",
+        "latitude": 29.49,
+        "longitude": -98.28,
+        "magnitude": 2.5,
+        "location": "3 SE Converse",
+        "state": "TX"
+      },
+      "volumes": [
+        "cache/KEWX/KEWX20260912_025217_V06",
+        "cache/KEWX/KEWX20260912_025919_V06"
+      ],
+      "nmd": [
+        "cache/level3/EWX/EWX_NMD_2026_09_12_02_45_16",
+        "cache/level3/EWX/EWX_NMD_2026_09_12_02_52_17",
+        "cache/level3/EWX/EWX_NMD_2026_09_12_02_59_19",
+        "cache/level3/EWX/EWX_NMD_2026_09_12_03_06_20"
+      ]
+    },
+    {
+      "id": "hail-20260715-0418-3",
+      "label": "hail",
+      "site_id": "KTYX",
+      "radar_distance_km": 90.4,
+      "report": {
+        "kind": "hail",
+        "time_utc": "2026-07-15T04:18:00",
+        "latitude": 44.55,
+        "longitude": -75.44,
+        "magnitude": 2.0,
+        "location": "De Peyster",
+        "state": "NY"
+      },
+      "volumes": [
+        "cache/KTYX/KTYX20260715_040811_V06",
+        "cache/KTYX/KTYX20260715_041224_V06",
+        "cache/KTYX/KTYX20260715_041633_V06",
+        "cache/KTYX/KTYX20260715_042041_V06"
+      ],
+      "nmd": [
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_03_58",
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_08_11",
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_12_24",
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_16_33",
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_20_41",
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_25_20"
+      ]
+    },
+    {
+      "id": "hail-20260715-0428-4",
+      "label": "hail",
+      "site_id": "KTYX",
+      "radar_distance_km": 87.1,
+      "report": {
+        "kind": "hail",
+        "time_utc": "2026-07-15T04:28:00",
+        "latitude": 44.5,
+        "longitude": -75.34,
+        "magnitude": 2.0,
+        "location": "De Kalb",
+        "state": "NY"
+      },
+      "volumes": [
+        "cache/KTYX/KTYX20260715_042041_V06",
+        "cache/KTYX/KTYX20260715_042520_V06",
+        "cache/KTYX/KTYX20260715_042947_V06"
+      ],
+      "nmd": [
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_16_33",
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_20_41",
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_25_20",
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_29_47",
+        "cache/level3/TYX/TYX_NMD_2026_07_15_04_34_05"
+      ]
+    },
+    {
+      "id": "hail-20260913-0010-5",
+      "label": "hail",
+      "site_id": "KDDC",
+      "radar_distance_km": 72.5,
+      "report": {
+        "kind": "hail",
+        "time_utc": "2026-09-13T00:10:00",
+        "latitude": 37.35,
+        "longitude": -99.33,
+        "magnitude": 2.0,
+        "location": "6 N Coldwater",
+        "state": "KS"
+      },
+      "volumes": [
+        "cache/KDDC/KDDC20260913_000451_V06",
+        "cache/KDDC/KDDC20260913_001101_V06"
+      ],
+      "nmd": [
+        "cache/level3/DDC/DDC_NMD_2026_09_12_23_58_40",
+        "cache/level3/DDC/DDC_NMD_2026_09_13_00_04_51",
+        "cache/level3/DDC/DDC_NMD_2026_09_13_00_11_01",
+        "cache/level3/DDC/DDC_NMD_2026_09_13_00_16_59"
+      ]
+    },
+    {
+      "id": "wind-20260715-0155-0",
+      "label": "wind",
+      "site_id": "KBLX",
+      "radar_distance_km": 112.6,
+      "report": {
+        "kind": "wind",
+        "time_utc": "2026-07-15T01:55:00",
+        "latitude": 46.84,
+        "longitude": -108.94,
+        "magnitude": 86.0,
+        "location": "12 SSE Forestgrove",
+        "state": "MT"
+      },
+      "volumes": [
+        "cache/KBLX/KBLX20260715_014830_V06",
+        "cache/KBLX/KBLX20260715_015342_V06",
+        "cache/KBLX/KBLX20260715_015831_V06"
+      ],
+      "nmd": [
+        "cache/level3/BLX/BLX_NMD_2026_07_15_01_43_19",
+        "cache/level3/BLX/BLX_NMD_2026_07_15_01_48_30",
+        "cache/level3/BLX/BLX_NMD_2026_07_15_01_53_42",
+        "cache/level3/BLX/BLX_NMD_2026_07_15_01_58_31",
+        "cache/level3/BLX/BLX_NMD_2026_07_15_02_03_27"
+      ]
+    },
+    {
+      "id": "wind-20260713-0100-2",
+      "label": "wind",
+      "site_id": "KBLX",
+      "radar_distance_km": 116.8,
+      "report": {
+        "kind": "wind",
+        "time_utc": "2026-07-13T01:00:00",
+        "latitude": 46.9,
+        "longitude": -108.74,
+        "magnitude": 77.0,
+        "location": "9 SSE Grass Range",
+        "state": "MT"
+      },
+      "volumes": [
+        "cache/KBLX/KBLX20260713_005359_V06",
+        "cache/KBLX/KBLX20260713_005808_V06",
+        "cache/KBLX/KBLX20260713_010218_V06"
+      ],
+      "nmd": [
+        "cache/level3/BLX/BLX_NMD_2026_07_13_00_45_46",
+        "cache/level3/BLX/BLX_NMD_2026_07_13_00_49_49",
+        "cache/level3/BLX/BLX_NMD_2026_07_13_00_53_59",
+        "cache/level3/BLX/BLX_NMD_2026_07_13_00_58_08",
+        "cache/level3/BLX/BLX_NMD_2026_07_13_01_02_18",
+        "cache/level3/BLX/BLX_NMD_2026_07_13_01_06_28"
+      ]
+    },
+    {
+      "id": "wind-20260912-2305-3",
+      "label": "wind",
+      "site_id": "KDDC",
+      "radar_distance_km": 80.3,
+      "report": {
+        "kind": "wind",
+        "time_utc": "2026-09-12T23:05:00",
+        "latitude": 37.06,
+        "longitude": -99.75,
+        "magnitude": 75.0,
+        "location": "8 ESE Acres",
+        "state": "KS"
+      },
+      "volumes": [
+        "cache/KDDC/KDDC20260912_225618_V06",
+        "cache/KDDC/KDDC20260912_230143_V06",
+        "cache/KDDC/KDDC20260912_230709_V06"
+      ],
+      "nmd": [
+        "cache/level3/DDC/DDC_NMD_2026_09_12_22_50_51",
+        "cache/level3/DDC/DDC_NMD_2026_09_12_22_56_18",
+        "cache/level3/DDC/DDC_NMD_2026_09_12_23_01_43",
+        "cache/level3/DDC/DDC_NMD_2026_09_12_23_07_09",
+        "cache/level3/DDC/DDC_NMD_2026_09_12_23_12_36"
+      ]
+    },
+    {
+      "id": "wind-20260715-0230-4",
+      "label": "wind",
+      "site_id": "KBLX",
+      "radar_distance_km": 66.3,
+      "report": {
+        "kind": "wind",
+        "time_utc": "2026-07-15T02:30:00",
+        "latitude": 46.4,
+        "longitude": -108.95,
+        "magnitude": 74.0,
+        "location": "7 N Lavina",
+        "state": "MT"
+      },
+      "volumes": [
+        "cache/KBLX/KBLX20260715_022427_V06",
+        "cache/KBLX/KBLX20260715_022954_V06"
+      ],
+      "nmd": [
+        "cache/level3/BLX/BLX_NMD_2026_07_15_02_19_01",
+        "cache/level3/BLX/BLX_NMD_2026_07_15_02_24_27",
+        "cache/level3/BLX/BLX_NMD_2026_07_15_02_29_54",
+        "cache/level3/BLX/BLX_NMD_2026_07_15_02_35_03"
+      ]
+    },
+    {
+      "id": "clear-air-KIWA-20260712",
+      "label": "clear_air",
+      "site_id": "KIWA",
+      "radar_distance_km": null,
+      "report": null,
+      "volumes": [
+        "cache/KIWA/KIWA20260712_163410_V06",
+        "cache/KIWA/KIWA20260712_164255_V06",
+        "cache/KIWA/KIWA20260712_165142_V06",
+        "cache/KIWA/KIWA20260712_170029_V06",
+        "cache/KIWA/KIWA20260712_170914_V06",
+        "cache/KIWA/KIWA20260712_171800_V06"
+      ],
+      "nmd": []
+    },
+    {
+      "id": "quiet-KAMA-20260712",
+      "label": "clear_air",
+      "site_id": "KAMA",
+      "radar_distance_km": null,
+      "strong_echo_share": 0.0069,
+      "report": null,
+      "volumes": [
+        "cache/KAMA/KAMA20260712_115536_V06"
+      ],
+      "nmd": [
+        "cache/level3/AMA/AMA_NMD_2026_07_12_11_51_03",
+        "cache/level3/AMA/AMA_NMD_2026_07_12_11_55_36",
+        "cache/level3/AMA/AMA_NMD_2026_07_12_12_00_05",
+        "cache/level3/AMA/AMA_NMD_2026_07_12_12_04_28",
+        "cache/level3/AMA/AMA_NMD_2026_07_12_12_08_56"
+      ]
+    },
+    {
+      "id": "quiet-KEWX-20260714",
+      "label": "null_storm",
+      "site_id": "KEWX",
+      "radar_distance_km": null,
+      "strong_echo_share": 0.1797,
+      "report": null,
+      "volumes": [
+        "cache/KEWX/KEWX20260714_115809_V06"
+      ],
+      "nmd": [
+        "cache/level3/EWX/EWX_NMD_2026_07_14_11_52_05",
+        "cache/level3/EWX/EWX_NMD_2026_07_14_11_58_09",
+        "cache/level3/EWX/EWX_NMD_2026_07_14_12_04_14"
+      ]
+    },
+    {
+      "id": "quiet-KMBX-20260907",
+      "label": "null_storm",
+      "site_id": "KMBX",
+      "radar_distance_km": null,
+      "strong_echo_share": 0.0495,
+      "report": null,
+      "volumes": [
+        "cache/KMBX/KMBX20260907_115720_V06"
+      ],
+      "nmd": [
+        "cache/level3/MBX/MBX_NMD_2026_09_07_11_51_51",
+        "cache/level3/MBX/MBX_NMD_2026_09_07_11_57_20",
+        "cache/level3/MBX/MBX_NMD_2026_09_07_12_02_47",
+        "cache/level3/MBX/MBX_NMD_2026_09_07_12_07_58"
+      ]
+    },
+    {
+      "id": "quiet-KJAX-20260912",
+      "label": "null_storm",
+      "site_id": "KJAX",
+      "radar_distance_km": null,
+      "strong_echo_share": 0.0304,
+      "report": null,
+      "volumes": [
+        "cache/KJAX/KJAX20260912_115659_V06"
+      ],
+      "nmd": [
+        "cache/level3/JAX/JAX_NMD_2026_09_12_11_52_30",
+        "cache/level3/JAX/JAX_NMD_2026_09_12_11_56_59",
+        "cache/level3/JAX/JAX_NMD_2026_09_12_12_01_17",
+        "cache/level3/JAX/JAX_NMD_2026_09_12_12_05_51"
+      ]
+    },
+    {
+      "id": "quiet-KAKQ-20260912",
+      "label": "clear_air",
+      "site_id": "KAKQ",
+      "radar_distance_km": null,
+      "strong_echo_share": 0.0005,
+      "report": null,
+      "volumes": [
+        "cache/KAKQ/KAKQ20260912_115531_V06"
+      ],
+      "nmd": []
+    }
+  ],
+  "reports": [
+    {
+      "kind": "tornado",
+      "time_utc": "2026-07-12T19:45:00",
+      "latitude": 35.1,
+      "longitude": -101.76,
+      "magnitude": null,
+      "location": "3 NNE Lake Tanglewood",
+      "state": "TX"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-12T12:00:00",
+      "latitude": 47.98,
+      "longitude": -88.8,
+      "magnitude": 1.75,
+      "location": "Malone Bay",
+      "state": "MI"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-12T16:24:00",
+      "latitude": 46.66,
+      "longitude": -88.37,
+      "magnitude": 1.75,
+      "location": "Herman",
+      "state": "MI"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-12T20:00:00",
+      "latitude": 35.14,
+      "longitude": -101.86,
+      "magnitude": 1.0,
+      "location": "5 SSW Amarillo",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T13:50:00",
+      "latitude": 47.3,
+      "longitude": -88.39,
+      "magnitude": null,
+      "location": "Ahmeek",
+      "state": "MI"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T13:51:00",
+      "latitude": 47.27,
+      "longitude": -88.54,
+      "magnitude": null,
+      "location": "4 WNW Calumet",
+      "state": "MI"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T17:00:00",
+      "latitude": 30.16,
+      "longitude": -84.71,
+      "magnitude": null,
+      "location": "2 NE East Camp",
+      "state": "FL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T17:07:00",
+      "latitude": 30.75,
+      "longitude": -85.78,
+      "magnitude": null,
+      "location": "2 SE Caryville",
+      "state": "FL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T17:35:00",
+      "latitude": 30.36,
+      "longitude": -84.53,
+      "magnitude": null,
+      "location": "4 NNW Brown House",
+      "state": "FL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T17:38:00",
+      "latitude": 30.89,
+      "longitude": -85.77,
+      "magnitude": null,
+      "location": "3 SW Bethlehem",
+      "state": "FL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T17:45:00",
+      "latitude": 35.25,
+      "longitude": -78.11,
+      "magnitude": null,
+      "location": "4 NNW Mount Olive",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T17:56:00",
+      "latitude": 30.18,
+      "longitude": -84.3,
+      "magnitude": null,
+      "location": "1 SSE Shadeville",
+      "state": "FL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:00:00",
+      "latitude": 30.47,
+      "longitude": -84.29,
+      "magnitude": null,
+      "location": "Tallahassee",
+      "state": "FL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:03:00",
+      "latitude": 31.27,
+      "longitude": -85.71,
+      "magnitude": null,
+      "location": "Clayhatchee",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:07:00",
+      "latitude": 31.32,
+      "longitude": -85.72,
+      "magnitude": null,
+      "location": "2 SSW Fort Novosel",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:08:00",
+      "latitude": 30.46,
+      "longitude": -84.27,
+      "magnitude": null,
+      "location": "Tallahassee",
+      "state": "FL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:08:00",
+      "latitude": 30.47,
+      "longitude": -84.28,
+      "magnitude": null,
+      "location": "Lake Ella",
+      "state": "FL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:10:00",
+      "latitude": 31.12,
+      "longitude": -85.34,
+      "magnitude": null,
+      "location": "2 ENE Keytons",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:17:00",
+      "latitude": 32.93,
+      "longitude": -80.13,
+      "magnitude": null,
+      "location": "4 SSW Ladson",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:19:00",
+      "latitude": 30.44,
+      "longitude": -84.12,
+      "magnitude": null,
+      "location": "Chaires",
+      "state": "FL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:20:00",
+      "latitude": 31.23,
+      "longitude": -85.38,
+      "magnitude": null,
+      "location": "1 NE Dothan",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:20:00",
+      "latitude": 31.23,
+      "longitude": -85.39,
+      "magnitude": null,
+      "location": "1 N Dothan",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:20:00",
+      "latitude": 31.23,
+      "longitude": -85.41,
+      "magnitude": null,
+      "location": "1 WNW Dothan",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:21:00",
+      "latitude": 31.24,
+      "longitude": -85.41,
+      "magnitude": null,
+      "location": "2 NW Dothan",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:21:00",
+      "latitude": 31.24,
+      "longitude": -85.43,
+      "magnitude": null,
+      "location": "3 SSE Kelly Springs",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:21:00",
+      "latitude": 31.25,
+      "longitude": -85.3,
+      "magnitude": null,
+      "location": "2 WSW Webb",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:21:00",
+      "latitude": 31.25,
+      "longitude": -85.43,
+      "magnitude": null,
+      "location": "2 SE Kelly Springs",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:21:00",
+      "latitude": 31.25,
+      "longitude": -85.4,
+      "magnitude": null,
+      "location": "2 NNW Dothan",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:23:00",
+      "latitude": 31.28,
+      "longitude": -85.43,
+      "magnitude": null,
+      "location": "1 E Kelly Springs",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:24:00",
+      "latitude": 30.41,
+      "longitude": -84.11,
+      "magnitude": null,
+      "location": "1 SSE Chaires Crossroad",
+      "state": "FL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:25:00",
+      "latitude": 31.26,
+      "longitude": -85.38,
+      "magnitude": null,
+      "location": "3 NNE Dothan",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:25:00",
+      "latitude": 31.32,
+      "longitude": -85.49,
+      "magnitude": null,
+      "location": "Midland City",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:25:00",
+      "latitude": 33.34,
+      "longitude": -83.84,
+      "magnitude": null,
+      "location": "2 S Turtle Cove",
+      "state": "GA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:27:00",
+      "latitude": 31.31,
+      "longitude": -85.42,
+      "magnitude": null,
+      "location": "2 ENE Grimes",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:28:00",
+      "latitude": 28.26,
+      "longitude": -81.61,
+      "magnitude": null,
+      "location": "ChampionsGate",
+      "state": "FL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:29:00",
+      "latitude": 31.35,
+      "longitude": -85.43,
+      "magnitude": null,
+      "location": "2 E Sylvan Grove",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:29:00",
+      "latitude": 34.5,
+      "longitude": -81.62,
+      "magnitude": null,
+      "location": "Whitmire",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:34:00",
+      "latitude": 32.73,
+      "longitude": -79.93,
+      "magnitude": null,
+      "location": "James Island",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:35:00",
+      "latitude": 31.35,
+      "longitude": -85.33,
+      "magnitude": null,
+      "location": "Headland",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:50:00",
+      "latitude": 30.48,
+      "longitude": -83.85,
+      "magnitude": null,
+      "location": "2 SE Drifton",
+      "state": "FL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T18:58:00",
+      "latitude": 34.67,
+      "longitude": -80.72,
+      "magnitude": null,
+      "location": "Elgin",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T19:00:00",
+      "latitude": 31.57,
+      "longitude": -85.25,
+      "magnitude": null,
+      "location": "Abbeville",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T19:05:00",
+      "latitude": 32.94,
+      "longitude": -83.81,
+      "magnitude": null,
+      "location": "Bolingbroke",
+      "state": "GA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T19:18:00",
+      "latitude": 34.81,
+      "longitude": -80.8,
+      "magnitude": null,
+      "location": "2 S Andrew Jackson SP",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T19:25:00",
+      "latitude": 31.67,
+      "longitude": -85.12,
+      "magnitude": null,
+      "location": "1 SSE Otho",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T19:27:00",
+      "latitude": 35.28,
+      "longitude": -101.62,
+      "magnitude": 66.0,
+      "location": "4 SSW Pantex",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T19:30:00",
+      "latitude": 34.84,
+      "longitude": -80.77,
+      "magnitude": null,
+      "location": "6 SSW Waxhaw",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T19:36:00",
+      "latitude": 34.87,
+      "longitude": -80.74,
+      "magnitude": null,
+      "location": "4 S Waxhaw",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T19:43:00",
+      "latitude": 46.57,
+      "longitude": -87.4,
+      "magnitude": null,
+      "location": "1 NNW Marquette",
+      "state": "MI"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T19:50:00",
+      "latitude": 46.55,
+      "longitude": -87.39,
+      "magnitude": null,
+      "location": "Marquette",
+      "state": "MI"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T19:53:00",
+      "latitude": 30.22,
+      "longitude": -81.67,
+      "magnitude": 58.0,
+      "location": "4 NE Orange Park",
+      "state": "FL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T19:55:00",
+      "latitude": 46.52,
+      "longitude": -87.41,
+      "magnitude": null,
+      "location": "2 SW Marquette",
+      "state": "MI"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T20:00:00",
+      "latitude": 46.31,
+      "longitude": -87.22,
+      "magnitude": null,
+      "location": "Carlshend",
+      "state": "MI"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T20:03:00",
+      "latitude": 35.15,
+      "longitude": -101.86,
+      "magnitude": null,
+      "location": "4 SW Amarillo",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T20:05:00",
+      "latitude": 30.29,
+      "longitude": -81.46,
+      "magnitude": null,
+      "location": "1 WSW San Pablo",
+      "state": "FL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T20:13:00",
+      "latitude": 33.59,
+      "longitude": -83.85,
+      "magnitude": null,
+      "location": "1 ESE Covington",
+      "state": "GA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T20:17:00",
+      "latitude": 34.02,
+      "longitude": -82.49,
+      "magnitude": null,
+      "location": "1 NE Mount Carmel",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T20:30:00",
+      "latitude": 31.67,
+      "longitude": -109.68,
+      "magnitude": null,
+      "location": "22 E Tombstone",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T20:34:00",
+      "latitude": 34.94,
+      "longitude": -101.64,
+      "magnitude": 58.0,
+      "location": "2 ESE Palo Duro Canyon",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T20:35:00",
+      "latitude": 32.44,
+      "longitude": -80.78,
+      "magnitude": null,
+      "location": "5 W Beaufort",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T20:36:00",
+      "latitude": 34.24,
+      "longitude": -79.71,
+      "magnitude": null,
+      "location": "2 NE Quinby",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T20:37:00",
+      "latitude": 34.23,
+      "longitude": -79.7,
+      "magnitude": null,
+      "location": "2 E Quinby",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T20:40:00",
+      "latitude": 29.91,
+      "longitude": -95.6,
+      "magnitude": null,
+      "location": "3 NW Jersey Village",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T20:50:00",
+      "latitude": 34.18,
+      "longitude": -79.65,
+      "magnitude": null,
+      "location": "6 SE Quinby",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T20:54:00",
+      "latitude": 35.3,
+      "longitude": -78.62,
+      "magnitude": null,
+      "location": "1 SSW Dunn",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T20:55:00",
+      "latitude": 34.16,
+      "longitude": -80.79,
+      "magnitude": null,
+      "location": "1 SW Elgin",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T20:59:00",
+      "latitude": 32.42,
+      "longitude": -80.64,
+      "magnitude": null,
+      "location": "3 ESE Beaufort",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T21:07:00",
+      "latitude": 32.37,
+      "longitude": -80.67,
+      "magnitude": null,
+      "location": "2 ESE Port Royal",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T21:15:00",
+      "latitude": 33.82,
+      "longitude": -79.56,
+      "magnitude": null,
+      "location": "7 W Johnsonville",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T21:25:00",
+      "latitude": 45.8,
+      "longitude": -87.15,
+      "magnitude": null,
+      "location": "5 NW Escanaba",
+      "state": "MI"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T21:30:00",
+      "latitude": 34.61,
+      "longitude": -83.52,
+      "magnitude": null,
+      "location": "Clarkesville",
+      "state": "GA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T21:35:00",
+      "latitude": 45.58,
+      "longitude": -87.0,
+      "magnitude": 62.0,
+      "location": "Minneapolis Shoal",
+      "state": "MI"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T21:35:00",
+      "latitude": 45.73,
+      "longitude": -87.2,
+      "magnitude": null,
+      "location": "Hyde",
+      "state": "MI"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T21:39:00",
+      "latitude": 32.43,
+      "longitude": -80.65,
+      "magnitude": null,
+      "location": "2 ESE Beaufort",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T21:44:00",
+      "latitude": 32.37,
+      "longitude": -80.59,
+      "magnitude": null,
+      "location": "6 ENE Parris Island",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T21:50:00",
+      "latitude": 34.66,
+      "longitude": -112.32,
+      "magnitude": null,
+      "location": "4 N Prescott Valley",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T21:50:00",
+      "latitude": 34.67,
+      "longitude": -112.24,
+      "magnitude": 61.0,
+      "location": "7 NE Prescott Valley",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T21:52:00",
+      "latitude": 32.44,
+      "longitude": -80.64,
+      "magnitude": null,
+      "location": "2 E Beaufort",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T21:53:00",
+      "latitude": 34.68,
+      "longitude": -112.24,
+      "magnitude": null,
+      "location": "7 NE Prescott Valley",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T21:56:00",
+      "latitude": 33.94,
+      "longitude": -81.57,
+      "magnitude": null,
+      "location": "3 NNW Batesburg",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T21:57:00",
+      "latitude": 32.43,
+      "longitude": -80.63,
+      "magnitude": null,
+      "location": "3 E Beaufort",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T21:58:00",
+      "latitude": 45.78,
+      "longitude": -87.43,
+      "magnitude": null,
+      "location": "4 SW Whitney",
+      "state": "MI"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:00:00",
+      "latitude": 45.38,
+      "longitude": -86.91,
+      "magnitude": null,
+      "location": "Washington Island",
+      "state": "WI"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:04:00",
+      "latitude": 31.96,
+      "longitude": -110.4,
+      "magnitude": 58.0,
+      "location": "6 W Benson",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:05:00",
+      "latitude": 45.68,
+      "longitude": -87.13,
+      "magnitude": null,
+      "location": "1 ENE Ford River",
+      "state": "MI"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:07:00",
+      "latitude": 45.78,
+      "longitude": -87.43,
+      "magnitude": null,
+      "location": "4 SW Whitney",
+      "state": "MI"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:12:00",
+      "latitude": 32.0,
+      "longitude": -110.28,
+      "magnitude": null,
+      "location": "3 NNE Benson",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:13:00",
+      "latitude": 33.89,
+      "longitude": -81.51,
+      "magnitude": null,
+      "location": "2 S Leesville",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:15:00",
+      "latitude": 35.17,
+      "longitude": -78.72,
+      "magnitude": null,
+      "location": "1 ENE Wade",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:15:00",
+      "latitude": 35.21,
+      "longitude": -78.68,
+      "magnitude": null,
+      "location": "Godwin",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:20:00",
+      "latitude": 31.99,
+      "longitude": -81.07,
+      "magnitude": null,
+      "location": "Sandfly",
+      "state": "GA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:20:00",
+      "latitude": 34.98,
+      "longitude": -78.98,
+      "magnitude": null,
+      "location": "1 W Hope Mills",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:22:00",
+      "latitude": 32.79,
+      "longitude": -80.62,
+      "magnitude": null,
+      "location": "1 E Ritter",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:24:00",
+      "latitude": 33.42,
+      "longitude": -102.05,
+      "magnitude": 62.0,
+      "location": "6 S Wolfforth",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:25:00",
+      "latitude": 32.66,
+      "longitude": -81.01,
+      "magnitude": null,
+      "location": "1 SSE Grays",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:25:00",
+      "latitude": 34.55,
+      "longitude": -112.4,
+      "magnitude": null,
+      "location": "4 E Prescott Courthouse",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:25:00",
+      "latitude": 45.19,
+      "longitude": -87.12,
+      "magnitude": null,
+      "location": "1 NW Sister Bay",
+      "state": "WI"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:29:00",
+      "latitude": 33.65,
+      "longitude": -80.89,
+      "magnitude": null,
+      "location": "7 W Saint Matthews",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:40:00",
+      "latitude": 33.61,
+      "longitude": -101.65,
+      "magnitude": null,
+      "location": "4 SSE Idalou",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:45:00",
+      "latitude": 34.08,
+      "longitude": -112.12,
+      "magnitude": null,
+      "location": "1 NE Black Canyon City",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:45:00",
+      "latitude": 34.63,
+      "longitude": -79.17,
+      "magnitude": null,
+      "location": "4 SSE Pembroke",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:53:00",
+      "latitude": 34.19,
+      "longitude": -112.13,
+      "magnitude": 64.0,
+      "location": "1 SE Bumble Bee",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:54:00",
+      "latitude": 32.15,
+      "longitude": -110.73,
+      "magnitude": 63.0,
+      "location": "10 ESE Tucson",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:55:00",
+      "latitude": 32.16,
+      "longitude": -80.75,
+      "magnitude": null,
+      "location": "1 NNW Forest Beach",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:58:00",
+      "latitude": 32.6,
+      "longitude": -81.14,
+      "magnitude": null,
+      "location": "1 E Pineland",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T22:58:00",
+      "latitude": 32.6,
+      "longitude": -81.16,
+      "magnitude": null,
+      "location": "Pineland",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T23:00:00",
+      "latitude": 46.13,
+      "longitude": -109.92,
+      "magnitude": 61.0,
+      "location": "3 NE Melville",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T23:05:00",
+      "latitude": 32.23,
+      "longitude": -80.73,
+      "magnitude": null,
+      "location": "2 NE Hilton Head Island",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T23:07:00",
+      "latitude": 32.35,
+      "longitude": -109.67,
+      "magnitude": 60.0,
+      "location": "12 NE Willcox",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T23:15:00",
+      "latitude": 33.52,
+      "longitude": -80.87,
+      "magnitude": null,
+      "location": "2 N Orangeburg",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T23:17:00",
+      "latitude": 47.47,
+      "longitude": -111.38,
+      "magnitude": 64.0,
+      "location": "5 WSW Great Falls",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T23:19:00",
+      "latitude": 33.48,
+      "longitude": -80.89,
+      "magnitude": null,
+      "location": "1 NE Edisto",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T23:21:00",
+      "latitude": 32.13,
+      "longitude": -110.95,
+      "magnitude": 59.0,
+      "location": "6 SW Tucson",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T23:32:00",
+      "latitude": 35.24,
+      "longitude": -79.39,
+      "magnitude": null,
+      "location": "1 SSW Whispering Pines",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T23:35:00",
+      "latitude": 32.29,
+      "longitude": -110.77,
+      "magnitude": null,
+      "location": "10 NE Tucson",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T23:55:00",
+      "latitude": 32.31,
+      "longitude": -81.06,
+      "magnitude": null,
+      "location": "2 NNE Hardeeville",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-12T23:55:00",
+      "latitude": 46.97,
+      "longitude": -108.5,
+      "magnitude": 59.0,
+      "location": "7 SE Tiegen",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T00:01:00",
+      "latitude": 34.16,
+      "longitude": -112.73,
+      "magnitude": 58.0,
+      "location": "4 S Yarnell",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T00:07:00",
+      "latitude": 47.03,
+      "longitude": -109.42,
+      "magnitude": null,
+      "location": "3 S Lewistown",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T00:08:00",
+      "latitude": 32.31,
+      "longitude": -110.82,
+      "magnitude": 67.0,
+      "location": "9 NNE Tucson",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T00:15:00",
+      "latitude": 31.91,
+      "longitude": -111.9,
+      "magnitude": 66.0,
+      "location": "1 WSW Sells",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T00:16:00",
+      "latitude": 35.82,
+      "longitude": -78.31,
+      "magnitude": null,
+      "location": "4 SSW Pilot",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T00:20:00",
+      "latitude": 38.58,
+      "longitude": -112.6,
+      "magnitude": 62.0,
+      "location": "2 SW Cove Ft",
+      "state": "UT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T00:22:00",
+      "latitude": 35.86,
+      "longitude": -78.33,
+      "magnitude": null,
+      "location": "4 WSW Pilot",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T00:30:00",
+      "latitude": 32.43,
+      "longitude": -111.55,
+      "magnitude": 68.0,
+      "location": "14 W Avra Valley",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T00:30:00",
+      "latitude": 35.83,
+      "longitude": -78.3,
+      "magnitude": null,
+      "location": "4 SSW Pilot",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T00:41:00",
+      "latitude": 47.24,
+      "longitude": -108.36,
+      "magnitude": 72.0,
+      "location": "17 N Winnett",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T00:45:00",
+      "latitude": 46.9,
+      "longitude": -108.74,
+      "magnitude": 59.0,
+      "location": "9 SSE Grass Range",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T00:47:00",
+      "latitude": 35.78,
+      "longitude": -78.35,
+      "magnitude": null,
+      "location": "1 E Wendell",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T00:50:00",
+      "latitude": 35.72,
+      "longitude": -78.77,
+      "magnitude": null,
+      "location": "3 WNW Lake Wheeler",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T00:55:00",
+      "latitude": 32.34,
+      "longitude": -96.63,
+      "magnitude": null,
+      "location": "Ennis",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T00:55:00",
+      "latitude": 35.71,
+      "longitude": -78.65,
+      "magnitude": null,
+      "location": "2 NW Garner",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T01:00:00",
+      "latitude": 46.9,
+      "longitude": -108.74,
+      "magnitude": 77.0,
+      "location": "9 SSE Grass Range",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T01:05:00",
+      "latitude": 35.71,
+      "longitude": -78.76,
+      "magnitude": null,
+      "location": "2 WNW Lake Wheeler",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T01:23:00",
+      "latitude": 35.69,
+      "longitude": -78.54,
+      "magnitude": null,
+      "location": "5 E Garner",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T01:24:00",
+      "latitude": 37.7,
+      "longitude": -113.1,
+      "magnitude": 67.0,
+      "location": "2 NW Cedar City",
+      "state": "UT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T01:26:00",
+      "latitude": 37.71,
+      "longitude": -113.06,
+      "magnitude": null,
+      "location": "2 N Cedar City",
+      "state": "UT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T01:58:00",
+      "latitude": 35.42,
+      "longitude": -78.8,
+      "magnitude": null,
+      "location": "2 NNE Lillington",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T02:00:00",
+      "latitude": 37.73,
+      "longitude": -113.05,
+      "magnitude": 58.0,
+      "location": "2 SSW Enoch",
+      "state": "UT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T02:00:00",
+      "latitude": 47.77,
+      "longitude": -107.68,
+      "magnitude": 60.0,
+      "location": "6 SSE Sun Prairie",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T02:06:00",
+      "latitude": 35.42,
+      "longitude": -78.4,
+      "magnitude": null,
+      "location": "2 SE Four Oaks",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T02:12:00",
+      "latitude": 35.41,
+      "longitude": -78.91,
+      "magnitude": null,
+      "location": "5 WNW Lillington",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T02:18:00",
+      "latitude": 37.21,
+      "longitude": -112.99,
+      "magnitude": null,
+      "location": "2 NNE Springdale",
+      "state": "UT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T02:25:00",
+      "latitude": 35.44,
+      "longitude": -78.26,
+      "magnitude": null,
+      "location": "5 S Pine Level",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T02:45:00",
+      "latitude": 35.52,
+      "longitude": -78.69,
+      "magnitude": null,
+      "location": "3 ENE Angier",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T03:00:00",
+      "latitude": 32.47,
+      "longitude": -90.06,
+      "magnitude": null,
+      "location": "4 E Madison",
+      "state": "MS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T03:10:00",
+      "latitude": 35.18,
+      "longitude": -78.3,
+      "magnitude": null,
+      "location": "1 E Hobbton",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T03:25:00",
+      "latitude": 32.41,
+      "longitude": -90.0,
+      "magnitude": null,
+      "location": "2 WSW Fannin",
+      "state": "MS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T03:30:00",
+      "latitude": 32.41,
+      "longitude": -89.96,
+      "magnitude": null,
+      "location": "1 SSW Fannin",
+      "state": "MS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-13T03:41:00",
+      "latitude": 35.25,
+      "longitude": -78.11,
+      "magnitude": null,
+      "location": "4 NNW Mount Olive",
+      "state": "NC"
+    },
+    {
+      "kind": "tornado",
+      "time_utc": "2026-07-15T10:20:00",
+      "latitude": 29.43,
+      "longitude": -98.47,
+      "magnitude": null,
+      "location": "2 ENE San Antonio",
+      "state": "TX"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-14T21:52:00",
+      "latitude": 44.87,
+      "longitude": -71.52,
+      "magnitude": 1.0,
+      "location": "2 NE Lemington",
+      "state": "NH"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-14T23:38:00",
+      "latitude": 47.13,
+      "longitude": -110.2,
+      "magnitude": 1.25,
+      "location": "2 SSE Stanford",
+      "state": "MT"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T00:08:00",
+      "latitude": 47.0,
+      "longitude": -109.86,
+      "magnitude": 1.75,
+      "location": "Hobson",
+      "state": "MT"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T00:18:00",
+      "latitude": 47.01,
+      "longitude": -109.87,
+      "magnitude": 2.5,
+      "location": "1 N Hobson",
+      "state": "MT"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T01:23:00",
+      "latitude": 44.33,
+      "longitude": -71.81,
+      "magnitude": 1.25,
+      "location": "3 NW Littleton",
+      "state": "NH"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T01:30:00",
+      "latitude": 44.28,
+      "longitude": -71.69,
+      "magnitude": 1.5,
+      "location": "Bethlehem",
+      "state": "NH"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T02:10:00",
+      "latitude": 43.98,
+      "longitude": -71.13,
+      "magnitude": 1.25,
+      "location": "1 W Conway",
+      "state": "NH"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T04:18:00",
+      "latitude": 44.55,
+      "longitude": -75.44,
+      "magnitude": 2.0,
+      "location": "De Peyster",
+      "state": "NY"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T04:28:00",
+      "latitude": 44.5,
+      "longitude": -75.34,
+      "magnitude": 2.0,
+      "location": "De Kalb",
+      "state": "NY"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T04:28:00",
+      "latitude": 44.5,
+      "longitude": -75.35,
+      "magnitude": 1.5,
+      "location": "De Kalb",
+      "state": "NY"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T04:31:00",
+      "latitude": 44.47,
+      "longitude": -75.23,
+      "magnitude": 2.75,
+      "location": "Hermon",
+      "state": "NY"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T05:10:00",
+      "latitude": 44.13,
+      "longitude": -74.63,
+      "magnitude": 1.25,
+      "location": "Horseshoe Lake",
+      "state": "NY"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T07:26:00",
+      "latitude": 43.3,
+      "longitude": -72.37,
+      "magnitude": 1.75,
+      "location": "5 NE Charlestown",
+      "state": "NH"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T07:44:00",
+      "latitude": 43.23,
+      "longitude": -72.18,
+      "magnitude": 1.75,
+      "location": "2 E Lempster",
+      "state": "NH"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T08:05:00",
+      "latitude": 43.05,
+      "longitude": -71.74,
+      "magnitude": 1.25,
+      "location": "3 S Weare",
+      "state": "NH"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T08:06:00",
+      "latitude": 43.11,
+      "longitude": -71.89,
+      "magnitude": 1.5,
+      "location": "1 SE Hillsborough",
+      "state": "NH"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T08:10:00",
+      "latitude": 43.04,
+      "longitude": -71.68,
+      "magnitude": 1.0,
+      "location": "4 WNW Goffstown",
+      "state": "NH"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T08:24:00",
+      "latitude": 43.04,
+      "longitude": -71.66,
+      "magnitude": 1.5,
+      "location": "3 W Goffstown",
+      "state": "NH"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-07-15T08:34:00",
+      "latitude": 48.75,
+      "longitude": -100.33,
+      "magnitude": 1.75,
+      "location": "3 NNE Omemee",
+      "state": "ND"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-14T21:10:00",
+      "latitude": 36.84,
+      "longitude": -108.02,
+      "magnitude": 58.0,
+      "location": "1 NW Aztec",
+      "state": "NM"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-14T21:40:00",
+      "latitude": 44.96,
+      "longitude": -71.71,
+      "magnitude": null,
+      "location": "Little Averill Dam",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-14T21:59:00",
+      "latitude": 44.83,
+      "longitude": -71.55,
+      "magnitude": null,
+      "location": "2 S Lemington",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-14T23:40:00",
+      "latitude": 32.87,
+      "longitude": -110.71,
+      "magnitude": null,
+      "location": "3 SSE Dudleyville",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-14T23:56:00",
+      "latitude": 47.05,
+      "longitude": -109.46,
+      "magnitude": 59.0,
+      "location": "2 SW Lewistown",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T00:55:00",
+      "latitude": 47.06,
+      "longitude": -109.52,
+      "magnitude": 58.0,
+      "location": "4 W Lewistown",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T01:05:00",
+      "latitude": 47.06,
+      "longitude": -109.43,
+      "magnitude": null,
+      "location": "Lewistown",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T01:40:00",
+      "latitude": 44.28,
+      "longitude": -71.54,
+      "magnitude": null,
+      "location": "2 S Carroll",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T01:40:00",
+      "latitude": 47.05,
+      "longitude": -108.84,
+      "magnitude": 67.0,
+      "location": "2 NW Grass Range",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T01:55:00",
+      "latitude": 44.08,
+      "longitude": -71.28,
+      "magnitude": null,
+      "location": "Bartlett",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T01:55:00",
+      "latitude": 44.26,
+      "longitude": -71.45,
+      "magnitude": null,
+      "location": "6 ESE Carroll",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T01:55:00",
+      "latitude": 46.54,
+      "longitude": -109.35,
+      "magnitude": 62.0,
+      "location": "9 NE Hedgesville",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T01:55:00",
+      "latitude": 46.84,
+      "longitude": -108.94,
+      "magnitude": 86.0,
+      "location": "12 SSE Forestgrove",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T02:12:00",
+      "latitude": 43.95,
+      "longitude": -71.21,
+      "magnitude": null,
+      "location": "2 W Albany",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T02:15:00",
+      "latitude": 43.88,
+      "longitude": -71.16,
+      "magnitude": null,
+      "location": "1 SW Madison",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T02:18:00",
+      "latitude": 43.93,
+      "longitude": -70.96,
+      "magnitude": null,
+      "location": "3 WSW Brownfield",
+      "state": "ME"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T02:30:00",
+      "latitude": 43.83,
+      "longitude": -71.21,
+      "magnitude": null,
+      "location": "West Ossipee",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T02:30:00",
+      "latitude": 46.4,
+      "longitude": -108.95,
+      "magnitude": 74.0,
+      "location": "7 N Lavina",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T03:15:00",
+      "latitude": 46.58,
+      "longitude": -108.43,
+      "magnitude": 62.0,
+      "location": "11 NNE Roundup",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T03:30:00",
+      "latitude": 47.01,
+      "longitude": -108.36,
+      "magnitude": 63.0,
+      "location": "1 NNW Winnett",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T04:05:00",
+      "latitude": 44.6,
+      "longitude": -75.62,
+      "magnitude": null,
+      "location": "2 NE Morristown",
+      "state": "NY"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T04:05:00",
+      "latitude": 44.68,
+      "longitude": -75.51,
+      "magnitude": null,
+      "location": "1 SW Ogdensburg",
+      "state": "NY"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T04:05:00",
+      "latitude": 46.78,
+      "longitude": -107.92,
+      "magnitude": 58.0,
+      "location": "15 S Mosby",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T04:16:00",
+      "latitude": 44.55,
+      "longitude": -75.44,
+      "magnitude": null,
+      "location": "De Peyster",
+      "state": "NY"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T04:20:00",
+      "latitude": 44.48,
+      "longitude": -75.3,
+      "magnitude": null,
+      "location": "East De Kalb",
+      "state": "NY"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T04:34:00",
+      "latitude": 44.37,
+      "longitude": -75.2,
+      "magnitude": null,
+      "location": "4 W South Russell",
+      "state": "NY"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T04:45:00",
+      "latitude": 47.17,
+      "longitude": -107.64,
+      "magnitude": 60.0,
+      "location": "8 WNW Sand Springs",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T05:21:00",
+      "latitude": 44.45,
+      "longitude": -74.78,
+      "magnitude": null,
+      "location": "Stark",
+      "state": "NY"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T06:00:00",
+      "latitude": 44.14,
+      "longitude": -74.56,
+      "magnitude": null,
+      "location": "4 E Horseshoe Lake",
+      "state": "NY"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T06:05:00",
+      "latitude": 46.86,
+      "longitude": -68.01,
+      "magnitude": null,
+      "location": "Caribou",
+      "state": "ME"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T06:05:00",
+      "latitude": 46.87,
+      "longitude": -68.01,
+      "magnitude": null,
+      "location": "1 NNE Caribou",
+      "state": "ME"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T06:14:00",
+      "latitude": 43.9,
+      "longitude": -73.31,
+      "magnitude": null,
+      "location": "1 NE Shoreham",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T06:24:00",
+      "latitude": 43.81,
+      "longitude": -73.09,
+      "magnitude": null,
+      "location": "1 N Brandon",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T06:28:00",
+      "latitude": 43.85,
+      "longitude": -73.25,
+      "magnitude": null,
+      "location": "3 WSW Whiting",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T06:30:00",
+      "latitude": 43.68,
+      "longitude": -73.19,
+      "magnitude": null,
+      "location": "1 ESE Half Moon State P",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T06:30:00",
+      "latitude": 43.81,
+      "longitude": -73.29,
+      "magnitude": null,
+      "location": "Orwell",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T06:40:00",
+      "latitude": 43.71,
+      "longitude": -73.03,
+      "magnitude": null,
+      "location": "Pittsford",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T06:42:00",
+      "latitude": 43.77,
+      "longitude": -73.94,
+      "magnitude": null,
+      "location": "Olmstedville",
+      "state": "NY"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T06:48:00",
+      "latitude": 47.33,
+      "longitude": -106.95,
+      "magnitude": 62.0,
+      "location": "2 WNW Jordan",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T06:54:00",
+      "latitude": 43.63,
+      "longitude": -73.75,
+      "magnitude": null,
+      "location": "7 NW Bolton Landing",
+      "state": "NY"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T06:56:00",
+      "latitude": 43.51,
+      "longitude": -72.87,
+      "magnitude": null,
+      "location": "Shrewsbury",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T07:15:00",
+      "latitude": 43.36,
+      "longitude": -72.36,
+      "magnitude": null,
+      "location": "1 SW Claremont",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T07:15:00",
+      "latitude": 43.38,
+      "longitude": -72.44,
+      "magnitude": null,
+      "location": "1 WSW Wilgus State Park",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T07:18:00",
+      "latitude": 43.38,
+      "longitude": -72.47,
+      "magnitude": null,
+      "location": "3 E Perkinsville",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T07:20:00",
+      "latitude": 43.34,
+      "longitude": -72.42,
+      "magnitude": null,
+      "location": "4 S Wilgus State Park",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T07:20:00",
+      "latitude": 43.4,
+      "longitude": -72.49,
+      "magnitude": null,
+      "location": "1 E Amsden",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T07:23:00",
+      "latitude": 43.3,
+      "longitude": -72.38,
+      "magnitude": null,
+      "location": "5 E Springfield",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T07:26:00",
+      "latitude": 43.4,
+      "longitude": -72.51,
+      "magnitude": null,
+      "location": "Downers",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T07:37:00",
+      "latitude": 43.31,
+      "longitude": -72.37,
+      "magnitude": null,
+      "location": "5 SSW Claremont",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T07:40:00",
+      "latitude": 43.31,
+      "longitude": -72.31,
+      "magnitude": null,
+      "location": "3 WNW Unity",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T07:40:00",
+      "latitude": 43.31,
+      "longitude": -72.32,
+      "magnitude": null,
+      "location": "3 WNW Unity",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T07:48:00",
+      "latitude": 43.18,
+      "longitude": -72.1,
+      "magnitude": null,
+      "location": "Washington",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T08:00:00",
+      "latitude": 43.04,
+      "longitude": -71.69,
+      "magnitude": null,
+      "location": "5 WNW Goffstown",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T08:00:00",
+      "latitude": 43.68,
+      "longitude": -73.19,
+      "magnitude": null,
+      "location": "1 ESE Half Moon State P",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T08:02:00",
+      "latitude": 43.14,
+      "longitude": -71.95,
+      "magnitude": null,
+      "location": "3 WNW Hillsborough",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T08:10:00",
+      "latitude": 43.07,
+      "longitude": -71.84,
+      "magnitude": null,
+      "location": "1 E Deering",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T08:10:00",
+      "latitude": 43.09,
+      "longitude": -71.86,
+      "magnitude": null,
+      "location": "2 NNE Deering",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T08:10:00",
+      "latitude": 43.1,
+      "longitude": -71.88,
+      "magnitude": null,
+      "location": "2 SE Hillsborough",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T08:12:00",
+      "latitude": 42.99,
+      "longitude": -72.38,
+      "magnitude": null,
+      "location": "4 E Westmoreland",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T08:12:00",
+      "latitude": 43.04,
+      "longitude": -71.7,
+      "magnitude": null,
+      "location": "4 SE Weare",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T08:15:00",
+      "latitude": 43.12,
+      "longitude": -71.89,
+      "magnitude": null,
+      "location": "Hillsborough",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T08:20:00",
+      "latitude": 43.04,
+      "longitude": -71.69,
+      "magnitude": null,
+      "location": "5 WNW Goffstown",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T08:30:00",
+      "latitude": 43.34,
+      "longitude": -72.42,
+      "magnitude": null,
+      "location": "4 S Wilgus State Park",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T08:30:00",
+      "latitude": 43.35,
+      "longitude": -72.42,
+      "magnitude": null,
+      "location": "3 SSW Wilgus State Park",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T08:40:00",
+      "latitude": 43.32,
+      "longitude": -72.47,
+      "magnitude": null,
+      "location": "2 NNE Springfield",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T08:45:00",
+      "latitude": 43.2,
+      "longitude": -72.46,
+      "magnitude": null,
+      "location": "4 N Bellows Falls",
+      "state": "VT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T08:50:00",
+      "latitude": 43.04,
+      "longitude": -72.45,
+      "magnitude": null,
+      "location": "3 S Westminster",
+      "state": "NH"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-07-15T09:12:00",
+      "latitude": 42.99,
+      "longitude": -72.38,
+      "magnitude": null,
+      "location": "4 E Westmoreland",
+      "state": "NH"
+    },
+    {
+      "kind": "tornado",
+      "time_utc": "2026-09-07T19:39:00",
+      "latitude": 30.5,
+      "longitude": -90.5,
+      "magnitude": null,
+      "location": "2 W Hammond",
+      "state": "LA"
+    },
+    {
+      "kind": "tornado",
+      "time_utc": "2026-09-07T23:35:00",
+      "latitude": 47.67,
+      "longitude": -100.87,
+      "magnitude": null,
+      "location": "6 S Strawberry Lake",
+      "state": "ND"
+    },
+    {
+      "kind": "tornado",
+      "time_utc": "2026-09-08T00:35:00",
+      "latitude": 42.9,
+      "longitude": -98.63,
+      "magnitude": null,
+      "location": "4 ENE Spencer",
+      "state": "NE"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-07T23:27:00",
+      "latitude": 42.87,
+      "longitude": -98.95,
+      "magnitude": 1.0,
+      "location": "6 WSW Butte",
+      "state": "NE"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-07T23:30:00",
+      "latitude": 47.78,
+      "longitude": -100.98,
+      "magnitude": 1.75,
+      "location": "4 SSW Ruso",
+      "state": "ND"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-07T23:53:00",
+      "latitude": 43.19,
+      "longitude": -98.54,
+      "magnitude": 1.25,
+      "location": "2 N Lake Andes",
+      "state": "SD"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-08T04:00:00",
+      "latitude": 42.95,
+      "longitude": -97.66,
+      "magnitude": 1.0,
+      "location": "Tabor",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T13:40:00",
+      "latitude": 44.09,
+      "longitude": -101.09,
+      "magnitude": 62.0,
+      "location": "3 ENE Midland",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T14:20:00",
+      "latitude": 44.32,
+      "longitude": -100.48,
+      "magnitude": 73.0,
+      "location": "6 WSW Fort Pierre",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T18:05:00",
+      "latitude": 47.06,
+      "longitude": -109.03,
+      "magnitude": 59.0,
+      "location": "5 NNE Forestgrove",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T18:45:00",
+      "latitude": 47.01,
+      "longitude": -108.36,
+      "magnitude": 63.0,
+      "location": "1 NNW Winnett",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T18:57:00",
+      "latitude": 30.4,
+      "longitude": -91.26,
+      "magnitude": null,
+      "location": "Brusly",
+      "state": "LA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T19:30:00",
+      "latitude": 30.52,
+      "longitude": -90.35,
+      "magnitude": null,
+      "location": "1 NNW Robert",
+      "state": "LA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T19:39:00",
+      "latitude": 30.5,
+      "longitude": -90.5,
+      "magnitude": null,
+      "location": "2 WSW Hammond",
+      "state": "LA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T19:45:00",
+      "latitude": 30.52,
+      "longitude": -90.53,
+      "magnitude": null,
+      "location": "4 WNW Hammond",
+      "state": "LA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T19:50:00",
+      "latitude": 26.46,
+      "longitude": -80.22,
+      "magnitude": null,
+      "location": "2 WNW Boca Raton Equest",
+      "state": "FL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T19:55:00",
+      "latitude": 30.6,
+      "longitude": -90.53,
+      "magnitude": null,
+      "location": "3 SSW Independence",
+      "state": "LA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T20:32:00",
+      "latitude": 31.42,
+      "longitude": -87.05,
+      "magnitude": 58.0,
+      "location": "2 W I65 And Us 84",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T20:39:00",
+      "latitude": 31.1,
+      "longitude": -87.17,
+      "magnitude": null,
+      "location": "3 NW Keego",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T20:45:00",
+      "latitude": 31.89,
+      "longitude": -87.71,
+      "magnitude": null,
+      "location": "Roundhill",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T21:00:00",
+      "latitude": 30.72,
+      "longitude": -91.14,
+      "magnitude": null,
+      "location": "Slaughter",
+      "state": "LA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T21:25:00",
+      "latitude": 47.31,
+      "longitude": -105.77,
+      "magnitude": 61.0,
+      "location": "1 NW Brockway",
+      "state": "MT"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T21:45:00",
+      "latitude": 31.89,
+      "longitude": -87.71,
+      "magnitude": null,
+      "location": "Roundhill",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T22:30:00",
+      "latitude": 32.38,
+      "longitude": -90.03,
+      "magnitude": null,
+      "location": "5 WSW Fannin",
+      "state": "MS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T22:50:00",
+      "latitude": 35.34,
+      "longitude": -94.37,
+      "magnitude": 59.0,
+      "location": "3 E Mill Creek",
+      "state": "AR"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T23:09:00",
+      "latitude": 42.93,
+      "longitude": -98.97,
+      "magnitude": 64.0,
+      "location": "6 W Butte",
+      "state": "NE"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T23:10:00",
+      "latitude": 42.93,
+      "longitude": -98.97,
+      "magnitude": 71.0,
+      "location": "6 W Butte",
+      "state": "NE"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T23:31:00",
+      "latitude": 31.09,
+      "longitude": -92.4,
+      "magnitude": null,
+      "location": "Lecompte",
+      "state": "LA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T23:42:00",
+      "latitude": 40.19,
+      "longitude": -101.07,
+      "magnitude": 70.0,
+      "location": "3 WNW Trenton",
+      "state": "NE"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T23:45:00",
+      "latitude": 40.15,
+      "longitude": -101.03,
+      "magnitude": null,
+      "location": "2 SW Trenton",
+      "state": "NE"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T23:45:00",
+      "latitude": 40.15,
+      "longitude": -101.0,
+      "magnitude": null,
+      "location": "2 SSE Trenton",
+      "state": "NE"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-07T23:45:00",
+      "latitude": 42.92,
+      "longitude": -98.82,
+      "magnitude": 60.0,
+      "location": "1 ENE Butte",
+      "state": "NE"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T00:00:00",
+      "latitude": 42.93,
+      "longitude": -98.63,
+      "magnitude": 60.0,
+      "location": "3 WSW Gross",
+      "state": "NE"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T00:00:00",
+      "latitude": 43.26,
+      "longitude": -98.51,
+      "magnitude": null,
+      "location": "7 N Lake Andes",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T00:03:00",
+      "latitude": 30.97,
+      "longitude": -92.58,
+      "magnitude": null,
+      "location": "Glenmora",
+      "state": "LA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T00:16:00",
+      "latitude": 32.32,
+      "longitude": -93.29,
+      "magnitude": null,
+      "location": "Ringgold",
+      "state": "LA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T00:29:00",
+      "latitude": 47.75,
+      "longitude": -100.43,
+      "magnitude": 59.0,
+      "location": "3 ESE Krueger Lake",
+      "state": "ND"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T00:42:00",
+      "latitude": 32.32,
+      "longitude": -93.42,
+      "magnitude": null,
+      "location": "8 W Ringgold",
+      "state": "LA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T00:42:00",
+      "latitude": 42.99,
+      "longitude": -98.44,
+      "magnitude": null,
+      "location": "1 WSW Marty",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T00:43:00",
+      "latitude": 42.99,
+      "longitude": -98.43,
+      "magnitude": null,
+      "location": "Marty",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T01:30:00",
+      "latitude": 33.46,
+      "longitude": -94.05,
+      "magnitude": null,
+      "location": "2 NE Texarkana",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T01:36:00",
+      "latitude": 42.98,
+      "longitude": -98.17,
+      "magnitude": 61.0,
+      "location": "4 SSE Dante",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T04:13:00",
+      "latitude": 43.3,
+      "longitude": -98.34,
+      "magnitude": 62.0,
+      "location": "2 S Armour",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T04:15:00",
+      "latitude": 43.32,
+      "longitude": -98.35,
+      "magnitude": 68.0,
+      "location": "Armour",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T04:24:00",
+      "latitude": 43.4,
+      "longitude": -98.77,
+      "magnitude": 63.0,
+      "location": "4 ENE Platte",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T04:27:00",
+      "latitude": 43.35,
+      "longitude": -98.52,
+      "magnitude": 60.0,
+      "location": "6 S Harrison",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T04:34:00",
+      "latitude": 43.34,
+      "longitude": -98.14,
+      "magnitude": 60.0,
+      "location": "5 NNE Delmont",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T05:30:00",
+      "latitude": 43.54,
+      "longitude": -97.89,
+      "magnitude": null,
+      "location": "5 E Ethan",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-08T06:04:00",
+      "latitude": 43.6,
+      "longitude": -97.62,
+      "magnitude": null,
+      "location": "Emery",
+      "state": "SD"
+    },
+    {
+      "kind": "tornado",
+      "time_utc": "2026-09-12T00:50:00",
+      "latitude": 45.46,
+      "longitude": -96.06,
+      "magnitude": null,
+      "location": "8 S Alberta",
+      "state": "MN"
+    },
+    {
+      "kind": "tornado",
+      "time_utc": "2026-09-12T00:51:00",
+      "latitude": 45.47,
+      "longitude": -96.08,
+      "magnitude": null,
+      "location": "7 NE Artichoke",
+      "state": "MN"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-11T19:00:00",
+      "latitude": 32.64,
+      "longitude": -97.1,
+      "magnitude": 1.0,
+      "location": "4 SSE Arlington",
+      "state": "TX"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-11T19:02:00",
+      "latitude": 32.64,
+      "longitude": -97.12,
+      "magnitude": 1.75,
+      "location": "4 S Arlington",
+      "state": "TX"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-11T19:05:00",
+      "latitude": 32.63,
+      "longitude": -97.12,
+      "magnitude": 1.25,
+      "location": "4 S Arlington",
+      "state": "TX"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-11T19:50:00",
+      "latitude": 47.54,
+      "longitude": -92.92,
+      "magnitude": 1.0,
+      "location": "4 NNW Chisholm",
+      "state": "MN"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-11T22:10:00",
+      "latitude": 35.16,
+      "longitude": -77.55,
+      "magnitude": 1.0,
+      "location": "5 SSW Wise Forks",
+      "state": "NC"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-11T22:27:00",
+      "latitude": 32.36,
+      "longitude": -96.99,
+      "magnitude": 1.0,
+      "location": "3 NNE Maypearl",
+      "state": "TX"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-11T22:32:00",
+      "latitude": 34.06,
+      "longitude": -95.01,
+      "magnitude": 1.0,
+      "location": "Wright City",
+      "state": "OK"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-11T22:46:00",
+      "latitude": 32.71,
+      "longitude": -97.43,
+      "magnitude": 1.0,
+      "location": "3 NE Benbrook",
+      "state": "TX"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-11T22:50:00",
+      "latitude": 32.48,
+      "longitude": -96.99,
+      "magnitude": 1.0,
+      "location": "1 SE Midlothian",
+      "state": "TX"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-11T23:29:00",
+      "latitude": 45.79,
+      "longitude": -96.32,
+      "magnitude": 1.0,
+      "location": "7 NE Dumont",
+      "state": "MN"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-11T23:37:00",
+      "latitude": 45.79,
+      "longitude": -96.32,
+      "magnitude": 1.25,
+      "location": "7 NE Dumont",
+      "state": "MN"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-11T23:38:00",
+      "latitude": 45.76,
+      "longitude": -96.21,
+      "magnitude": 1.25,
+      "location": "4.8 SW Herman",
+      "state": "MN"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-11T23:47:00",
+      "latitude": 45.84,
+      "longitude": -96.17,
+      "magnitude": 1.25,
+      "location": "2 SSE Norcross",
+      "state": "MN"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T00:00:00",
+      "latitude": 44.57,
+      "longitude": -96.64,
+      "magnitude": 1.25,
+      "location": "Toronto",
+      "state": "SD"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T00:03:00",
+      "latitude": 44.52,
+      "longitude": -96.6,
+      "magnitude": 1.5,
+      "location": "6 NNE White",
+      "state": "SD"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T00:05:00",
+      "latitude": 44.56,
+      "longitude": -96.63,
+      "magnitude": 1.25,
+      "location": "1 SE Toronto",
+      "state": "SD"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T00:30:00",
+      "latitude": 45.57,
+      "longitude": -96.18,
+      "magnitude": 1.0,
+      "location": "Chokio",
+      "state": "MN"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T00:38:00",
+      "latitude": 45.49,
+      "longitude": -96.06,
+      "magnitude": 1.25,
+      "location": "6 S Alberta",
+      "state": "MN"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T00:38:00",
+      "latitude": 46.54,
+      "longitude": -95.01,
+      "magnitude": 1.0,
+      "location": "Blue Grass",
+      "state": "MN"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T00:40:00",
+      "latitude": 45.47,
+      "longitude": -96.06,
+      "magnitude": 1.0,
+      "location": "7 NE Artichoke",
+      "state": "MN"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T00:53:00",
+      "latitude": 45.43,
+      "longitude": -96.06,
+      "magnitude": 1.75,
+      "location": "5 E Artichoke",
+      "state": "MN"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T00:54:00",
+      "latitude": 45.47,
+      "longitude": -96.07,
+      "magnitude": 1.75,
+      "location": "7 S Alberta",
+      "state": "MN"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T01:28:00",
+      "latitude": 45.47,
+      "longitude": -96.08,
+      "magnitude": 1.5,
+      "location": "7 S Alberta",
+      "state": "MN"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T01:30:00",
+      "latitude": 45.47,
+      "longitude": -96.06,
+      "magnitude": 1.75,
+      "location": "7 S Alberta",
+      "state": "MN"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T02:59:00",
+      "latitude": 29.49,
+      "longitude": -98.28,
+      "magnitude": 2.5,
+      "location": "3 SE Converse",
+      "state": "TX"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T03:10:00",
+      "latitude": 29.46,
+      "longitude": -98.28,
+      "magnitude": 1.75,
+      "location": "4 SSE Converse",
+      "state": "TX"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T03:17:00",
+      "latitude": 29.44,
+      "longitude": -98.18,
+      "magnitude": 1.0,
+      "location": "2 NE Saint Hedwig",
+      "state": "TX"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T03:18:00",
+      "latitude": 29.47,
+      "longitude": -98.34,
+      "magnitude": 1.5,
+      "location": "3 ENE Kirby",
+      "state": "TX"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T03:20:00",
+      "latitude": 29.39,
+      "longitude": -98.36,
+      "magnitude": 1.0,
+      "location": "1 WSW China Grove",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T19:00:00",
+      "latitude": 32.64,
+      "longitude": -97.13,
+      "magnitude": null,
+      "location": "4 S Arlington",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T19:07:00",
+      "latitude": 32.63,
+      "longitude": -97.12,
+      "magnitude": null,
+      "location": "4 N Mansfield",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T19:20:00",
+      "latitude": 32.73,
+      "longitude": -96.98,
+      "magnitude": null,
+      "location": "4 NE Grand Prairie",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T19:30:00",
+      "latitude": 32.61,
+      "longitude": -97.13,
+      "magnitude": null,
+      "location": "3 N Mansfield",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T19:40:00",
+      "latitude": 32.58,
+      "longitude": -97.09,
+      "magnitude": null,
+      "location": "2 ENE Mansfield",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T19:40:00",
+      "latitude": 32.79,
+      "longitude": -80.02,
+      "magnitude": null,
+      "location": "1 SSW West Ashley",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T20:27:00",
+      "latitude": 36.8,
+      "longitude": -78.36,
+      "magnitude": null,
+      "location": "3 WNW Wightman",
+      "state": "VA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T20:44:00",
+      "latitude": 37.26,
+      "longitude": -79.84,
+      "magnitude": null,
+      "location": "2 WSW Stewartsville",
+      "state": "VA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T20:50:00",
+      "latitude": 34.63,
+      "longitude": -86.58,
+      "magnitude": null,
+      "location": "6 SE Redstone Arsenal",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:02:00",
+      "latitude": 34.27,
+      "longitude": -80.3,
+      "magnitude": null,
+      "location": "5 NW Bishopville",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:05:00",
+      "latitude": 34.23,
+      "longitude": -80.32,
+      "magnitude": null,
+      "location": "4 W Bishopville",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:08:00",
+      "latitude": 31.94,
+      "longitude": -89.62,
+      "magnitude": null,
+      "location": "3 N Shady Grove",
+      "state": "MS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:14:00",
+      "latitude": 47.63,
+      "longitude": -92.43,
+      "magnitude": null,
+      "location": "6 E Britt",
+      "state": "MN"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:15:00",
+      "latitude": 34.38,
+      "longitude": -80.54,
+      "magnitude": null,
+      "location": "6 SE Westville",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:20:00",
+      "latitude": 34.42,
+      "longitude": -80.36,
+      "magnitude": null,
+      "location": "1 NW Bethune",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:21:00",
+      "latitude": 47.64,
+      "longitude": -92.29,
+      "magnitude": null,
+      "location": "5 WSW Embarrass",
+      "state": "MN"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:22:00",
+      "latitude": 47.64,
+      "longitude": -92.24,
+      "magnitude": null,
+      "location": "3 WSW Embarrass",
+      "state": "MN"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:23:00",
+      "latitude": 34.76,
+      "longitude": -79.52,
+      "magnitude": null,
+      "location": "3 WSW Laurinburg",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:25:00",
+      "latitude": 34.74,
+      "longitude": -79.53,
+      "magnitude": null,
+      "location": "4 WSW Laurinburg",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:25:00",
+      "latitude": 47.64,
+      "longitude": -92.22,
+      "magnitude": null,
+      "location": "2 SW Embarrass",
+      "state": "MN"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:26:00",
+      "latitude": 34.77,
+      "longitude": -79.47,
+      "magnitude": null,
+      "location": "Laurinburg",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:27:00",
+      "latitude": 47.66,
+      "longitude": -92.22,
+      "magnitude": null,
+      "location": "1 WNW Embarrass",
+      "state": "MN"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:28:00",
+      "latitude": 34.38,
+      "longitude": -80.54,
+      "magnitude": null,
+      "location": "6 SE Westville",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:30:00",
+      "latitude": 31.83,
+      "longitude": -89.43,
+      "magnitude": null,
+      "location": "Taylorsville",
+      "state": "MS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:31:00",
+      "latitude": 47.69,
+      "longitude": -92.18,
+      "magnitude": null,
+      "location": "2 NNE Embarrass",
+      "state": "MN"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:33:00",
+      "latitude": 47.67,
+      "longitude": -92.13,
+      "magnitude": null,
+      "location": "3 E Embarrass",
+      "state": "MN"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:42:00",
+      "latitude": 34.25,
+      "longitude": -80.61,
+      "magnitude": null,
+      "location": "1 S Camden",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:45:00",
+      "latitude": 32.88,
+      "longitude": -96.08,
+      "magnitude": null,
+      "location": "3 ESE Quinlan",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:46:00",
+      "latitude": 37.27,
+      "longitude": -79.0,
+      "magnitude": null,
+      "location": "4 NW Spring Mills",
+      "state": "VA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:50:00",
+      "latitude": 34.23,
+      "longitude": -80.78,
+      "magnitude": null,
+      "location": "5 N Elgin",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T21:55:00",
+      "latitude": 37.28,
+      "longitude": -79.02,
+      "magnitude": null,
+      "location": "4 E Rustburg",
+      "state": "VA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T22:10:00",
+      "latitude": 34.25,
+      "longitude": -80.74,
+      "magnitude": null,
+      "location": "3 NW Lugoff",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T22:25:00",
+      "latitude": 35.19,
+      "longitude": -77.41,
+      "magnitude": null,
+      "location": "2 SE Dover",
+      "state": "NC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T22:42:00",
+      "latitude": 36.41,
+      "longitude": -87.37,
+      "magnitude": null,
+      "location": "9 WSW Fredonia",
+      "state": "TN"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T22:53:00",
+      "latitude": 34.57,
+      "longitude": -84.47,
+      "magnitude": null,
+      "location": "3 ESE Talona",
+      "state": "GA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T22:54:00",
+      "latitude": 34.61,
+      "longitude": -84.46,
+      "magnitude": null,
+      "location": "3 E Talona",
+      "state": "GA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T23:09:00",
+      "latitude": 34.17,
+      "longitude": -81.3,
+      "magnitude": null,
+      "location": "3 NW White Rock",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T23:10:00",
+      "latitude": 34.18,
+      "longitude": -81.31,
+      "magnitude": null,
+      "location": "2 NE Chapin",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T23:26:00",
+      "latitude": 34.21,
+      "longitude": -81.35,
+      "magnitude": null,
+      "location": "2 SW Peak",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-11T23:32:00",
+      "latitude": 34.19,
+      "longitude": -81.34,
+      "magnitude": null,
+      "location": "2 N Chapin",
+      "state": "SC"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T00:19:00",
+      "latitude": 47.05,
+      "longitude": -94.37,
+      "magnitude": null,
+      "location": "Whipholt",
+      "state": "MN"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T00:29:00",
+      "latitude": 46.99,
+      "longitude": -94.25,
+      "magnitude": null,
+      "location": "2 WNW Longville",
+      "state": "MN"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T00:30:00",
+      "latitude": 45.57,
+      "longitude": -96.17,
+      "magnitude": null,
+      "location": "Chokio",
+      "state": "MN"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T00:52:00",
+      "latitude": 46.57,
+      "longitude": -95.01,
+      "magnitude": null,
+      "location": "2 N Blue Grass",
+      "state": "MN"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T01:07:00",
+      "latitude": 32.27,
+      "longitude": -107.72,
+      "magnitude": 68.0,
+      "location": "2 E Deming",
+      "state": "NM"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T01:16:00",
+      "latitude": 36.9,
+      "longitude": -87.99,
+      "magnitude": null,
+      "location": "Rockcastle",
+      "state": "KY"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T01:24:00",
+      "latitude": 43.22,
+      "longitude": -96.91,
+      "magnitude": 58.0,
+      "location": "5 SE Davis",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T01:56:00",
+      "latitude": 43.04,
+      "longitude": -96.8,
+      "magnitude": 59.0,
+      "location": "3 SSW Beresford",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T02:08:00",
+      "latitude": 42.77,
+      "longitude": -96.81,
+      "magnitude": 67.0,
+      "location": "6 E Vermillion",
+      "state": "SD"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T02:30:00",
+      "latitude": 42.83,
+      "longitude": -96.56,
+      "magnitude": null,
+      "location": "Akron",
+      "state": "IA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T03:00:00",
+      "latitude": 42.79,
+      "longitude": -96.15,
+      "magnitude": null,
+      "location": "1 ENE Le Mars",
+      "state": "IA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T03:04:00",
+      "latitude": 29.53,
+      "longitude": -98.27,
+      "magnitude": 60.0,
+      "location": "2 S Schertz",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T04:07:00",
+      "latitude": 41.47,
+      "longitude": -97.29,
+      "magnitude": 62.0,
+      "location": "4 NE Columbus",
+      "state": "NE"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T04:46:00",
+      "latitude": 37.99,
+      "longitude": -87.8,
+      "magnitude": null,
+      "location": "7 NE Mount Vernon",
+      "state": "IN"
+    },
+    {
+      "kind": "tornado",
+      "time_utc": "2026-09-12T19:40:00",
+      "latitude": 29.6,
+      "longitude": -81.28,
+      "magnitude": null,
+      "location": "5 WNW Palm Coast",
+      "state": "FL"
+    },
+    {
+      "kind": "tornado",
+      "time_utc": "2026-09-12T20:46:00",
+      "latitude": 37.16,
+      "longitude": -76.96,
+      "magnitude": null,
+      "location": "1 ESE Spring Grove",
+      "state": "VA"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T15:53:00",
+      "latitude": 40.28,
+      "longitude": -96.71,
+      "magnitude": 1.75,
+      "location": "2 ENE Beatrice",
+      "state": "NE"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T15:54:00",
+      "latitude": 40.28,
+      "longitude": -96.75,
+      "magnitude": 1.75,
+      "location": "1 N Beatrice",
+      "state": "NE"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T15:55:00",
+      "latitude": 40.28,
+      "longitude": -96.75,
+      "magnitude": 1.0,
+      "location": "1 N Beatrice",
+      "state": "NE"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T15:56:00",
+      "latitude": 40.27,
+      "longitude": -96.74,
+      "magnitude": 1.0,
+      "location": "1 NE Beatrice",
+      "state": "NE"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T16:13:00",
+      "latitude": 40.14,
+      "longitude": -96.66,
+      "magnitude": 1.0,
+      "location": "Blue Springs",
+      "state": "NE"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T16:51:00",
+      "latitude": 40.44,
+      "longitude": -99.37,
+      "magnitude": 1.0,
+      "location": "Holdrege",
+      "state": "NE"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T16:52:00",
+      "latitude": 40.44,
+      "longitude": -99.38,
+      "magnitude": 1.25,
+      "location": "Holdrege",
+      "state": "NE"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T16:52:00",
+      "latitude": 40.45,
+      "longitude": -99.36,
+      "magnitude": 1.0,
+      "location": "1 NE Holdrege",
+      "state": "NE"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T18:46:00",
+      "latitude": 37.55,
+      "longitude": -95.22,
+      "magnitude": 1.0,
+      "location": "2 SE Erie",
+      "state": "KS"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T19:50:00",
+      "latitude": 37.28,
+      "longitude": -94.93,
+      "magnitude": 1.0,
+      "location": "1 WSW West Mineral",
+      "state": "KS"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T20:12:00",
+      "latitude": 39.64,
+      "longitude": -98.04,
+      "magnitude": 1.75,
+      "location": "Randall",
+      "state": "KS"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T20:36:00",
+      "latitude": 39.6,
+      "longitude": -97.86,
+      "magnitude": 1.25,
+      "location": "Jamestown",
+      "state": "KS"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T20:44:00",
+      "latitude": 39.61,
+      "longitude": -97.9,
+      "magnitude": 1.0,
+      "location": "2 WNW Jamestown",
+      "state": "KS"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T21:10:00",
+      "latitude": 35.48,
+      "longitude": -97.52,
+      "magnitude": 1.0,
+      "location": "1 NNW Oklahoma City",
+      "state": "OK"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T22:38:00",
+      "latitude": 39.04,
+      "longitude": -96.77,
+      "magnitude": 1.0,
+      "location": "1 NE Grandview Plaza",
+      "state": "KS"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T22:45:00",
+      "latitude": 36.33,
+      "longitude": -100.8,
+      "magnitude": 1.0,
+      "location": "4 S Perryton",
+      "state": "TX"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T23:38:00",
+      "latitude": 38.88,
+      "longitude": -96.64,
+      "magnitude": 1.75,
+      "location": "4 NW Dwight",
+      "state": "KS"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-12T23:52:00",
+      "latitude": 37.26,
+      "longitude": -99.24,
+      "magnitude": 1.0,
+      "location": "5 ESE Coldwater",
+      "state": "KS"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-13T00:10:00",
+      "latitude": 37.35,
+      "longitude": -99.33,
+      "magnitude": 2.0,
+      "location": "6 N Coldwater",
+      "state": "KS"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-13T00:15:00",
+      "latitude": 37.41,
+      "longitude": -99.32,
+      "magnitude": 2.0,
+      "location": "8 NW Wilmore",
+      "state": "KS"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-13T00:45:00",
+      "latitude": 38.47,
+      "longitude": -96.19,
+      "magnitude": 1.0,
+      "location": "5 N Emporia",
+      "state": "KS"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-13T01:15:00",
+      "latitude": 37.65,
+      "longitude": -98.56,
+      "magnitude": 1.5,
+      "location": "Cairo",
+      "state": "KS"
+    },
+    {
+      "kind": "hail",
+      "time_utc": "2026-09-13T04:42:00",
+      "latitude": 38.52,
+      "longitude": -96.42,
+      "magnitude": 1.5,
+      "location": "5 SW Dunlap",
+      "state": "KS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T15:30:00",
+      "latitude": 37.66,
+      "longitude": -94.29,
+      "magnitude": null,
+      "location": "Sheldon",
+      "state": "MO"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T16:04:00",
+      "latitude": 34.95,
+      "longitude": -87.87,
+      "magnitude": null,
+      "location": "11 ENE Waterloo",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T16:30:00",
+      "latitude": 36.1,
+      "longitude": -95.76,
+      "magnitude": null,
+      "location": "4 NNE Broken Arrow",
+      "state": "OK"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T17:34:00",
+      "latitude": 35.75,
+      "longitude": -95.64,
+      "magnitude": 58.0,
+      "location": "5 SSE Haskell",
+      "state": "OK"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T18:13:00",
+      "latitude": 34.56,
+      "longitude": -86.97,
+      "magnitude": null,
+      "location": "1 SE Decatur",
+      "state": "AL"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T18:44:00",
+      "latitude": 33.74,
+      "longitude": -89.8,
+      "magnitude": null,
+      "location": "Tie Plant",
+      "state": "MS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T19:00:00",
+      "latitude": 33.78,
+      "longitude": -89.8,
+      "magnitude": null,
+      "location": "Grenada",
+      "state": "MS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T19:17:00",
+      "latitude": 40.17,
+      "longitude": -80.2,
+      "magnitude": null,
+      "location": "2 E East Washington",
+      "state": "PA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T19:26:00",
+      "latitude": 40.27,
+      "longitude": -80.05,
+      "magnitude": null,
+      "location": "2 W Gastonville",
+      "state": "PA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T19:30:00",
+      "latitude": 40.18,
+      "longitude": -80.11,
+      "magnitude": null,
+      "location": "1 ESE Eighty Four",
+      "state": "PA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T19:35:00",
+      "latitude": 40.39,
+      "longitude": -79.93,
+      "magnitude": null,
+      "location": "1 WSW West Homestead",
+      "state": "PA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T20:05:00",
+      "latitude": 37.16,
+      "longitude": -95.04,
+      "magnitude": null,
+      "location": "3 WSW Hallowell",
+      "state": "KS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T20:06:00",
+      "latitude": 39.55,
+      "longitude": -97.65,
+      "magnitude": 59.0,
+      "location": "1 SSE Concordia",
+      "state": "KS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T20:24:00",
+      "latitude": 40.95,
+      "longitude": -79.13,
+      "magnitude": null,
+      "location": "4 ESE Timblin",
+      "state": "PA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T20:43:00",
+      "latitude": 32.8,
+      "longitude": -88.95,
+      "magnitude": null,
+      "location": "2 SSW Bogue Chitto",
+      "state": "MS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T20:47:00",
+      "latitude": 32.8,
+      "longitude": -88.83,
+      "magnitude": 58.0,
+      "location": "3 N Cleveland",
+      "state": "MS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T20:50:00",
+      "latitude": 32.79,
+      "longitude": -89.0,
+      "magnitude": null,
+      "location": "4 SE Spring Creek",
+      "state": "MS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T20:57:00",
+      "latitude": 40.33,
+      "longitude": -79.28,
+      "magnitude": null,
+      "location": "1 ESE Derry",
+      "state": "PA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T21:00:00",
+      "latitude": 35.85,
+      "longitude": -97.76,
+      "magnitude": 63.0,
+      "location": "6 NW Cashion",
+      "state": "OK"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T21:22:00",
+      "latitude": 40.74,
+      "longitude": -79.16,
+      "magnitude": null,
+      "location": "4 SSE Plumville",
+      "state": "PA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T22:00:00",
+      "latitude": 35.83,
+      "longitude": -97.89,
+      "magnitude": null,
+      "location": "3 SE Kingfisher",
+      "state": "OK"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T22:00:00",
+      "latitude": 39.73,
+      "longitude": -80.08,
+      "magnitude": null,
+      "location": "8 ESE Spraggs",
+      "state": "PA"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T22:10:00",
+      "latitude": 34.1,
+      "longitude": -94.1,
+      "magnitude": null,
+      "location": "5 WSW Dierks",
+      "state": "AR"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T22:20:00",
+      "latitude": 36.38,
+      "longitude": -100.83,
+      "magnitude": null,
+      "location": "2 WSW Perryton",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T22:24:00",
+      "latitude": 38.95,
+      "longitude": -95.68,
+      "magnitude": 59.0,
+      "location": "1 SE Pauline",
+      "state": "KS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T22:30:00",
+      "latitude": 34.04,
+      "longitude": -94.64,
+      "magnitude": null,
+      "location": "4 WNW Eagletown",
+      "state": "OK"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T22:30:00",
+      "latitude": 36.37,
+      "longitude": -100.78,
+      "magnitude": null,
+      "location": "2 SE Perryton",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T22:39:00",
+      "latitude": 35.73,
+      "longitude": -97.96,
+      "magnitude": null,
+      "location": "1 E Okarche",
+      "state": "OK"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T22:40:00",
+      "latitude": 36.33,
+      "longitude": -100.8,
+      "magnitude": null,
+      "location": "4 S Perryton",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T23:00:00",
+      "latitude": 37.06,
+      "longitude": -99.75,
+      "magnitude": 64.0,
+      "location": "8 ESE Acres",
+      "state": "KS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T23:05:00",
+      "latitude": 37.06,
+      "longitude": -99.75,
+      "magnitude": 75.0,
+      "location": "8 ESE Acres",
+      "state": "KS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T23:11:00",
+      "latitude": 33.8,
+      "longitude": -93.41,
+      "magnitude": null,
+      "location": "1 WSW Prescott",
+      "state": "AR"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T23:38:00",
+      "latitude": 32.93,
+      "longitude": -112.79,
+      "magnitude": 60.0,
+      "location": "4 WSW Gila Bend",
+      "state": "AZ"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T23:50:00",
+      "latitude": 37.92,
+      "longitude": -95.4,
+      "magnitude": null,
+      "location": "1 S Iola",
+      "state": "KS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T23:52:00",
+      "latitude": 32.08,
+      "longitude": -89.78,
+      "magnitude": null,
+      "location": "Puckett",
+      "state": "MS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T23:57:00",
+      "latitude": 33.26,
+      "longitude": -92.7,
+      "magnitude": null,
+      "location": "3 NW El Dorado",
+      "state": "AR"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-12T23:58:00",
+      "latitude": 37.81,
+      "longitude": -95.44,
+      "magnitude": 60.0,
+      "location": "Humboldt",
+      "state": "KS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-13T00:15:00",
+      "latitude": 33.17,
+      "longitude": -92.78,
+      "magnitude": null,
+      "location": "8 WSW El Dorado",
+      "state": "AR"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-13T00:15:00",
+      "latitude": 37.73,
+      "longitude": -95.34,
+      "magnitude": 60.0,
+      "location": "7 E Petrolia",
+      "state": "KS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-13T00:29:00",
+      "latitude": 33.22,
+      "longitude": -92.81,
+      "magnitude": 61.0,
+      "location": "9 W El Dorado",
+      "state": "AR"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-13T00:50:00",
+      "latitude": 36.35,
+      "longitude": -100.28,
+      "magnitude": 64.0,
+      "location": "7 SSE Darrouzett",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-13T01:15:00",
+      "latitude": 37.29,
+      "longitude": -94.92,
+      "magnitude": null,
+      "location": "West Mineral",
+      "state": "KS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-13T02:10:00",
+      "latitude": 36.73,
+      "longitude": -99.13,
+      "magnitude": 59.0,
+      "location": "3 SSW Freedom",
+      "state": "OK"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-13T02:20:00",
+      "latitude": 35.1,
+      "longitude": -101.38,
+      "magnitude": 63.0,
+      "location": "1 W Claude",
+      "state": "TX"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-13T03:50:00",
+      "latitude": 37.67,
+      "longitude": -95.49,
+      "magnitude": 61.0,
+      "location": "Chanute Airport",
+      "state": "KS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-13T04:17:00",
+      "latitude": 37.53,
+      "longitude": -95.27,
+      "magnitude": null,
+      "location": "3 SSW Erie",
+      "state": "KS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-13T05:45:00",
+      "latitude": 37.67,
+      "longitude": -95.48,
+      "magnitude": 84.0,
+      "location": "Chanute Martin Johnson",
+      "state": "KS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-13T05:51:00",
+      "latitude": 37.68,
+      "longitude": -95.45,
+      "magnitude": null,
+      "location": "Chanute",
+      "state": "KS"
+    },
+    {
+      "kind": "wind",
+      "time_utc": "2026-09-13T06:13:00",
+      "latitude": 37.53,
+      "longitude": -95.33,
+      "magnitude": null,
+      "location": "4 NNE Galesburg",
+      "state": "KS"
+    }
+  ]
+}
