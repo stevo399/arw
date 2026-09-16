@@ -82,6 +82,10 @@ def test_history_tracking_is_identical_to_retained_scan_tracking(tmp_path):
         _promote_persistent_rotation(previous, old_input)
         for obj in old_input.detected_objects:
             obj.temporal_status = previous.temporal_status_for_current_object(obj.object_id)
+            # Live tracking also attaches each object's own track motion; the
+            # reference does the same, so the two pipelines differ only by what
+            # compaction did, never by an attachment one side simply skipped.
+            obj.motion = previous.motion_for_current_object(obj.object_id)
         old_snapshot = dumps(previous.snapshot())
 
         plain.add_live_scan(original)
