@@ -1499,3 +1499,54 @@ def test_intensity_layer_contours_each_distinct_level_once(monkeypatch):
 
     assert sorted(contoured) == [20.0, 30.0, 40.0]
     assert json.dumps(shared, sort_keys=True) == json.dumps(baseline, sort_keys=True)
+
+
+def _storm_feature_with_motion(motion):
+    reflectivity = np.full((12, 12), np.nan)
+    reflectivity[4:8, 5:9] = 50.0
+    mask = ~np.isnan(reflectivity)
+    obj = DetectedObject(
+        object_id=1, centroid_lat=35.2, centroid_lon=-96.9, distance_km=30.0,
+        bearing_deg=90.0, peak_dbz=50.0, peak_label="intense precipitation",
+        area_km2=24.0,
+    )
+    obj.motion = motion
+    scan = BufferedScan(
+        timestamp=datetime(2026, 4, 10, 20, 0), site_id="KTLX",
+        reflectivity_data=SweepData(
+            reflectivity=reflectivity, azimuths=np.linspace(80, 100, 12),
+            ranges_m=np.linspace(20000, 40000, 12), radar_lat=35.3331,
+            radar_lon=-97.2778, elevation_angle=0.5, elevations=np.full(12, 0.5),
+            elevation_angles=[0.5], radar_alt_m=390.0, timestamp="2026-04-10T20:00:00Z",
+        ),
+        detected_objects=[obj],
+        labeled_grid=mask.astype(int), object_masks={1: mask},
+    )
+    return build_storm_geojson(scan)["features"][0]
+
+
+def test_storm_features_carry_motion_properties():
+    from src.tracking.motion import MotionVector
+    from src.tracking.types import MotionConfidence
+
+    props = _storm_feature_with_motion(MotionVector(
+        speed_kmh=32.0, speed_mph=20, heading_deg=95.0, heading_label="east",
+        confidence=MotionConfidence(label="measured", score=0.9),
+        source="track_history",
+    ))["properties"]
+
+    assert props["motion_speed_mph"] == 20
+    assert props["motion_heading_deg"] == 95.0
+    assert props["motion_heading_label"] == "east"
+    assert props["motion_confidence"] == "measured"
+    assert props["motion_source"] == "track_history"
+
+
+def test_storm_features_emit_null_motion_when_unknown():
+    props = _storm_feature_with_motion(None)["properties"]
+
+    assert props["motion_speed_mph"] is None
+    assert props["motion_heading_deg"] is None
+    assert props["motion_heading_label"] is None
+    assert props["motion_confidence"] is None
+    assert props["motion_source"] is None

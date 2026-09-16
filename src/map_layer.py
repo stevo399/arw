@@ -347,6 +347,12 @@ def _layer_geometry(
 
 def _storm_properties(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any]:
     rotation = getattr(obj, "rotation", None)
+    motion = getattr(obj, "motion", None)
+    motion_confidence = (
+        motion.confidence.label
+        if motion is not None and motion.confidence is not None
+        else None
+    )
     rotation_strength = rotation.strength if rotation is not None else None
     return {
         "object_id": obj.object_id,
@@ -382,6 +388,11 @@ def _storm_properties(scan: BufferedScan, obj: DetectedObject) -> dict[str, Any]
         "rotation_motion_reference": rotation.motion_reference if rotation is not None else None,
         "rotation_context_peak_dbz": rotation.associated_object_peak_dbz if rotation is not None else None,
         "rotation_dual_pol_available": rotation.dual_pol_available if rotation is not None else None,
+        "motion_speed_mph": motion.speed_mph if motion is not None else None,
+        "motion_heading_deg": motion.heading_deg if motion is not None else None,
+        "motion_heading_label": motion.heading_label if motion is not None else None,
+        "motion_confidence": motion_confidence,
+        "motion_source": motion.source if motion is not None else None,
         "max_inbound_ms": getattr(obj, "max_inbound_ms", None),
         "max_outbound_ms": getattr(obj, "max_outbound_ms", None),
         "layers": [layer.__dict__ for layer in obj.layers],
