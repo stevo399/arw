@@ -59,6 +59,10 @@ class DetectedObject:
     # Set by live cross-scan association. This describes repeat detection,
     # never confirmation of precipitation at the surface.
     temporal_status: str = "not_checked"
+    # Set by live cross-scan association, from this object's own track. None
+    # when the object has no track yet, or when its track has not measured a
+    # motion. Never inferred from a neighbouring storm.
+    motion: "MotionVector | None" = None
 
 
 def classify_intensity(dbz: float) -> str:

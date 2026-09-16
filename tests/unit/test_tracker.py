@@ -517,3 +517,27 @@ def test_last_scan_timestamp_follows_updates():
     t1 = datetime(2026, 9, 12, 18, 0)
     tracker.update(_make_scan("KTLX", t1, [_make_object(1, 35.3, -97.3)]))
     assert tracker.last_scan_timestamp == t1
+
+
+def test_motion_for_current_object_returns_track_motion():
+    tracker = StormTracker()
+    t1 = datetime(2026, 4, 8, 18, 30)
+    t2 = t1 + timedelta(minutes=5)
+    obj1 = _make_object(1, 35.0, -97.5)
+    obj2 = _make_object(1, 35.05, -97.5)
+    mask1 = np.zeros((360, 500), dtype=bool)
+    mask1[85:95, 195:205] = True
+    mask2 = np.zeros((360, 500), dtype=bool)
+    mask2[86:96, 196:206] = True
+    tracker.update(_make_scan("KTLX", t1, [obj1], masks={1: mask1}))
+    tracker.update(_make_scan("KTLX", t2, [obj2], masks={1: mask2}))
+
+    motion = tracker.motion_for_current_object(obj2.object_id)
+
+    assert motion is not None
+    assert motion.heading_label
+
+
+def test_motion_for_current_object_returns_none_for_untracked_object():
+    tracker = StormTracker()
+    assert tracker.motion_for_current_object(999) is None
