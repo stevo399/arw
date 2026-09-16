@@ -1585,3 +1585,30 @@ def test_description_is_silent_on_nearby_sourced_motion():
     ))["properties"]["description"]
 
     assert "Moving" not in description
+
+
+def test_metadata_advertises_motion_speed_when_it_varies():
+    from src.tracking.motion import MotionVector
+
+    scan = _scan_with_two_adjacent_objects()
+    for obj, mph in zip(scan.detected_objects, [10, 30]):
+        obj.motion = MotionVector(
+            speed_kmh=mph * 1.60934, speed_mph=mph, heading_deg=90.0,
+            heading_label="east", source="track_history",
+        )
+
+    metadata = build_storm_audiom_centroid_geojson(scan)["metadata"]
+    fields = [descriptor["field"] for descriptor in metadata["dataProperties"]]
+
+    assert "motion_speed_mph" in fields
+
+
+def test_metadata_drops_motion_speed_when_all_objects_lack_motion():
+    scan = _scan_with_two_adjacent_objects()
+    for obj in scan.detected_objects:
+        obj.motion = None
+
+    metadata = build_storm_audiom_centroid_geojson(scan)["metadata"]
+    fields = [descriptor["field"] for descriptor in metadata["dataProperties"]]
+
+    assert "motion_speed_mph" not in fields

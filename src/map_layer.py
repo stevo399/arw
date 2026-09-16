@@ -548,6 +548,7 @@ def _storm_metadata(name: str = "ARW storm polygons") -> dict[str, Any]:
             {"field": "peak_dbz", "displayName": "Parent storm peak dBZ", "type": "number"},
             {"field": "area_mi2", "displayName": "Area square miles", "type": "number"},
             {"field": "distance_mi", "displayName": "Distance miles", "type": "number"},
+            {"field": "motion_speed_mph", "displayName": "Motion speed mph", "type": "number"},
         ],
         "suggestedRefreshInterval": 300,
     }
