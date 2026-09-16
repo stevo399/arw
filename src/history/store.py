@@ -108,6 +108,7 @@ class RadarHistory:
             _promote_persistent_rotation(self.tracker, buffered)
             for obj in buffered.detected_objects:
                 obj.temporal_status = self.tracker.temporal_status_for_current_object(obj.object_id)
+                obj.motion = self.tracker.motion_for_current_object(obj.object_id)
             buffered.tracking = self.tracker.snapshot()
             compact = CompactScan.from_buffered_scan(buffered)
             self._ring.append(compact)
@@ -201,6 +202,7 @@ class RadarHistory:
             _promote_persistent_rotation(self.tracker, buffered)
             for obj in buffered.detected_objects:
                 obj.temporal_status = self.tracker.temporal_status_for_current_object(obj.object_id)
+                obj.motion = self.tracker.motion_for_current_object(obj.object_id)
             snapshot = self.tracker.snapshot()
             snapshot.continuity_rebuilt = True
             buffered.tracking = snapshot

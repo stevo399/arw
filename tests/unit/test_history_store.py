@@ -244,3 +244,30 @@ def test_rotation_is_not_promoted_across_a_gap_longer_than_the_persistence_windo
     history.add_live_scan(_scan_with_rotation(25))  # 25 minutes after the last rotation
     newest = history.newest().to_buffered_scan()
     assert [r.evidence_level for r in newest.rotation_signatures] == ["unconfirmed"]
+
+
+def test_live_scan_objects_carry_their_track_motion(tmp_path):
+    history = RadarHistory.open("KTLX", tmp_path, ring_size=5)
+    scans = [_scan(minute, minute * 0.001) for minute in (0, 5, 10)]
+    for scan in scans:
+        history.add_live_scan(scan)
+
+    newest = scans[-1]
+
+    assert newest.detected_objects
+    for obj in newest.detected_objects:
+        assert hasattr(obj, "motion")
+    assert any(obj.motion is not None for obj in newest.detected_objects)
+
+
+def test_retained_scan_round_trip_preserves_motion(tmp_path):
+    """The server renders retained.to_buffered_scan(), never the live scan, so
+    motion that does not survive compaction never reaches the map at all."""
+    history = RadarHistory.open("KTLX", tmp_path, ring_size=5)
+    for minute in (0, 5, 10):
+        history.add_live_scan(_scan(minute, minute * 0.001))
+
+    restored = list(history.scans())[-1].to_buffered_scan()
+
+    assert restored.detected_objects
+    assert any(obj.motion is not None for obj in restored.detected_objects)
