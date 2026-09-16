@@ -273,6 +273,22 @@ def test_a_key_for_a_different_volume_is_not_accepted(monkeypatch):
     assert ingest.sti_key_for_volume("KIWA", datetime(2026, 9, 16, 1, 34, 20)) is None
 
 
+def test_an_aware_scan_timestamp_still_matches_its_key(monkeypatch):
+    """buffered.timestamp is timezone-aware; Level III key times are naive.
+    Comparing them directly returns False rather than raising, so a missing
+    conversion would make every lookup miss silently and the gate would never
+    engage. This test is the guard against that."""
+    from datetime import timezone
+
+    monkeypatch.setattr(ingest, "list_level3_keys", lambda site, product, start, end: [
+        "IWA_NST_2026_09_16_01_34_20",
+    ])
+
+    aware = datetime(2026, 9, 16, 1, 34, 20, tzinfo=timezone.utc)
+
+    assert ingest.sti_key_for_volume("KIWA", aware) == "IWA_NST_2026_09_16_01_34_20"
+
+
 def test_fetch_returns_the_product_bytes(monkeypatch, tmp_path):
     product = tmp_path / "IWA_NST_2026_09_16_01_34_20"
     product.write_bytes(b"storm table bytes")
@@ -301,6 +317,18 @@ In `src/ingest.py`, immediately after `download_level3`:
 STI_PRODUCT = "NST"
 
 
+def _as_naive_utc(when: datetime) -> datetime:
+    """Level III key times are naive UTC; a scan timestamp is timezone-aware.
+
+    Comparing the two directly returns False rather than raising, so without
+    this every lookup would silently miss, every volume would sit out the full
+    deadline, and the gate would never once engage.
+    """
+    if when.tzinfo is None:
+        return when
+    return when.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def sti_key_for_volume(site_id: str, volume_time: datetime) -> str | None:
     """The storm-tracking product for exactly this volume, or None.
 
@@ -308,9 +336,9 @@ def sti_key_for_volume(site_id: str, volume_time: datetime) -> str | None:
     exact match. Accepting a near miss would silently attach a neighbouring
     volume's storm cells to this one.
     """
-    keys = list_level3_keys(site_id, STI_PRODUCT, volume_time, volume_time)
-    for key in keys:
-        if level3_key_time(key) == volume_time:
+    wanted = _as_naive_utc(volume_time)
+    for key in list_level3_keys(site_id, STI_PRODUCT, wanted, wanted):
+        if level3_key_time(key) == wanted:
             return key
     return None
 
@@ -324,7 +352,9 @@ def fetch_sti_for_volume(site_id: str, volume_time: datetime) -> bytes | None:
         return handle.read()
 ```
 
-`list_level3_keys` already filters on `start <= level3_key_time(key) <= end`, so passing the volume time as both bounds narrows the listing; the equality check then guards against any boundary looseness.
+Add `timezone` to the existing datetime import at `src/ingest.py:3` — it currently reads `from datetime import date, datetime, timedelta`.
+
+`list_level3_keys` already filters on `start <= level3_key_time(key) <= end`, so passing the volume time as both bounds narrows the listing; the equality check then guards against any boundary looseness. Both bounds must be the *naive* value, since `list_level3_keys` compares them against naive key times — passing an aware datetime there raises `TypeError` on the `<=` comparison.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
