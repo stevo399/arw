@@ -13,6 +13,7 @@ from src.geometry import gate_areas_km2
 from src.qc.classifier import CODE_TO_CLASS
 from src import summary as _summary
 from src.summary import km2_to_mi2, km_to_miles
+from src.tracking.motion import NEARBY_SOURCE
 
 
 def _storm_fill_color(peak_dbz: float) -> str:
@@ -115,6 +116,29 @@ def _display_intensity_label(label: str, phenomenon: str) -> str:
     return label.replace(" precipitation", " reflectivity").replace("severe core", "severe reflectivity core")
 
 
+_UNSPOKEN_HEADINGS = {"uncertain", "stationary", "nearly stationary", "unknown"}
+
+
+def _motion_sentence(obj: DetectedObject) -> str | None:
+    """State motion only when this storm measured it itself.
+
+    Descriptions are read aloud, so an inferred or borrowed heading must not
+    be spoken as though this storm had been observed moving. Motion taken
+    from nearby storms, and headings too slow or unsettled to state, stay
+    silent here; the feature's motion properties still carry them, labelled.
+    """
+    motion = getattr(obj, "motion", None)
+    if motion is None:
+        return None
+    if motion.heading_label in _UNSPOKEN_HEADINGS:
+        return None
+    if motion.source == NEARBY_SOURCE:
+        return None
+    if motion.speed_mph is None:
+        return None
+    return f"Moving {motion.heading_label} at {motion.speed_mph} mph."
+
+
 def _storm_description(obj: DetectedObject, rotation) -> str:
     area_mi2 = km2_to_mi2(obj.area_km2)
     phenomenon = _object_phenomenon(obj)
@@ -139,6 +163,9 @@ def _storm_description(obj: DetectedObject, rotation) -> str:
         )
     else:
         parts.append("Persistence was not checked because no prior scan was available.")
+    motion_sentence = _motion_sentence(obj)
+    if motion_sentence is not None:
+        parts.append(motion_sentence)
     # Descriptions are read aloud, so only validated evidence levels appear;
     # the feature's rotation properties still carry every level, labelled.
     if rotation is not None and rotation.evidence_level in _summary.SPOKEN_ROTATION_EVIDENCE:

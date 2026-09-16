@@ -1550,3 +1550,38 @@ def test_storm_features_emit_null_motion_when_unknown():
     assert props["motion_heading_label"] is None
     assert props["motion_confidence"] is None
     assert props["motion_source"] is None
+
+
+def test_description_states_known_motion():
+    from src.tracking.motion import MotionVector
+
+    description = _storm_feature_with_motion(MotionVector(
+        speed_kmh=32.0, speed_mph=20, heading_deg=95.0,
+        heading_label="east", source="track_history",
+    ))["properties"]["description"]
+
+    assert "Moving east at 20 mph." in description
+
+
+def test_description_is_silent_on_uncertain_motion():
+    from src.tracking.motion import MotionVector
+
+    description = _storm_feature_with_motion(MotionVector(
+        speed_kmh=None, speed_mph=None, heading_deg=None,
+        heading_label="uncertain", source="track_history",
+    ))["properties"]["description"]
+
+    # "uncertain" also appears as a QC phenomenon label ("uncertain
+    # reflectivity echo"), so only the motion sentence can be asserted on.
+    assert "Moving" not in description
+
+
+def test_description_is_silent_on_nearby_sourced_motion():
+    from src.tracking.motion import MotionVector, NEARBY_SOURCE
+
+    description = _storm_feature_with_motion(MotionVector(
+        speed_kmh=32.0, speed_mph=20, heading_deg=95.0,
+        heading_label="east", source=NEARBY_SOURCE,
+    ))["properties"]["description"]
+
+    assert "Moving" not in description
