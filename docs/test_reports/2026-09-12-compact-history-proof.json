@@ -3,70 +3,70 @@
     "scans": [
       {
         "scan": "KTLX20260410_224209_V06",
-        "objects": 63,
-        "active_tracks": 63,
+        "objects": 60,
+        "active_tracks": 60,
         "reacquired": []
       },
       {
         "scan": "KTLX20260410_224737_V06",
-        "objects": 53,
-        "active_tracks": 53,
+        "objects": 48,
+        "active_tracks": 48,
         "reacquired": []
       },
       {
         "scan": "KTLX20260410_225255_V06",
-        "objects": 51,
-        "active_tracks": 51,
+        "objects": 46,
+        "active_tracks": 46,
         "reacquired": []
       },
       {
         "scan": "KTLX20260410_225805_V06",
-        "objects": 49,
-        "active_tracks": 49,
+        "objects": 46,
+        "active_tracks": 46,
         "reacquired": [
           {
             "event_type": "reacquired",
             "timestamp": "2026-04-10T22:58:05+00:00",
-            "description": "Track 39 reacquired after 1 missed scan",
+            "description": "Track 36 reacquired after 1 missed scan",
             "involved_track_ids": [
-              39
+              36
             ]
           },
           {
             "event_type": "reacquired",
             "timestamp": "2026-04-10T22:58:05+00:00",
-            "description": "Track 62 reacquired after 2 missed scans",
+            "description": "Track 59 reacquired after 2 missed scans",
             "involved_track_ids": [
-              62
+              59
             ]
           }
         ]
       },
       {
         "scan": "KTLX20260410_230332_V06",
-        "objects": 50,
-        "active_tracks": 50,
+        "objects": 47,
+        "active_tracks": 47,
         "reacquired": [
           {
             "event_type": "reacquired",
             "timestamp": "2026-04-10T23:03:32+00:00",
-            "description": "Track 28 reacquired after 2 missed scans",
+            "description": "Track 25 reacquired after 2 missed scans",
             "involved_track_ids": [
-              28
+              25
             ]
           }
         ]
       },
       {
         "scan": "KTLX20260410_230850_V06",
-        "objects": 61,
-        "active_tracks": 61,
+        "objects": 56,
+        "active_tracks": 56,
         "reacquired": []
       },
       {
         "scan": "KTLX20260410_231407_V06",
-        "objects": 57,
-        "active_tracks": 57,
+        "objects": 55,
+        "active_tracks": 55,
         "reacquired": []
       }
     ],
@@ -74,36 +74,36 @@
   },
   "memory": {
     "compact_scan_bytes": [
-      295381,
-      295921,
-      296796,
-      299797,
-      298464,
-      169983,
-      171309,
-      172215,
-      172344,
-      170237
+      294890,
+      295146,
+      295312,
+      299043,
+      297861,
+      170135,
+      171482,
+      172463,
+      172631,
+      170476
     ],
-    "retained_compact_bytes": 2342447,
-    "compact_limit_bytes": 3297767.0000000005,
+    "retained_compact_bytes": 2339439,
+    "compact_limit_bytes": 3289473.0000000005,
     "rendered_scan_bytes": [
-      6709166,
-      6518482,
-      6183361,
-      6054677,
-      5896430,
-      141149,
-      143093,
-      173218,
-      215453,
-      163152
+      6666982,
+      6456216,
+      6104137,
+      6008273,
+      5842366,
+      142301,
+      144311,
+      175402,
+      217565,
+      165324
     ],
-    "retained_rendered_bytes": 32198371,
-    "rendered_limit_bytes": 88560991.2,
-    "old_pipeline_largest_scan_array_bytes": 98928000,
-    "old_pipeline_two_scans_two_radars_bytes": 395712000,
-    "transient_peak_traced_bytes": 624698023,
+    "retained_rendered_bytes": 31923067,
+    "rendered_limit_bytes": 88004162.4,
+    "old_pipeline_largest_scan_array_bytes": 94970880,
+    "old_pipeline_two_scans_two_radars_bytes": 379883520,
+    "transient_peak_traced_bytes": 620488246,
     "retained_full_grids": []
   },
   "restart": {
