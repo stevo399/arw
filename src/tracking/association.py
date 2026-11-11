@@ -16,10 +16,42 @@ from src.tracking.types import AssociationScore, Track
 MIN_OVERLAP_PCT = 0.30
 MIN_ADVECTED_OVERLAP_PCT = 0.15
 MAX_STORM_SPEED_KMH = 120.0
+# Cost-matrix entry for a pair that is not a candidate at all.
 UNMATCHED_COST = 10.0
+# Cost of leaving one track, or one object, unmatched.  Without this choice the
+# solver matched every track it could, however poorly: on KIWA 2026-11-02 00:54
+# it paired a 12-scan squall-line track (0.48 to its own outline) with a 14 km2
+# sliver (1.01) so that a 1-scan track from 99 km away (1.84) could take the
+# line.  A pair now wins only when it is cheaper than leaving both sides
+# unmatched.  1.0 kept the line on both cached Phoenix events (2026-10-30 and
+# 2026-11-01, docs/test_reports/2026-11-11-phoenix-identity-stability.md).
+NO_MATCH_COST = 1.0
 # Must equal src.tracker.MAX_TEMPORAL_CONTINUITY_MINUTES (asserted in tests):
 # a storm unseen for longer than that is not evidence of the same storm.
 MAX_REACQUISITION_MINUTES = 20.0
+
+
+def gated_assignment(cost_matrix: np.ndarray, no_match_cost: float = NO_MATCH_COST) -> list[tuple[int, int]]:
+    """The cheapest set of (row, column) pairs when any row or column may stay unmatched.
+
+    The matrix is padded to a square of size rows + columns.  Row i has its
+    own "no match" column at cost `no_match_cost` (the top-right diagonal), and
+    column j has its own "no match" row (the bottom-left diagonal).  The
+    bottom-right block is free, so unused padding pairs with itself.  Entries
+    at UNMATCHED_COST or more are never paired.
+    """
+    cost = np.asarray(cost_matrix, dtype=float)
+    rows, cols = cost.shape
+    if rows == 0 or cols == 0:
+        return []
+    forbidden = 1e9
+    padded = np.full((rows + cols, cols + rows), forbidden)
+    padded[:rows, :cols] = np.where(cost >= UNMATCHED_COST, forbidden, cost)
+    padded[:rows, cols:] = np.where(np.eye(rows, dtype=bool), no_match_cost, forbidden)
+    padded[rows:, :cols] = np.where(np.eye(cols, dtype=bool), no_match_cost, forbidden)
+    padded[rows:, cols:] = 0.0
+    row_ind, col_ind = linear_sum_assignment(padded)
+    return [(int(r), int(c)) for r, c in zip(row_ind, col_ind) if r < rows and c < cols]
 
 
 @dataclass
@@ -321,15 +353,8 @@ def associate_tracks(
             scores_by_object[new_id].append(score)
             cost_matrix[track_index[track.track_id], new_index[new_id]] = score.total_cost
 
-    if cost_matrix.size:
-        row_ind, col_ind = linear_sum_assignment(cost_matrix)
-        for row, col in zip(row_ind, col_ind):
-            total_cost = float(cost_matrix[row, col])
-            if total_cost >= UNMATCHED_COST:
-                continue
-            track_id = track_ids[row]
-            new_id = new_ids[col]
-            result.primary_matches[new_id] = track_id
+    for row, col in gated_assignment(cost_matrix):
+        result.primary_matches[new_ids[col]] = track_ids[row]
 
     matched_track_ids = set(result.primary_matches.values())
     matched_new_ids = set(result.primary_matches.keys())
@@ -476,9 +501,7 @@ def _reacquire_missing_tracks(
             result.reacquisition_scores.append(score)
             cost_matrix[row, col] = score.total_cost
 
-    for row, col in zip(*linear_sum_assignment(cost_matrix)):
-        if cost_matrix[row, col] >= UNMATCHED_COST:
-            continue
+    for row, col in gated_assignment(cost_matrix):
         object_id, track_id = unclaimed[col], candidates[row].track_id
         result.reacquired_matches[object_id] = track_id
         result.unmatched_new_ids.discard(object_id)

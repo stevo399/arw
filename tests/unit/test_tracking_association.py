@@ -341,3 +341,29 @@ def test_each_track_mask_is_shifted_once_not_once_per_candidate(monkeypatch):
 
     assert association.primary_matches == {i + 1: i + 1 for i in range(storms)}
     assert len(shifts) == storms
+
+
+def test_a_long_storm_keeps_its_outline_when_a_poor_track_also_touches_it():
+    """KIWA 2026-11-02 00:54: the squall line's own track scored its new
+    outline 0.48, a 1-scan track from 99 km away scored it 1.84, and a 14 km2
+    sliver near the line scored 1.01 for the line's track.  Forcing every
+    track to match gave the line to the far track and the sliver to the line.
+    """
+    t1 = datetime(2026, 11, 2, 0, 45)
+    previous = _make_scan(
+        "KIWA", t1,
+        [_make_object(1, 35.30, -97.50, 54.0, 2600.0), _make_object(2, 35.30, -98.40, 50.0, 500.0)],
+        {1: _block((50, 90), (100, 160)), 2: _block((90, 100), (100, 120))},
+    )
+    current = _make_scan(
+        "KIWA", t1 + timedelta(minutes=5),
+        [_make_object(1, 35.30, -97.50, 54.0, 3300.0), _make_object(2, 35.32, -97.52, 40.0, 14.0)],
+        {1: _block((50, 100), (100, 160)), 2: _block((40, 42), (100, 102))},
+    )
+    tracker = StormTracker()
+    tracker.update(previous)
+
+    association = associate_tracks(previous, current, tracker.all_tracks, tracker._obj_to_track)
+
+    assert association.primary_matches.get(1) == 1
+    assert association.merge_candidates.get(1) == [1, 2]
