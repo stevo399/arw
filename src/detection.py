@@ -10,7 +10,12 @@ MIN_SIGNIFICANT_WEAK_OBJECT_AREA_KM2 = 8.0
 MIN_SMALL_OBJECT_PEAK_DBZ = 40.0
 MIN_DBZ_THRESHOLD = 20.0
 SEGMENTATION_HIERARCHY_THRESHOLDS = (20.0, 30.0, 40.0, 50.0, 60.0)
-MIN_SEED_PIXELS = 6
+# Gates a 50 dBZ core needs before it can split a storm.  At 6, small cores
+# came and went between scans and cut one KIWA complex (2026-10-30) into 1, 4,
+# 2 and 1 pieces in consecutive scans; at 40 a large storm kept its identity
+# for 12.7 scans on average instead of 9.0
+# (docs/test_reports/2026-11-11-phoenix-identity-stability.md).
+MIN_SEED_PIXELS = 40
 
 INTENSITY_THRESHOLDS = [
     (20, 30, "light precipitation"),

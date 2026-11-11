@@ -645,9 +645,10 @@ def test_split_gives_each_gate_to_the_core_nearest_on_the_ground():
     reflectivity = np.full((360, 500), np.nan)
     reflectivity[94:114, 282:310] = 25.0
     reflectivity[97:104, 286:295] = 40.0
-    reflectivity[99:102, 288:293] = 55.0
+    # Each 55 dBZ core is 5 by 8 = 40 gates, the smallest that may split a storm.
+    reflectivity[98:103, 286:294] = 55.0
     reflectivity[106:111, 296:305] = 40.0
-    reflectivity[107:110, 298:303] = 55.0
+    reflectivity[106:111, 297:305] = 55.0
     result = detect_objects_with_grid(
         reflectivity=reflectivity,
         azimuths=np.arange(360, dtype=float),
