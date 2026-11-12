@@ -297,7 +297,33 @@
   busy radar. A future speak rule should include a live or many-volume false-alarm rate.
 - **Not started:** Part B of the spec, the classifier (#8).
 
+## Storm identity stability, Phoenix (2026-11-11) -- branch `fix/storm-identity-stability`, not pushed
+- **Problem:** during the KIWA storms of 2026-10-30 and 2026-11-01, storms changed identity between
+  scans, motion was sometimes unknown, and storms disappeared for one or two scans.
+- **Method:** `scripts/investigations/identity_stability_eval.py` replays cached KIWA volumes through
+  `_process_scan_file` and `StormTracker`. Report: `docs/test_reports/2026-11-11-phoenix-identity-stability.md`.
+- **Changes (each with failing tests first, Hypothesis added as a dev dependency):**
+  - `gated_assignment`: a track or an object can stay unmatched at `NO_MATCH_COST = 1.0`, so the
+    solver no longer forces poor pairs (it gave the 12-scan squall line to a track 99 km away);
+  - `MIN_SEED_PIXELS` 6 -> 40: tiny 50 dBZ cores no longer cut one storm into 1, 4, 2 or 1 pieces
+    from scan to scan;
+  - `MIN_MERGE_SHARE = 0.15`: a track merges only when 15% of its moved outline is inside the storm.
+    About half of all merges had absorbed tracks that did not touch the storm;
+  - `parse_radar_file` reads the sweeps a short volume has. A 3-sweep KTLX volume
+    (2026-11-11 18:58 UTC) gave HTTP 500 on `/objects`.
+- **Results:** area-weighted track life 9.0 -> 13.2 (10-30) and 8.0 -> 9.3 (11-01); merges 106 -> 51
+  and 118 -> 54; inversions 18 -> 8 and 12 -> 0.
+- **One-scan storms:** the earlier "half live one scan" figure counted only scans at 20 km2 or more.
+  Over the whole life it is 17 of 116 and 27 of 135, mostly weak distant cells. A containment gate
+  for pieces that break off a big line was tested and not adopted.
+- **Verified:** full suite 623 passed, 3 xfailed (after the merge rule); unit and smoke 581 passed
+  (after the parser fix); live checks PASS on KMLB, KAKQ, KTLX (the 3-sweep volume now returns 200)
+  and KIWA (no weather there, endpoints only).
+- **Not adopted:** survivor rules ("oldest wins", "most gates wins") helped one event and hurt the
+  other, so the cost rule stays.
+
 ## In Progress
+- Storm identity stability: 7 commits on `fix/storm-identity-stability`, not pushed. Next step: owner review, then merge and push decision
 - Owner review: keyboard-and-NVDA pass through the Weather Kitten recent-scans section
 - Spec 2 restoration is validated and documented; commit/merge decision pending
 
@@ -317,6 +343,7 @@
 - Spec 3 (SCIT cell identification), Spec 4 (hail/mesocyclone, needs volumetric parsing)
 
 ## Blockers / Decisions
+- Storm identity stability: push or merge of `fix/storm-identity-stability` needs owner approval
 - **The classifier is miscalibrated and its parameters are unvalidated.** Not blocking, because
   quality control no longer deletes anything — errors degrade annotation quality rather than
   removing weather. But no hazard call should be trusted until the two strict xfails pass
