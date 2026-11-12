@@ -211,3 +211,21 @@ def test_extract_velocity_uses_doppler_nyquist(radar):
     velocity_data = extract_velocity(radar, max_sweeps=3)
     for sweep in velocity_data.sweeps:
         assert sweep.nyquist_velocity > 20.0
+
+
+# KTLX 2026-11-11 18:58 UTC: the radar sent a volume with only 3 sweeps
+# (0.5, 0.5, 0.9 degrees).  The live map asks for sweeps 0 to 5, and Py-ART
+# failed with "IndexError: list index out of range", so /objects returned 500.
+SHORT_VOLUME = "cache/KTLX/KTLX20261111_185850_V06"
+
+
+def test_a_short_volume_gives_the_sweeps_it_has():
+    radar = parse_radar_file(SHORT_VOLUME, scans=list(range(6)), include_fields=["reflectivity"])
+    assert radar.nsweeps == 3
+
+
+def test_a_short_volume_goes_through_the_live_scan_path():
+    from src.server import _process_scan_file
+
+    scan = _process_scan_file("KTLX", SHORT_VOLUME)
+    assert scan.reflectivity_data.elevation_angle == pytest.approx(0.5, abs=0.1)

@@ -51,9 +51,33 @@ def parse_radar_file(
     need a full volume keep the original behavior, while an interactive
     current map can load only the low elevation cuts and moments it analyzes.
     """
-    return pyart.io.read_nexrad_archive(
-        filepath, scans=scans, include_fields=include_fields
-    )
+    try:
+        return pyart.io.read_nexrad_archive(
+            filepath, scans=scans, include_fields=include_fields
+        )
+    except IndexError:
+        # A short volume (KTLX 2026-11-11 18:58 had 3 sweeps) has fewer
+        # sweeps than the caller asked for, and Py-ART indexes past the end.
+        if scans is None:
+            raise
+        available = _sweep_count(filepath)
+        present = [scan for scan in scans if scan < available]
+        if not present or len(present) == len(scans):
+            raise
+        return pyart.io.read_nexrad_archive(
+            filepath, scans=present, include_fields=include_fields
+        )
+
+
+def _sweep_count(filepath: str) -> int:
+    from pyart.io.common import prepare_for_read
+    from pyart.io.nexrad_level2 import NEXRADLevel2File
+
+    level2 = NEXRADLevel2File(prepare_for_read(filepath))
+    try:
+        return int(level2.nscans)
+    finally:
+        level2.close()
 
 
 def _extract_field(
