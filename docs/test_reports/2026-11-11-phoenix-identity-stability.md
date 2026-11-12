@@ -58,9 +58,25 @@ unmatched (0.48 + 10). The line lost its 12-scan history.
 | Both, and the oldest track survives each merge | 13.8 | 8.0 | 0 | 0 |
 
 The "oldest track survives" rule removes inversions by definition, but it made
-2026-11-01 worse. It is not adopted. The remaining inversions need a better
-survivor rule, for example the track that gives the most gates to the new
-object.
+2026-11-01 worse. It is not adopted.
+
+### 3. Merges absorbed tracks that did not touch the storm
+
+A track can be a merge candidate when its centroid is near the storm, even if
+its outline shares no gates with it. On 2026-10-30, 66 of 128 absorbed tracks
+shared no gates with the storm (after moving the outline by the track's
+motion). On 2026-11-01, 94 of 157 shared no gates. "Merged" is final, so those
+tracks could not be reacquired, and merge notes counted storms that faded.
+
+| Variant | 10-30 merges | 11-01 merges | 10-30 inversions | 11-01 inversions | 10-30 life | 11-01 life |
+|---|---:|---:|---:|---:|---:|---:|
+| Both fixes above | 106 | 118 | 16 | 8 | 13.2 | 9.3 |
+| Merge needs 15% shared outline (adopted) | 51 | 54 | 8 | 0 | 13.2 | 9.3 |
+| That, and the track that gives the most gates survives | 51 | 55 | 6 | 2 | 13.7 | 8.4 |
+
+The "most gates survives" rule helped 2026-10-30 and hurt 2026-11-01. At
+23:59 the larger of two line pieces (10,800 against 8,400 gates) won, and the
+longer history was lost. It is not adopted.
 
 ## Changes
 
@@ -68,6 +84,9 @@ object.
   object its own "no match" choice at `NO_MATCH_COST = 1.0`. Stage 1 and stage 2
   (reacquisition) use it.
 - `src/detection.py`: `MIN_SEED_PIXELS` goes from 6 to 40.
+- `src/tracking/association.py`: a track joins a merge only when
+  `MIN_MERGE_SHARE = 0.15` of its moved outline lies inside the storm. Other
+  unmatched tracks become "missing".
 
 ## Not reproduced
 
@@ -79,6 +98,9 @@ the live app skipped, could explain the difference. This is not confirmed.
 
 ## Open items
 
-- A survivor rule for merges that does not lose long histories.
+- A survivor rule for merges that does not lose long histories. Two rules
+  were tested on two events, and neither was better on both.
+- About half of tracks of 20 km2 or more still live for one scan. That is now
+  the largest identity loss, and it is not caused by merges.
 - `MIN_SEED_PIXELS` counts gates. A gate covers more ground at long range, so
   a minimum core area in km2 can be more consistent.

@@ -26,6 +26,14 @@ UNMATCHED_COST = 10.0
 # unmatched.  1.0 kept the line on both cached Phoenix events (2026-10-30 and
 # 2026-11-01, docs/test_reports/2026-11-11-phoenix-identity-stability.md).
 NO_MATCH_COST = 1.0
+# A track merges into a storm only when at least this fraction of its outline,
+# moved forward by its motion, lies inside the storm.  On KIWA 2026-10-30 and
+# 2026-11-01, about half of all merges absorbed a track that shared no gates
+# with the storm and was only near it.  "Merged" is final, so those tracks
+# could not be reacquired, and "N storms merged" counted storms that faded.
+# 0.15 halved the merges and kept track life the same on both events
+# (docs/test_reports/2026-11-11-phoenix-identity-stability.md).
+MIN_MERGE_SHARE = 0.15
 # Must equal src.tracker.MAX_TEMPORAL_CONTINUITY_MINUTES (asserted in tests):
 # a storm unseen for longer than that is not evidence of the same storm.
 MAX_REACQUISITION_MINUTES = 20.0
@@ -308,6 +316,7 @@ def associate_tracks(
     scores_by_object: dict[int, list[AssociationScore]] = {obj_id: [] for obj_id in new_ids}
 
     new_extents: dict[int, MaskExtent] = {}
+    shifted_extents: dict[int, MaskExtent] = {}
 
     def new_extent(object_id: int) -> MaskExtent:
         if object_id not in new_extents:
@@ -335,6 +344,7 @@ def associate_tracks(
         shift_rows, shift_cols = _grid_shift(prev_mask, previous_scan.reflectivity_data, east_km, north_km)
         prev_extent = mask_extent(prev_mask)
         shifted_extent = mask_extent(_shift_mask(prev_mask, shift_rows, shift_cols))
+        shifted_extents[track.track_id] = shifted_extent
         for new_id, new_object in new_objects.items():
             score = _candidate_score(
                 track=track,
@@ -379,7 +389,9 @@ def associate_tracks(
         merge_track_ids = [
             track_id
             for track_id in related_track_ids
-            if track_id != surviving_track_id and track_id not in matched_track_ids
+            if track_id != surviving_track_id
+            and track_id not in matched_track_ids
+            and _overlap_from_extents(shifted_extents[track_id], new_extent(new_id)) >= MIN_MERGE_SHARE
         ]
         if merge_track_ids:
             result.merge_candidates[new_id] = [surviving_track_id] + merge_track_ids

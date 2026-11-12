@@ -75,18 +75,18 @@
   "memory": {
     "compact_scan_bytes": [
       294890,
-      295146,
-      295312,
-      299043,
-      297861,
+      295074,
+      295230,
+      299004,
+      297803,
       170135,
       171482,
       172463,
-      172631,
-      170476
+      172632,
+      170475
     ],
-    "retained_compact_bytes": 2339439,
-    "compact_limit_bytes": 3289473.0000000005,
+    "retained_compact_bytes": 2339188,
+    "compact_limit_bytes": 3289044.0000000005,
     "rendered_scan_bytes": [
       6666982,
       6456216,
@@ -103,7 +103,7 @@
     "rendered_limit_bytes": 88004162.4,
     "old_pipeline_largest_scan_array_bytes": 94970880,
     "old_pipeline_two_scans_two_radars_bytes": 379883520,
-    "transient_peak_traced_bytes": 620488246,
+    "transient_peak_traced_bytes": 620472534,
     "retained_full_grids": []
   },
   "restart": {

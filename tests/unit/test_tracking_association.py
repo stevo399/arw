@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 import numpy as np
+from hypothesis import given, settings, strategies as st
 
 from src.buffer import BufferedScan
 from src.detection import DetectedObject
@@ -367,3 +368,60 @@ def test_a_long_storm_keeps_its_outline_when_a_poor_track_also_touches_it():
 
     assert association.primary_matches.get(1) == 1
     assert association.merge_candidates.get(1) == [1, 2]
+
+
+def _neighbour_beside_a_growing_storm(gap_cols: int, width_cols: int):
+    """Track 1 grows into the new object; track 2 sits `gap_cols` gates east
+    of track 1's old outline and is gone in the new scan.  Both tracks have
+    unknown motion, so their outlines are not moved forward.
+    """
+    t1 = datetime(2026, 10, 30, 23, 0)
+    start = 120 + gap_cols
+    previous = _make_scan(
+        "KIWA", t1,
+        [_make_object(1, 35.30, -97.50, 50.0, 400.0), _make_object(2, 35.30, -97.49, 45.0, 40.0)],
+        {1: _block((50, 70), (100, 120)), 2: _block((50, 70), (start, start + width_cols))},
+    )
+    current = _make_scan(
+        "KIWA", t1 + timedelta(minutes=5),
+        [_make_object(1, 35.30, -97.50, 50.0, 440.0)],
+        {1: _block((50, 70), (100, 124))},
+    )
+    return previous, current
+
+
+def test_a_track_that_does_not_touch_the_storm_is_not_merged_into_it():
+    """KIWA 2026-10-30 and 2026-11-01: about half of all merges absorbed a
+    track whose outline shared no gates with the merged storm.  The track was
+    only near it.  "Merged" is final, so the track could not be reacquired.
+    """
+    previous, current = _neighbour_beside_a_growing_storm(gap_cols=10, width_cols=6)
+    scans = {previous.timestamp: previous, current.timestamp: current}
+    tracker = StormTracker(scan_loader=lambda _site, ts: scans.get(ts), reacquire=True)
+    tracker.update(previous)
+
+    association = associate_tracks(previous, current, tracker.all_tracks, tracker._obj_to_track)
+    assert association.primary_matches == {1: 1}
+    assert association.merge_candidates == {}
+
+    tracker.update(current)
+    assert tracker.get_track(2).status == "missing"
+
+
+@given(gap_cols=st.integers(-6, 30), width_cols=st.integers(1, 20))
+@settings(max_examples=60, deadline=None)
+def test_a_merged_track_shares_part_of_its_outline_with_the_storm(gap_cols, width_cols):
+    from src.tracking.association import MIN_MERGE_SHARE
+
+    previous, current = _neighbour_beside_a_growing_storm(gap_cols, width_cols)
+    tracker = StormTracker()
+    tracker.update(previous)
+    association = associate_tracks(previous, current, tracker.all_tracks, tracker._obj_to_track)
+
+    old_outline = previous.object_masks[2]
+    share = np.count_nonzero(old_outline & current.object_masks[1]) / np.count_nonzero(old_outline)
+    merged = 2 in association.merge_candidates.get(1, [])
+    if share < MIN_MERGE_SHARE:
+        assert not merged
+    elif association.primary_matches.get(1) == 1:
+        assert merged
