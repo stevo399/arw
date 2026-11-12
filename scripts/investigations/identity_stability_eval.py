@@ -49,6 +49,8 @@ def main() -> None:
     inversions = 0
     merges = 0
     life: dict[int, list] = {}
+    scans_alive: dict[int, int] = {}  # track_id -> scans with an object of any size
+    last_ts = None
     phx_src: dict[str, int] = {}
 
     for path in scan_files(args.start, args.end):
@@ -57,6 +59,9 @@ def main() -> None:
         tracker.update(scan)
         events = tracker.recent_events
         obj_to_track = dict(tracker._obj_to_track)
+        for tid in obj_to_track.values():
+            scans_alive[tid] = scans_alive.get(tid, 0) + 1
+        last_ts = scan.timestamp
         tracks = {t.track_id: t for t in tracker.all_tracks}
         for t in tracks.values():
             if t.status == "merged" and prev_status.get(t.track_id) not in (None, "merged"):
@@ -65,6 +70,7 @@ def main() -> None:
                 if sv is not None and len(sv.positions) < len(t.positions):
                     inversions += 1
         prev_status = {t.track_id: t.status for t in tracks.values()}
+        tracks_last_seen = {t.track_id: t.last_seen for t in tracks.values()}
         sig = [o for o in scan.detected_objects if o.area_km2 >= args.sig_area]
         rows = []
         new_ids, reacq, motion_known = [], [], 0
@@ -123,8 +129,14 @@ def main() -> None:
     wsum = sum(sum(v) for v in life.values())
     wlife = sum(len(v) * sum(v) for v in life.values()) / wsum
     tot = sum(phx_src.values())
+    # seen_once counts scans at >= sig-area only.  one_scan_life counts tracks
+    # whose whole life (any size) is one scan, without those born on the last scan.
+    one_scan = sum(
+        1 for tid in life
+        if scans_alive.get(tid, 0) == 1 and tracks_last_seen.get(tid) != last_ts
+    )
     print(f"SUMMARY merges={merges} inversions={inversions} sig_tracks={len(lens)} "
-          f"seen_once={sum(1 for x in lens if x == 1)} median_life={sorted(lens)[len(lens)//2]} "
+          f"seen_once={sum(1 for x in lens if x == 1)} one_scan_life={one_scan} median_life={sorted(lens)[len(lens)//2]} "
           f"area_weighted_life={wlife:.1f} phx_pattern={phx_src.get('pattern_match',0)}/{tot} "
           f"phx_unknown={phx_src.get('not_measured',0)}/{tot}", flush=True)
 

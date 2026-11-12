@@ -96,11 +96,36 @@ before the storm arrived. In this replay, the line had measured motion (NE, abou
 they had unknown or nearby-storm motion. A tracker restart, or volumes that
 the live app skipped, could explain the difference. This is not confirmed.
 
+## Storms that live for one scan
+
+An earlier count said that about half of the tracks of 20 km2 or more lived
+for one scan. That count used only the scans where a track was 20 km2 or more.
+Over a track's whole life, at any size, the numbers are smaller:
+
+| Event | Tracks of 20 km2 or more | One scan, not born on the last scan |
+|---|---:|---:|
+| 2026-10-30 | 116 | 17 |
+| 2026-11-01 | 135 | 27 |
+
+The replay script now prints this as `one_scan_life`. Most of these tracks are
+weak cells (25 to 45 dBZ) 100 to 300 km from Phoenix that fade in the next
+scan. That is expected.
+
+One case is an identity problem. At 2026-11-02 00:45, a 531 km2, 50 dBZ piece
+broke off the squall line. 74% of the piece was inside the line's 00:40
+outline, but the piece covered only 8% of the line. Each candidate gate (30% of
+the old outline covered, 15% moved IoU, or a near centroid) missed, so the
+piece started as a new track with no split link, and it merged back at 00:54.
+
+A test gate that also accepts a track when 30% of the new object is inside its
+old outline did not help: area-weighted life 13.2 and 9.1 (from 13.2 and 9.3),
+and 2026-11-01 inversions 0 to 2. A split child gets nearby-storm motion, the
+same as a new track, so a split label alone would only add split notes. It is
+not adopted.
+
 ## Open items
 
 - A survivor rule for merges that does not lose long histories. Two rules
   were tested on two events, and neither was better on both.
-- About half of tracks of 20 km2 or more still live for one scan. That is now
-  the largest identity loss, and it is not caused by merges.
 - `MIN_SEED_PIXELS` counts gates. A gate covers more ground at long range, so
   a minimum core area in km2 can be more consistent.
